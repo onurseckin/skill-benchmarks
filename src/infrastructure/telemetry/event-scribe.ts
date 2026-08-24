@@ -24,6 +24,15 @@ export function getMonotonicMicroseconds(): string {
   return nowUs.toString();
 }
 
+export function createTelemetryEvent(
+  runId: string,
+  sequenceNumber: number,
+  type: TelemetryEventType,
+  payload: Readonly<Record<string, unknown>> = {}
+): TelemetryEvent {
+  return { runId, sequenceNumber, timestampUs: getMonotonicMicroseconds(), type, payload };
+}
+
 export interface EventScribeOptions {
   readonly runId: string;
   readonly outputDir: string;
@@ -95,21 +104,9 @@ export class EventScribe {
     payload: Readonly<Record<string, unknown>> = {}
   ): TelemetryEvent {
     this.sequenceNumber += 1;
-    const event: TelemetryEvent = {
-      runId: this.runId,
-      sequenceNumber: this.sequenceNumber,
-      timestampUs: getMonotonicMicroseconds(),
-      type,
-      payload,
-    };
-
-    const line = JSON.stringify(event) + "\n";
-    this.eventBuffer.push(line);
-
-    if (this.eventBuffer.length >= this.batchSize) {
-      void this.flush();
-    }
-
+    const event = createTelemetryEvent(this.runId, this.sequenceNumber, type, payload);
+    this.eventBuffer.push(JSON.stringify(event) + "\n");
+    if (this.eventBuffer.length >= this.batchSize) void this.flush();
     return event;
   }
 

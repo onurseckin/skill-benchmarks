@@ -7,7 +7,15 @@ export type TelemetryEventType =
   | "TOOL_CALL_COMPLETED"
   | "RESOURCE_SAMPLE"
   | "GIT_DIFF_CAPTURED"
-  | "CONTAINER_TEARDOWN";
+  | "CONTAINER_TEARDOWN"
+  | "run:start"
+  | "run:finish"
+  | "turn:start"
+  | "turn:finish"
+  | "turn:error"
+  | "tool:dispatch"
+  | "tool:finish"
+  | (string & {});
 
 export interface TelemetryEvent {
   readonly runId: string;
