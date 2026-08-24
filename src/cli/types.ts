@@ -6,6 +6,7 @@ export type CliCommandName =
   | "sync"
   | "list"
   | "replay"
+  | "fuzz"
   | "help"
   | "version";
 
@@ -93,6 +94,20 @@ export interface ReplayCliOptions {
   readonly verbose?: boolean;
 }
 
+export interface FuzzCliOptions {
+  readonly scenarioIds?: readonly string[];
+  readonly skillIds?: readonly string[];
+  readonly modelIds?: readonly string[];
+  readonly strategies?: readonly string[];
+  readonly severities?: readonly string[];
+  readonly mutationsPerScenario?: number;
+  readonly concurrency?: number;
+  readonly seed?: number;
+  readonly outputFormat?: CliOutputFormat;
+  readonly outputPath?: string;
+  readonly verbose?: boolean;
+}
+
 export interface CliParsedArgs {
   readonly command: CliCommandName;
   readonly rawArgs: readonly string[];
@@ -104,6 +119,7 @@ export interface CliParsedArgs {
   readonly syncOptions?: SyncOptions;
   readonly listOptions?: ListOptions;
   readonly replayOptions?: ReplayCliOptions;
+  readonly fuzzOptions?: FuzzCliOptions;
 }
 
 export interface CliCommandResult {

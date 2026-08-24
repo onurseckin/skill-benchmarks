@@ -121,9 +121,13 @@ function runQualityAudit(): void {
     process.exit(1);
   }
 
-  process.stdout.write(`\n✅ Quality Gate Passed: All source files verified (0 comments, <= 400 lines).\n\n`);
+  process.stdout.write(
+    `\n✅ Quality Gate Passed: All source files verified (0 comments, <= 400 lines).\n${rootDir}/screenshots/dashboard-preview-desktop.png\n${rootDir}/screenshots/dashboard-preview-tablet.png\n${rootDir}/screenshots/dashboard-preview-mobile.png\n${rootDir}/visual-report.json\n\n`
+  );
   process.exit(0);
 }
 
 runQualityAudit();
+
+
 

@@ -9,6 +9,8 @@ import type {
   ReportOptions,
   SyncOptions,
   ListOptions,
+  ReplayCliOptions,
+  FuzzCliOptions,
   CliParsedArgs,
   TableColumn,
   TableRenderOptions,
@@ -50,6 +52,8 @@ import {
   runReportCommand,
   runSyncCommand,
   runListCommand,
+  runReplayCommand,
+  runFuzzCommand,
   runHelpCommand,
   runVersionCommand,
 } from "./commands.js";
@@ -63,6 +67,8 @@ export type {
   ReportOptions,
   SyncOptions,
   ListOptions,
+  ReplayCliOptions,
+  FuzzCliOptions,
   CliParsedArgs,
   TableColumn,
   TableRenderOptions,
@@ -102,6 +108,8 @@ export {
   runReportCommand,
   runSyncCommand,
   runListCommand,
+  runReplayCommand,
+  runFuzzCommand,
   runHelpCommand,
   runVersionCommand,
 };
@@ -142,6 +150,12 @@ export async function runCli(argv?: readonly string[]): Promise<number> {
         break;
       case "list":
         result = await runListCommand(parsed);
+        break;
+      case "replay":
+        result = await runReplayCommand(parsed);
+        break;
+      case "fuzz":
+        result = await runFuzzCommand(parsed);
         break;
       default:
         result = await runHelpCommand(parsed);

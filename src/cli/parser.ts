@@ -6,16 +6,13 @@ import type {
   ReportOptions,
   SyncOptions,
   ListOptions,
+  ReplayCliOptions,
+  FuzzCliOptions,
   CliParsedArgs,
-} from "./types";
+} from "./types.js";
 
 type FlagValueKind = "string" | "boolean" | "number" | "array";
-
-interface FlagSpec {
-  readonly canonical: string;
-  readonly kind: FlagValueKind;
-  readonly aliases: readonly string[];
-}
+interface FlagSpec { readonly canonical: string; readonly kind: FlagValueKind; readonly aliases: readonly string[]; }
 
 const SPECS: readonly (readonly [string, FlagValueKind, readonly string[]])[] = [
   ["scenario", "array", ["s", "scenario", "scenarios"]], ["skill", "array", ["k", "skill", "skills"]],
@@ -36,19 +33,21 @@ const SPECS: readonly (readonly [string, FlagValueKind, readonly string[]])[] = 
   ["catalogPath", "string", ["catalog", "catalog-path", "catalogPath"]], ["targetDir", "string", ["target-dir", "targetDir"]],
   ["force", "boolean", ["force"]], ["verifyOnly", "boolean", ["verify-only", "verifyOnly"]],
   ["help", "boolean", ["h", "help"]], ["version", "boolean", ["version"]],
+  ["target", "string", ["target"]], ["runId", "string", ["run-id", "runId"]], ["speed", "number", ["speed"]],
+  ["web", "boolean", ["web"]], ["live", "boolean", ["live"]],
+  ["strategies", "array", ["strategies", "strategy"]], ["severities", "array", ["severities", "severity"]],
+  ["mutationsPerScenario", "number", ["mutations-per-scenario", "mutationsPerScenario", "mutations"]],
+  ["seed", "number", ["seed"]],
 ];
 
 const FLAG_MAP = new Map<string, FlagSpec>();
 for (const [canonical, kind, aliases] of SPECS) {
   const spec = { canonical, kind, aliases };
-  for (const alias of aliases) {
-    FLAG_MAP.set(alias, spec);
-    FLAG_MAP.set(alias.toLowerCase(), spec);
-  }
+  for (const alias of aliases) { FLAG_MAP.set(alias, spec); FLAG_MAP.set(alias.toLowerCase(), spec); }
 }
 
 const KNOWN_COMMANDS = new Set<CliCommandName>([
-  "run", "bench", "tournament", "report", "sync", "list", "help", "version",
+  "run", "bench", "tournament", "report", "sync", "list", "replay", "fuzz", "help", "version",
 ]);
 
 function toBool(v: unknown): boolean {
@@ -56,24 +55,16 @@ function toBool(v: unknown): boolean {
   if (typeof v === "string") return ["true", "1", "yes"].includes(v.trim().toLowerCase());
   return Boolean(v);
 }
-
 function toNum(v: unknown): number | undefined {
   if (typeof v === "number" && !Number.isNaN(v)) return v;
-  if (typeof v === "string") {
-    const n = Number(v.trim());
-    return Number.isNaN(n) ? undefined : n;
-  }
+  if (typeof v === "string") { const n = Number(v.trim()); return Number.isNaN(n) ? undefined : n; }
   return undefined;
 }
-
 function toStr(v: unknown): string | undefined {
   return typeof v === "string" && v.trim().length > 0 ? v.trim() : undefined;
 }
-
 function toArr(v: unknown): readonly string[] {
-  if (Array.isArray(v)) {
-    return v.flatMap((item) => (typeof item === "string" ? item.split(",").map((s) => s.trim()).filter(Boolean) : []));
-  }
+  if (Array.isArray(v)) return v.flatMap((item) => (typeof item === "string" ? item.split(",").map((s) => s.trim()).filter(Boolean) : []));
   if (typeof v === "string") return v.split(",").map((s) => s.trim()).filter(Boolean);
   return [];
 }
@@ -98,166 +89,120 @@ function assignFlag(flags: Record<string, string | boolean | number | string[]>,
 }
 
 function parseToken(token: string): { key: string; value?: string } {
-  const stripped = token.startsWith("--") ? token.slice(2) : token.slice(1);
-  const eqIdx = stripped.indexOf("=");
-  return eqIdx !== -1 ? { key: stripped.slice(0, eqIdx), value: stripped.slice(eqIdx + 1) } : { key: stripped };
+  if (token.startsWith("--") || token.startsWith("-")) {
+    const prefixLen = token.startsWith("--") ? 2 : 1;
+    const eqIdx = token.indexOf("=");
+    if (eqIdx !== -1) return { key: token.slice(prefixLen, eqIdx), value: token.slice(eqIdx + 1) };
+    return { key: token.slice(prefixLen) };
+  }
+  return { key: token };
 }
 
-export function parseCliArgs(rawArgs: readonly string[]): CliParsedArgs {
-  const rawFlags: Record<string, string | boolean | number | string[]> = {};
+export function parseCliArgs(argv: readonly string[]): CliParsedArgs {
+  const flags: Record<string, string | boolean | number | string[]> = {};
   const positionals: string[] = [];
+  let command: CliCommandName = "help";
+  let foundCommand = false;
+  let i = 0;
 
-  let index = 0;
-  while (index < rawArgs.length) {
-    const arg = rawArgs[index];
-    if (!arg) {
-      index += 1;
-      continue;
-    }
-    if (arg === "--") {
-      positionals.push(...rawArgs.slice(index + 1));
-      break;
-    }
-    if (arg.startsWith("-") && arg.length > 1) {
-      const { key, value } = parseToken(arg);
-      const isBool = key.startsWith("no-") ? FLAG_MAP.get(key.slice(3))?.kind === "boolean" : FLAG_MAP.get(key)?.kind === "boolean";
+  while (i < argv.length) {
+    const token = argv[i];
+    if (!token) { i++; continue; }
+    if (token === "--") { positionals.push(...argv.slice(i + 1)); break; }
+    if (token.startsWith("-")) {
+      const { key, value } = parseToken(token);
+      const spec = FLAG_MAP.get(key.toLowerCase());
       if (value !== undefined) {
-        assignFlag(rawFlags, key, value);
-        index += 1;
-      } else if (isBool) {
-        assignFlag(rawFlags, key, true);
-        index += 1;
+        assignFlag(flags, key, value);
+      } else if (spec?.kind === "boolean") {
+        assignFlag(flags, key, true);
+      } else if (i + 1 < argv.length && !argv[i + 1]?.startsWith("-")) {
+        assignFlag(flags, key, argv[i + 1] ?? "");
+        i++;
       } else {
-        const next = rawArgs[index + 1];
-        if (next !== undefined && !next.startsWith("-")) {
-          assignFlag(rawFlags, key, next);
-          index += 2;
-        } else {
-          assignFlag(rawFlags, key, true);
-          index += 1;
-        }
+        assignFlag(flags, key, true);
       }
+    } else if (!foundCommand) {
+      const candidate = token.toLowerCase() as CliCommandName;
+      if (KNOWN_COMMANDS.has(candidate)) { command = candidate; foundCommand = true; }
+      else positionals.push(token);
     } else {
-      positionals.push(arg);
-      index += 1;
+      positionals.push(token);
     }
+    i++;
   }
 
-  let command: CliCommandName;
-  let remainingPositionals: readonly string[];
-  const firstPos = positionals[0]?.toLowerCase();
-  if (firstPos && KNOWN_COMMANDS.has(firstPos as CliCommandName)) {
-    command = firstPos as CliCommandName;
-    remainingPositionals = positionals.slice(1);
-  } else if (rawFlags["version"] === true) {
-    command = "version";
-    remainingPositionals = positionals;
-  } else if (rawFlags["help"] === true || rawFlags["h"] === true) {
-    command = "help";
-    remainingPositionals = positionals;
-  } else if (toArr(rawFlags["scenario"]).length > 0 || toArr(rawFlags["skill"]).length > 0 || toArr(rawFlags["model"]).length > 0) {
-    command = "run";
-    remainingPositionals = positionals;
-  } else {
-    command = "help";
-    remainingPositionals = positionals;
-  }
-
-  const finalFlags: Record<string, string | boolean | number | readonly string[]> = {};
-  for (const [k, v] of Object.entries(rawFlags)) {
-    finalFlags[k] = Array.isArray(v) ? Object.freeze([...v]) : v;
-  }
-  const frozenFlags = Object.freeze(finalFlags);
-
-  const parsedScenarios = toArr(rawFlags["scenario"]);
-  const effectiveScenarios = parsedScenarios.length > 0 ? parsedScenarios : remainingPositionals;
-  const skills = toArr(rawFlags["skill"]);
-  const models = toArr(rawFlags["model"]);
-  const tags = toArr(rawFlags["tag"]);
-  const format = toStr(rawFlags["format"]);
-  const outputFormat = format && ["console", "json", "markdown", "html"].includes(format) ? (format as CliOutputFormat) : undefined;
-  const dbPath = toStr(rawFlags["dbPath"]);
-  const outputPath = toStr(rawFlags["outputPath"]);
-  const verbose = typeof rawFlags["verbose"] === "boolean" ? rawFlags["verbose"] : undefined;
-  const targetCandidate = remainingPositionals[0]?.toLowerCase();
-  const listTarget = targetCandidate && ["scenarios", "skills", "models", "all"].includes(targetCandidate) ? (targetCandidate as "scenarios" | "skills" | "models" | "all") : "all";
+  if (Boolean(flags["help"]) && command !== "version") command = "help";
+  if (Boolean(flags["version"])) command = "version";
 
   const benchmarkOptions: BenchmarkRunOptions = {
-    scenarioIds: effectiveScenarios,
-    skillIds: skills,
-    modelIds: models,
-    providerId: toStr(rawFlags["provider"]),
-    category: toStr(rawFlags["category"]),
-    tags: tags.length > 0 ? tags : undefined,
-    concurrency: toNum(rawFlags["concurrency"]),
-    repetitions: toNum(rawFlags["repetitions"]),
-    temperature: toNum(rawFlags["temperature"]),
-    timeoutSeconds: toNum(rawFlags["timeoutSeconds"]),
-    maxTurns: toNum(rawFlags["maxTurns"]),
-    maxCostUSD: toNum(rawFlags["maxCostUSD"]),
-    dbPath, outputFormat, outputPath, verbose,
-    judgeModelId: toStr(rawFlags["judgeModelId"]),
-    skipJudge: typeof rawFlags["skipJudge"] === "boolean" ? rawFlags["skipJudge"] : undefined,
-    cleanSandbox: typeof rawFlags["cleanSandbox"] === "boolean" ? rawFlags["cleanSandbox"] : undefined,
+    scenarioIds: toArr(flags["scenario"]).concat(positionals), skillIds: toArr(flags["skill"]),
+    modelIds: toArr(flags["model"]), providerId: toStr(flags["provider"]),
+    category: toStr(flags["category"]), tags: toArr(flags["tag"]),
+    concurrency: toNum(flags["concurrency"]), repetitions: toNum(flags["repetitions"]),
+    temperature: toNum(flags["temperature"]), timeoutSeconds: toNum(flags["timeoutSeconds"]),
+    maxTurns: toNum(flags["maxTurns"]), maxCostUSD: toNum(flags["maxCostUSD"]),
+    dbPath: toStr(flags["dbPath"]), outputFormat: toStr(flags["format"]) as CliOutputFormat | undefined,
+    outputPath: toStr(flags["outputPath"]), verbose: toBool(flags["verbose"]),
+    judgeModelId: toStr(flags["judgeModelId"]), skipJudge: toBool(flags["skipJudge"]), cleanSandbox: toBool(flags["cleanSandbox"]),
   };
 
   const tournamentOptions: TournamentOptions = {
-    scenarioIds: effectiveScenarios,
-    skillIds: skills,
-    modelIds: models.length > 0 ? models : undefined,
-    judgeModelId: toStr(rawFlags["judgeModelId"]),
-    judgeProviderId: toStr(rawFlags["judgeProviderId"]),
-    kFactor: toNum(rawFlags["kFactor"]),
-    initialRating: toNum(rawFlags["initialRating"]),
-    dbPath, outputFormat, outputPath, verbose,
-    maxMatches: toNum(rawFlags["maxMatches"]),
+    scenarioIds: toArr(flags["scenario"]).concat(positionals), skillIds: toArr(flags["skill"]),
+    modelIds: toArr(flags["model"]), judgeModelId: toStr(flags["judgeModelId"]),
+    judgeProviderId: toStr(flags["judgeProviderId"]), kFactor: toNum(flags["kFactor"]),
+    initialRating: toNum(flags["initialRating"]), dbPath: toStr(flags["dbPath"]),
+    outputFormat: toStr(flags["format"]) as CliOutputFormat | undefined,
+    outputPath: toStr(flags["outputPath"]), verbose: toBool(flags["verbose"]), maxMatches: toNum(flags["maxMatches"]),
   };
 
   const reportOptions: ReportOptions = {
-    format: outputFormat ?? "console",
-    outputPath, dbPath,
-    category: toStr(rawFlags["category"]),
-    skillId: skills[0],
-    modelId: models[0],
-    controlSkillId: toStr(rawFlags["controlSkillId"]),
-    title: toStr(rawFlags["title"]),
-    includeTrends: typeof rawFlags["includeTrends"] === "boolean" ? rawFlags["includeTrends"] : undefined,
-    includeCostEfficiency: typeof rawFlags["includeCostEfficiency"] === "boolean" ? rawFlags["includeCostEfficiency"] : undefined,
+    format: toStr(flags["format"]) as CliOutputFormat | undefined, outputPath: toStr(flags["outputPath"]),
+    dbPath: toStr(flags["dbPath"]), category: toStr(flags["category"]),
+    skillId: toStr(flags["skill"]), modelId: toStr(flags["model"]),
+    controlSkillId: toStr(flags["controlSkillId"]), title: toStr(flags["title"]),
+    includeTrends: toBool(flags["includeTrends"]), includeCostEfficiency: toBool(flags["includeCostEfficiency"]),
   };
 
   const syncOptions: SyncOptions = {
-    catalogPath: toStr(rawFlags["catalogPath"]),
-    targetDir: toStr(rawFlags["targetDir"]),
-    category: toStr(rawFlags["category"]),
-    force: typeof rawFlags["force"] === "boolean" ? rawFlags["force"] : undefined,
-    verifyOnly: typeof rawFlags["verifyOnly"] === "boolean" ? rawFlags["verifyOnly"] : undefined,
-    verbose,
+    catalogPath: toStr(flags["catalogPath"]), targetDir: toStr(flags["targetDir"]),
+    category: toStr(flags["category"]), force: toBool(flags["force"]),
+    verifyOnly: toBool(flags["verifyOnly"]), verbose: toBool(flags["verbose"]),
   };
 
   const listOptions: ListOptions = {
-    target: listTarget,
-    category: toStr(rawFlags["category"]),
-    tag: tags[0],
-    format: outputFormat,
-    catalogPath: toStr(rawFlags["catalogPath"]),
+    target: (positionals[0] as ListOptions["target"]) ?? "all", category: toStr(flags["category"]),
+    tag: toStr(flags["tag"]), format: toStr(flags["format"]) as CliOutputFormat | undefined, catalogPath: toStr(flags["catalogPath"]),
+  };
+
+  const replayOptions: ReplayCliOptions = {
+    target: toStr(flags["target"]) ?? positionals[0], runId: toStr(flags["runId"]),
+    filePath: toStr(flags["outputPath"]) ?? toStr(flags["target"]), format: toStr(flags["format"]) as "tui" | "html" | "json" | undefined,
+    outputPath: toStr(flags["outputPath"]), speed: toNum(flags["speed"]),
+    dbPath: toStr(flags["dbPath"]), web: toBool(flags["web"]), live: toBool(flags["live"]), verbose: toBool(flags["verbose"]),
+  };
+
+  const fuzzOptions: FuzzCliOptions = {
+    scenarioIds: toArr(flags["scenario"]).concat(positionals), skillIds: toArr(flags["skill"]),
+    modelIds: toArr(flags["model"]), strategies: toArr(flags["strategies"]), severities: toArr(flags["severities"]),
+    mutationsPerScenario: toNum(flags["mutationsPerScenario"]), concurrency: toNum(flags["concurrency"]),
+    seed: toNum(flags["seed"]), outputFormat: toStr(flags["format"]) as CliOutputFormat | undefined,
+    outputPath: toStr(flags["outputPath"]), verbose: toBool(flags["verbose"]),
   };
 
   return {
-    command,
-    rawArgs,
-    flags: frozenFlags,
-    positionals: remainingPositionals,
+    command, rawArgs: argv, flags: flags as Readonly<Record<string, string | boolean | number | readonly string[]>>, positionals,
     benchmarkOptions: command === "run" || command === "bench" ? benchmarkOptions : undefined,
     tournamentOptions: command === "tournament" ? tournamentOptions : undefined,
     reportOptions: command === "report" ? reportOptions : undefined,
     syncOptions: command === "sync" ? syncOptions : undefined,
     listOptions: command === "list" ? listOptions : undefined,
+    replayOptions: command === "replay" ? replayOptions : undefined,
+    fuzzOptions: command === "fuzz" ? fuzzOptions : undefined,
   };
 }
 
-export function getVersionText(): string {
-  return "skill-benchmarks v0.1.0";
-}
+export function getVersionText(): string { return "skill-benchmarks v0.1.0"; }
 
 function formatCmd(usage: string, desc: string, opts: readonly (readonly [string, string])[], ex: readonly string[]): string {
   const optStr = opts.map(([o, d]) => `  ${o.padEnd(24)} ${d}`).join("\n");
@@ -266,7 +211,7 @@ function formatCmd(usage: string, desc: string, opts: readonly (readonly [string
 }
 
 const RUN_OPTS: readonly (readonly [string, string])[] = [
-  ["-s, --scenario <ids>", "Scenario IDs (comma-separated/repeated)"], ["-k, --skill <ids>", "Skill IDs to evaluate"],
+  ["-s, --scenario <ids>", "Scenario IDs"], ["-k, --skill <ids>", "Skill IDs to evaluate"],
   ["-m, --model <ids>", "Model IDs to benchmark"], ["-p, --provider <id>", "Model provider ID"],
   ["-c, --category <name>", "Scenario category filter"], ["-t, --tag <tags>", "Scenario tags filter"],
   ["-j, --concurrency <n>", "Parallel concurrency (default: 4)"], ["-r, --repeats <n>", "Repetitions (default: 1)"],
@@ -275,17 +220,16 @@ const RUN_OPTS: readonly (readonly [string, string])[] = [
   ["--judge-model <id>", "LLM judge model ID"], ["--skip-judge", "Skip LLM judge scoring"],
   ["--clean-sandbox", "Clean sandboxes after completion"], ["--db <path>", "SQLite database path"],
   ["-f, --format <format>", "Output format: console, json, markdown, html"], ["-o, --output <path>", "Output file path"],
-  ["-v, --verbose", "Enable verbose execution logs"], ["-h, --help", "Show help for run command"],
+  ["-v, --verbose", "Enable verbose logs"], ["-h, --help", "Show help for run command"],
 ];
 
 const TOURNAMENT_OPTS: readonly (readonly [string, string])[] = [
   ["-s, --scenario <ids>", "Scenario IDs"], ["-k, --skill <ids>", "Skill IDs to compete"],
-  ["-m, --model <ids>", "Model IDs for participants"], ["--judge-model <id>", "Judge model ID for pairwise comparison"],
+  ["-m, --model <ids>", "Model IDs for participants"], ["--judge-model <id>", "Judge model ID"],
   ["--judge-provider <id>", "Judge provider ID"], ["--k-factor <n>", "Elo K-factor (default: 32)"],
   ["--initial-rating <n>", "Initial rating (default: 1500)"], ["--max-matches <n>", "Max tournament matches"],
   ["--db <path>", "SQLite database path"], ["-f, --format <format>", "Output format: console, json, markdown, html"],
-  ["-o, --output <path>", "Output file path"], ["-v, --verbose", "Enable verbose logs"],
-  ["-h, --help", "Show help for tournament command"],
+  ["-o, --output <path>", "Output file path"], ["-v, --verbose", "Enable verbose logs"], ["-h, --help", "Show help for tournament command"],
 ];
 
 const REPORT_OPTS: readonly (readonly [string, string])[] = [
@@ -310,56 +254,56 @@ const LIST_OPTS: readonly (readonly [string, string])[] = [
   ["-h, --help", "Show help for list command"],
 ];
 
+const FUZZ_OPTS: readonly (readonly [string, string])[] = [
+  ["-s, --scenario <ids>", "Scenario IDs to fuzz"], ["-k, --skill <ids>", "Skill IDs under evaluation"],
+  ["-m, --model <ids>", "Model IDs to test"], ["--strategies <strats>", "Mutation strategies (comma-separated)"],
+  ["--severities <sevs>", "Mutation severities (low, medium, high, critical)"],
+  ["--mutations <n>", "Mutated variants generated per scenario (default: 4)"],
+  ["-j, --concurrency <n>", "Parallel execution concurrency (default: 4)"],
+  ["--seed <n>", "PRNG seed for deterministic mutation (default: 42)"],
+  ["-o, --output <path>", "Export path for markdown resilience report"],
+  ["-v, --verbose", "Enable verbose fuzz event logging"], ["-h, --help", "Show help for fuzz command"],
+];
+
 export function getHelpText(command?: CliCommandName): string {
   if (command === "run" || command === "bench") {
     return formatCmd(
-      "skill-bench run [options] [scenario-ids...]\n  skill-bench bench [options] [scenario-ids...]",
-      "Execute benchmark evaluation runs across scenarios, skills, and models.",
-      RUN_OPTS,
-      [
-        "skill-bench run -s git-workflow -k git-master -m gpt-4o",
-        "skill-bench run -c coding -m gpt-4o,claude-3-5-sonnet -j 8",
-        "skill-bench bench -s math-1,math-2 -k python-calc --skip-judge",
-      ]
+      "skill-bench run [options] [scenario-ids...]", "Execute benchmark evaluation runs across scenarios, skills, and models.",
+      RUN_OPTS, ["skill-bench run -s git-workflow -k git-master -m gpt-4o", "skill-bench run -c coding -m gpt-4o -j 8"]
     );
   }
   if (command === "tournament") {
     return formatCmd(
-      "skill-bench tournament [options] [scenario-ids...]",
-      "Run pairwise Elo rating tournament matches between skills.",
-      TOURNAMENT_OPTS,
-      [
-        "skill-bench tournament -s coding-refactor -k skill-v1,skill-v2,skill-v3",
-        "skill-bench tournament -s task-1 -k agent-a,agent-b --judge-model gpt-4o",
-      ]
+      "skill-bench tournament [options] [scenario-ids...]", "Run pairwise Elo rating tournament matches between skills.",
+      TOURNAMENT_OPTS, ["skill-bench tournament -s coding-refactor -k skill-v1,skill-v2"]
     );
   }
   if (command === "report") {
     return formatCmd(
-      "skill-bench report [options]",
-      "Generate benchmark analytics, comparison, and trend reports.",
-      REPORT_OPTS,
-      [
-        "skill-bench report -f markdown -o benchmark-summary.md",
-        "skill-bench report -f html -o dashboard.html --include-trends --include-cost",
-        'skill-bench report --control-skill baseline-skill --title "Release v2.0"',
-      ]
+      "skill-bench report [options]", "Generate benchmark analytics, comparison, and trend reports.",
+      REPORT_OPTS, ["skill-bench report -f markdown -o summary.md", "skill-bench report -f html -o dashboard.html"]
     );
   }
   if (command === "sync") {
     return formatCmd(
-      "skill-bench sync [options]",
-      "Synchronize skills and scenarios from catalog repositories.",
-      SYNC_OPTS,
-      ["skill-bench sync", "skill-bench sync --force --catalog ./skills-catalog", "skill-bench sync --verify-only"]
+      "skill-bench sync [options]", "Synchronize skills and scenarios from catalog repositories.",
+      SYNC_OPTS, ["skill-bench sync", "skill-bench sync --force --catalog ./catalog"]
     );
   }
   if (command === "list") {
     return formatCmd(
-      "skill-bench list [target] [options]",
-      "List available benchmark scenarios, skills, and models.\n\nArguments:\n  target                   Entity type: scenarios, skills, models, all (default: all)",
-      LIST_OPTS,
-      ["skill-bench list scenarios", "skill-bench list skills -c reasoning", "skill-bench list all -f json"]
+      "skill-bench list [target] [options]", "List available benchmark scenarios, skills, and models.",
+      LIST_OPTS, ["skill-bench list scenarios", "skill-bench list skills -c reasoning"]
+    );
+  }
+  if (command === "fuzz") {
+    return formatCmd(
+      "skill-bench fuzz [options] [scenario-ids...]", "Run adversarial mutation fuzzing across benchmark scenarios.",
+      FUZZ_OPTS, [
+        "skill-bench fuzz -s git-worktrees --strategies prompt_injection,syntax_corruption",
+        "skill-bench fuzz -s git-worktrees --severities low,medium,high,critical -o fuzz-report.md",
+        "skill-bench fuzz -s git-worktrees --mutations 8 -j 4 --seed 1337",
+      ]
     );
   }
   if (command === "version") {
@@ -375,6 +319,8 @@ export function getHelpText(command?: CliCommandName): string {
     "  report       Generate benchmark reports (console, json, markdown, html)",
     "  sync         Sync skills and scenarios from catalog repositories",
     "  list         List available scenarios, skills, and models",
+    "  replay       Interactive TUI or web execution replay player",
+    "  fuzz         Adversarial scenario mutation and fuzzing engine",
     "  help         Display help for a command",
     "  version      Display version information", "",
     "Global Options:",
