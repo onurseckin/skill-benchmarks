@@ -7,7 +7,7 @@ The `skill-benchmarks` infrastructure requires a deterministic, lightweight, and
 Benchmarking skills across diverse developer workstations (macOS Apple Silicon, Linux x86_64/ARM64, Windows WSL2) introduces host environment variance—divergent glibc versions, shell configurations, ambient environment variables, and pre-installed binary tools. Containerized execution eliminates this variance by guaranteeing:
 
 1. **Deterministic Execution**: Identical binary versions, tool paths, standard library implementations, and execution sandboxes regardless of the host machine.
-2. **Dual-Runtime High Velocity**: Native, high-performance support for both JavaScript/TypeScript (Node.js LTS + Bun) and Python (Python 3.12+ + `uv`), utilizing the fastest package managers and runtime engines available.
+2. **Dual-Runtime High Velocity**: Native, high-performance support for both JavaScript/TypeScript (Node.js 24 LTS + Bun 1.4+) and Python (Python 3.14+ + `uv` 0.12+), utilizing the fastest package managers and runtime engines available.
 3. **Hermetic Security & Safety**: Complete isolation from the host filesystem, non-root execution, privilege dropping, and restricted capabilities to prevent untrusted agent actions from affecting the host.
 4. **Minimal Startup Latency**: A slim image footprint (~350MB compressed, <900MB uncompressed) optimized for cold startup in < 1.5 seconds and instant tool dispatch.
 
@@ -19,14 +19,15 @@ Benchmarking skills across diverse developer workstations (macOS Apple Silicon, 
 
 | Distribution | Base Size | C Library | Compatibility | Package Ecosystem | Verdict |
 |---|---|---|---|---|---|
-| **Debian Bookworm Slim** (`debian:bookworm-slim`) | **~74 MB** | **glibc** | **Maximum (Universal wheels, Bun native bindings, Node addons)** | **Apt (extensive, stable, well-maintained)** | **SELECTED (Optimal balance of size, glibc compatibility, and stability)** |
+| **Debian Trixie Slim** (`debian:trixie-slim` / `debian:13-slim`) | **~75 MB** | **glibc (2.40+)** | **Maximum (Universal wheels, Bun native bindings, Node addons)** | **Apt (extensive, stable Debian 13 repository)** | **SELECTED (Current Debian Stable, optimal balance of size, modern glibc, and long-term support through 2030)** |
+| **Debian Bookworm Slim** (`debian:bookworm-slim` / `debian:12-slim`) | ~74 MB | glibc (2.36) | High | Apt (Debian 12 Oldstable, LTS phase through 2028) | Superseded (Maintained as fallback, replaced by Trixie for new image builds) |
 | **Alpine Linux** (`alpine:latest`) | ~7 MB | musl | Low (Requires musl wheels, Bun incompatibilities, segfault risks on native binaries) | Apk (minimal, frequent ABI mismatch) | Rejected (musl breaks standard Python wheels and Bun native bindings) |
-| **Ubuntu Minimal** (`ubuntu:24.04`) | ~110 MB | glibc | Maximum | Apt + Snap (unnecessary bloat, slower image build) | Rejected (Heavier than Debian-slim with no added benefits) |
+| **Ubuntu Minimal** (`ubuntu:24.04` / `ubuntu:26.04`) | ~110 MB | glibc | Maximum | Apt + Snap (unnecessary bloat, slower image build) | Rejected (Heavier than Debian-slim with no added benefits) |
 | **Distroless / Scratch** | ~2-20 MB | None/glibc | None (No interactive shell, no CLI tools, impossible to run agent bash tools) | None | Rejected (Agent benchmarks require standard CLI tools: bash, git, jq) |
 
-### 2.2 Why Debian Bookworm Slim?
-- **Universal glibc Compatibility**: Python binary wheels on PyPI (PEP 600 `manylinux_2_34`), Bun binary distributions, Node.js pre-compiled binaries, and Rust/C++ native addons compile and execute without musl ABI friction.
-- **Predictable Tooling**: Well-tested standard utilities (`coreutils`, `bash 5.2+`, `git 2.39+`, `tar`, `grep`, `sed`, `awk`).
+### 2.2 Why Debian Trixie Slim?
+- **Universal glibc Compatibility**: Python binary wheels on PyPI (PEP 600 `manylinux_2_34` / `manylinux_2_40`), Bun binary distributions, Node.js pre-compiled binaries, and Rust/C++ native addons compile and execute without musl ABI friction.
+- **Predictable Modern Tooling**: Well-tested standard utilities (`coreutils`, `bash 5.2+`, `git 2.45+`, `tar`, `grep`, `sed`, `awk`).
 - **Clean Attack Surface**: Minimal pre-installed packages without systemd or desktop daemon overhead.
 
 ---
@@ -49,8 +50,8 @@ Modern agent skills predominantly operate in two primary ecosystems: **JavaScrip
 |         v                                                               v         |
 |  +-----------------------------+                         +-----------------------------+
 |  |     JS / TS Runtime Stack   |                         |     Python Runtime Stack    |
-|  |  - Node.js v22.x LTS        |                         |  - Python 3.12+ (CPython)   |
-|  |  - Bun v1.2+ (Fast runtime) |                         |  - Astral uv (Ultra-fast)   |
+|  |  - Node.js v24.x LTS (Node) |                         |  - Python 3.14+ (CPython)   |
+|  |  - Bun v1.4+ (Fast runtime) |                         |  - Astral uv (v0.12+)       |
 |  |  - pnpm / npm / corepack    |                         |  - pip / venv / setuptools  |
 |  +-----------------------------+                         +-----------------------------+
 |         |                                                               |         |
@@ -59,28 +60,28 @@ Modern agent skills predominantly operate in two primary ecosystems: **JavaScrip
 |                                         v                                         |
 |  +-----------------------------------------------------------------------------+  |
 |  |                         Strategic CLI Toolkit (C / Rust)                    |  |
-|  |   git (2.39+)   |   ripgrep (rg)   |   fd-find (fd)   |   jq (1.6+)         |  |
-|  |   curl / wget   |   tar / gzip     |   make / gcc     |   bash (5.2+)       |  |
+|  |   git (2.45+)   |   ripgrep (15.2+)  |   fd-find (10.4+) |   jq (1.8+)         |  |
+|  |   curl / wget   |   tar / gzip       |   make / gcc      |   bash (5.2+)       |  |
 |  +-----------------------------------------------------------------------------+  |
 |                                         |                                         |
 |                                         v                                         |
 |  +-----------------------------------------------------------------------------+  |
-|  |                     Debian 12 Bookworm Slim Base Layer                      |  |
+|  |                      Debian 13 Trixie Slim Base Layer                       |  |
 |  +-----------------------------------------------------------------------------+  |
 +-----------------------------------------------------------------------------------+
 ```
 
 ### 3.1 JavaScript / TypeScript Runtime Specification
-- **Node.js LTS (v22.x)**: Official active LTS release providing maximum compatibility with legacy npm scripts, standard libraries, and testing frameworks (Jest, Vitest, Mocha).
-- **Bun (v1.2+)**:
+- **Node.js LTS (v24.x)**: Official active LTS release ("Krypton") providing maximum compatibility with legacy npm scripts, modern ESM/CJS tooling, standard libraries, and testing frameworks (Jest, Vitest, Mocha).
+- **Bun (v1.4+)**:
   - Primary execution engine for TypeScript scripts without transpile steps (`bun run script.ts`).
   - High-performance package manager (`bun install` is 10x-25x faster than npm/pnpm).
   - Native high-speed test runner (`bun test`).
 - **Package Manager Caching**: Dedicated cache directories pre-configured at `/home/sandbox/.bun/install/cache` and `/home/sandbox/.npm` with proper ownership.
 
 ### 3.2 Python Runtime Specification
-- **Python (3.12+)**: Modern CPython runtime with full standard library support, typing enhancements, and sub-interpreter performance optimizations.
-- **Astral `uv` (Latest Stable)**:
+- **Python (3.14+)**: Modern CPython runtime (3.14.x) with full standard library support, typing enhancements, and sub-interpreter performance optimizations.
+- **Astral `uv` (v0.12+)**:
   - Statically linked, Rust-based package installer and resolver.
   - Sub-millisecond virtualenv creation (`uv venv .venv`).
   - Ultra-fast dependency resolution and installation (`uv pip install -r requirements.txt`).
@@ -97,10 +98,10 @@ The base image includes a curated set of high-performance developer utilities re
 | Tool | Binary Path | Version / Source | Primary Role in Benchmark Scenarios |
 |---|---|---|---|
 | `bash` | `/bin/bash` | 5.2+ (Debian) | Default interactive shell with programmable completion and job control. |
-| `git` | `/usr/bin/git` | 2.39+ (Debian) | Version control, workspace baseline tagging, diff generation (`git diff`). |
-| `ripgrep` | `/usr/bin/rg` | Latest Rust binary | Ultra-fast regex and text searching across large multi-file codebases. |
-| `fd-find` | `/usr/bin/fd` | Latest Rust binary | High-speed directory tree traversal and file pattern discovery. |
-| `jq` | `/usr/bin/jq` | 1.6+ (Debian) | JSON parsing, transformation, and query extraction in CLI pipelines. |
+| `git` | `/usr/bin/git` | 2.45+ (Debian) | Version control, workspace baseline tagging, diff generation (`git diff`). |
+| `ripgrep` | `/usr/bin/rg` | 15.2+ (BurntSushi) | Ultra-fast regex and text searching across large multi-file codebases. |
+| `fd-find` | `/usr/bin/fd` | 10.4+ (sharkdp) | High-speed directory tree traversal and file pattern discovery. |
+| `jq` | `/usr/bin/jq` | 1.8+ (jqlang) | JSON parsing, transformation, and query extraction in CLI pipelines. |
 | `curl` / `wget` | `/usr/bin/curl` | Latest (Debian) | HTTP payload inspection, network retrieval, API interactions. |
 | `tar` / `gzip` / `unzip` | `/bin/tar` | Coreutils / Debian | Fixture decompression and workspace archive extraction. |
 | `make` / `build-essential` | `/usr/bin/make` | Debian build tools | Building native extensions, C bindings, and running Makefile targets. |
@@ -119,11 +120,11 @@ To minimize final image size, reduce security vulnerabilities, and ensure cache 
 # ==============================================================================
 # Stage 1: Tool & Binary Downloader Stage
 # ==============================================================================
-FROM debian:bookworm-slim AS binary-builder
+FROM debian:trixie-slim AS binary-builder
 
 ARG TARGETPLATFORM
-ARG BUN_VERSION=1.2.4
-ARG UV_VERSION=0.6.3
+ARG BUN_VERSION=1.4.0
+ARG UV_VERSION=0.12.5
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -165,7 +166,7 @@ RUN case "${TARGETPLATFORM}" in \
 # ==============================================================================
 # Stage 2: Final Runtime Image
 # ==============================================================================
-FROM debian:bookworm-slim AS sandbox-base
+FROM debian:trixie-slim AS sandbox-base
 
 LABEL maintainer="infrastructure@skill-benchmarks.dev"
 LABEL description="Deterministic Dual-Runtime Sandbox for Skill Benchmarking"
@@ -182,7 +183,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gnupg \
     && mkdir -p /etc/apt/keyrings \
     && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg \
-    && echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_22.x nodistro main" | tee /etc/apt/sources.list.d/nodesource.list \
+    && echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_24.x nodistro main" | tee /etc/apt/sources.list.d/nodesource.list \
     && apt-get update && apt-get install -y --no-install-recommends \
     bash \
     git \
@@ -208,7 +209,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     sed \
     gawk \
     && ln -s /usr/bin/fdfind /usr/local/bin/fd \
-    && npm install -g pnpm corepack \
+    && npm install -g pnpm@11.23.0 corepack \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
