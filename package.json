@@ -6,7 +6,8 @@
   "scripts": {
     "test": "bun test",
     "typecheck": "tsc --noEmit",
-    "gc:containers": "bun run src/infrastructure/container/gc.ts"
+    "gc:containers": "bun run src/infrastructure/container/gc.ts",
+    "sync:skills": "bun run src/scripts/sync-skills.ts"
   },
   "devDependencies": {
     "@types/node": "^22.13.0",
