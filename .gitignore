@@ -327,5 +327,8 @@ scratch/
 .capsules/
 .claude/
 .cursor/
-.serp/
 .cortex/
+screenshots/
+visual-report.json
+.skills/
+.benchmarks/
