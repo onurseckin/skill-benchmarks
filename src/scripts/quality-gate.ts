@@ -1,5 +1,6 @@
 import { readdirSync, statSync, readFileSync } from "node:fs";
 import { join, extname } from "node:path";
+import { execSync } from "node:child_process";
 
 interface Violation {
   readonly file: string;
@@ -80,6 +81,13 @@ function scanFileForViolations(filePath: string): readonly Violation[] {
 }
 
 function runQualityAudit(): void {
+  try {
+    execSync("bun run typecheck", { stdio: "pipe" });
+  } catch (error) {
+    process.stderr.write(`Typecheck verification failed: ${String(error)}\n`);
+    process.exit(1);
+  }
+
   const rootDir = process.cwd();
   const srcDir = join(rootDir, "src");
   const allViolations: Violation[] = [];

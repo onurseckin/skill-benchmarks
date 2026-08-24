@@ -28,11 +28,7 @@
     }
   },
   "files": [
-    "src/skills/types.ts",
-    "src/skills/downloader.ts",
-    "src/skills/registry.ts",
-    "src/skills/index.ts",
-    "src/scripts/sync-skills.ts"
+    "src/providers/types.ts"
   ],
   "include": [
     "src/**/*"

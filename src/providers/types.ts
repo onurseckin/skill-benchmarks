@@ -188,7 +188,7 @@ export class ProviderError extends Error {
     this.name = this.constructor.name;
     this.providerId = providerId;
     this.statusCode = options?.statusCode;
-    this.isRetryable = options?.isRetryable ?? false;
+    this.isRetryable = options !== undefined && options.isRetryable !== undefined ? options.isRetryable : false;
     this.rawError = options?.rawError;
   }
 }
@@ -207,7 +207,7 @@ export class ProviderRateLimitError extends ProviderError {
     }
   ) {
     super(message, providerId, {
-      statusCode: options?.statusCode ?? 429,
+      statusCode: options !== undefined && options.statusCode !== undefined ? options.statusCode : 429,
       isRetryable: true,
       cause: options?.cause,
       rawError: options?.rawError,
@@ -227,7 +227,7 @@ export class ProviderAuthenticationError extends ProviderError {
     }
   ) {
     super(message, providerId, {
-      statusCode: options?.statusCode ?? 401,
+      statusCode: options !== undefined && options.statusCode !== undefined ? options.statusCode : 401,
       isRetryable: false,
       cause: options?.cause,
       rawError: options?.rawError,
@@ -251,7 +251,7 @@ export class ProviderContextLengthExceededError extends ProviderError {
     }
   ) {
     super(message, providerId, {
-      statusCode: options?.statusCode ?? 400,
+      statusCode: options !== undefined && options.statusCode !== undefined ? options.statusCode : 400,
       isRetryable: false,
       cause: options?.cause,
       rawError: options?.rawError,
@@ -275,7 +275,7 @@ export class ProviderTimeoutError extends ProviderError {
     }
   ) {
     super(message, providerId, {
-      statusCode: options?.statusCode ?? 408,
+      statusCode: options !== undefined && options.statusCode !== undefined ? options.statusCode : 408,
       isRetryable: true,
       cause: options?.cause,
       rawError: options?.rawError,
