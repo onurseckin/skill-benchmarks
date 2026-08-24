@@ -3,11 +3,15 @@
   "version": "0.1.0",
   "description": "Deterministic, high-throughput LLM agent skill benchmarking and evaluation harness",
   "type": "module",
+  "bin": {
+    "skill-benchmarks": "bin/skill-benchmarks"
+  },
   "scripts": {
     "test": "bun test",
     "typecheck": "tsc --noEmit",
     "gc:containers": "bun run src/infrastructure/container/gc.ts",
-    "sync:skills": "bun run src/scripts/sync-skills.ts"
+    "sync:skills": "bun run src/scripts/sync-skills.ts",
+    "cli": "bun run bin/skill-benchmarks"
   },
   "devDependencies": {
     "@types/node": "^22.13.0",
