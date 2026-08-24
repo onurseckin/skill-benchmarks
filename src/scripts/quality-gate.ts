@@ -46,8 +46,7 @@ function scanFileForViolations(filePath: string): readonly Violation[] {
     });
   }
 
-  for (let lineNumber = 0; lineNumber < lines.length; lineNumber++) {
-    const rawLine = lines[lineNumber];
+  for (const [lineNumber, rawLine] of lines.entries()) {
     const trimmedLine = rawLine.trim();
 
     if (trimmedLine.startsWith("//") || trimmedLine.startsWith("/*") || trimmedLine.startsWith("*") || trimmedLine.endsWith("*/")) {
