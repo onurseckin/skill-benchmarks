@@ -1,0 +1,16 @@
+{
+  "agent_id": "orchestrator-1",
+  "role": "orchestrator",
+  "tier": 1,
+  "token": "tok_live_9361d6351b68ff672f7d65391187a1d8c0abeaa57558d101",
+  "pid": 80819,
+  "ppid": 35673,
+  "run_id": "/Users/onurseckinsenoglu/repos/skill-benchmarks",
+  "can_execute_shell": true,
+  "can_edit_files": false,
+  "host": "antigravity",
+  "mechanisms_detected": [
+    "registration"
+  ],
+  "granted_at": "2026-08-24T17:14:19.933Z"
+}
