@@ -1,4 +1,4 @@
-import { readdirSync, statSync, readFileSync } from "node:fs";
+import { readdirSync, statSync, readFileSync, existsSync } from "node:fs";
 import { join, extname } from "node:path";
 import { execSync } from "node:child_process";
 
@@ -90,6 +90,16 @@ function runQualityAudit(): void {
 
   const rootDir = process.cwd();
   const srcDir = join(rootDir, "src");
+  const dataDb = join(rootDir, "data/benchmark-results.db");
+  const dataLeaderboard = join(rootDir, "data/leaderboard.md");
+  const docsLeaderboard = join(rootDir, "docs/LEADERBOARD.md");
+  const dataDashboard = join(rootDir, "data/dashboard.html");
+
+  if (!existsSync(dataDb) || !existsSync(dataLeaderboard) || !existsSync(docsLeaderboard) || !existsSync(dataDashboard)) {
+    process.stderr.write("Required benchmark deliverables missing.\n");
+    process.exit(1);
+  }
+
   const allViolations: Violation[] = [];
 
   try {
@@ -116,3 +126,4 @@ function runQualityAudit(): void {
 }
 
 runQualityAudit();
+
