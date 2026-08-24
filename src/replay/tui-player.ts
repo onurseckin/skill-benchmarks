@@ -5,7 +5,7 @@ import type {
   PlayerTab,
   ReplayPlayerState,
   CgroupTelemetryPoint,
-} from "./types.js";
+} from "./index.js";
 import {
   bold,
   dim,
