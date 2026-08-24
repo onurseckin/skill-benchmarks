@@ -31,59 +31,47 @@ import {
 } from "../reporting/aggregator.js";
 import type { RunRecord, RunStatus } from "../reporting/types.js";
 
+import { MatrixSweepEngine } from "../sweep/index.js";
+
 export async function runBenchmarkCommand(args: CliParsedArgs): Promise<CliCommandResult> {
   const startTime = Date.now();
   const options = args.benchmarkOptions !== undefined ? args.benchmarkOptions : ({} as BenchmarkRunOptions);
-  const scenarioLoader = new ScenarioLoader();
   const scenarioIds = options.scenarioIds.length > 0 ? options.scenarioIds : ["git-worktrees"];
   const skillIds = options.skillIds.length > 0 ? options.skillIds : ["using-git-worktrees"];
   const modelIds = options.modelIds.length > 0 ? options.modelIds : ["claude-3-7-sonnet"];
   const dbPath = options.dbPath !== undefined ? options.dbPath : resolve(process.cwd(), "benchmarks.db");
-  const db = new TelemetryDatabase(dbPath);
-  db.initSchema();
 
   console.log(formatSectionHeader(`Executing Skill Benchmark Matrix: ${scenarioIds.length} scenario(s) x ${skillIds.length} skill(s) x ${modelIds.length} model(s)`));
 
-  for (const scenarioId of scenarioIds) {
-    for (const skillId of skillIds) {
-      for (const modelId of modelIds) {
-        const scenario = scenarioLoader.loadScenario(scenarioId);
-        const durationMs = 1200 + Math.floor(Math.random() * 800);
-        const score = 80 + Math.floor(Math.random() * 20);
-        const passed = score >= 70;
-        const runId = `run-${scenarioId}-${skillId}-${Date.now()}`;
-
-        const record: RunRecord = {
-          runId,
-          scenarioId,
-          category: scenario.category,
-          skillId,
-          modelId,
-          providerId: "anthropic",
-          status: "completed" as RunStatus,
-          compositeScore: score,
-          passedBenchmark: passed,
-          wallClockMs: durationMs,
-          totalTokens: 1880,
-          cacheHitRatio: 0.64,
-          totalCostUSD: 0.0125,
-          totalTurns: 3,
-          errorCount: 0,
-          startedAt: new Date(Date.now() - durationMs).toISOString(),
-          completedAt: new Date().toISOString(),
-        };
-
-        db.saveRunRecord(record);
-
-        const badge = passed ? formatBadge("success", "PASS") : formatBadge("error", "FAIL");
-        console.log(`  ${badge} ${cyan(scenarioId)} | ${bold(skillId)} | ${modelId} -> Score: ${score}/100 (${durationMs}ms)`);
-      }
+  const engine = new MatrixSweepEngine();
+  engine.on((event) => {
+    if (event.type === "cell:complete") {
+      console.log(`  ${formatBadge("success", "PASS")} ${cyan(event.cellId ?? "")} | ${event.message}`);
+    } else if (event.type === "cell:error") {
+      console.log(`  ${formatBadge("error", "FAIL")} ${cyan(event.cellId ?? "")} | ${event.message}`);
     }
-  }
+  });
+
+  const models = modelIds.map((m) => ({
+    modelId: m,
+    providerId: m.includes("gpt") ? "openai" : "anthropic",
+  }));
+
+  const summary = await engine.run({
+    scenarioIds,
+    skillIds,
+    models,
+    repetitions: options.repetitions ?? 1,
+    telemetryDbPath: dbPath,
+    dryRun: true,
+    concurrency: {
+      maxGlobalConcurrency: options.concurrency ?? 4,
+    },
+  });
 
   const durationMs = Date.now() - startTime;
-  console.log(green(`\nBenchmark execution completed in ${durationMs}ms. Results saved to ${dbPath}`));
-  return { success: true, exitCode: 0, durationMs };
+  console.log(green(`\nBenchmark sweep completed in ${durationMs}ms with ${summary.completedCount} passed, ${summary.failedCount} failed. Results saved to ${dbPath}`));
+  return { success: summary.failedCount === 0, exitCode: summary.failedCount === 0 ? 0 : 1, durationMs };
 }
 
 export async function runTournamentCommand(args: CliParsedArgs): Promise<CliCommandResult> {
