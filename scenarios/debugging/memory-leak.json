@@ -1,0 +1,78 @@
+{
+  "id": "debugging-memory-leak",
+  "name": "Node.js Stream Backpressure and Event Listener Leak Diagnosis",
+  "category": "debugging",
+  "difficulty": "hard",
+  "targetSkill": "memory-leak-debugging",
+  "baselineModel": "claude-3-7-sonnet-20250219",
+  "description": "Benchmark scenario evaluating an agent's debugging prowess to diagnose and fix a severe memory leak in a high-throughput Node.js pipeline caused by uncleaned EventEmitter listeners, retained closures, and missing backpressure handling on stream writes.",
+  "instructions": "You are tasked with diagnosing and fixing severe memory leaks in a high-throughput Node.js stream pipeline.\n\n### Background:\nUnder sustained load, the data pipeline service experiences continuous RSS and Heap Used memory growth, eventually crashing with an Out Of Memory (OOM) error. Profiling indicates two primary culprits:\n1. Uncleaned EventEmitter listeners and retained closures when subscriptions are discarded.\n2. Stream backpressure is ignored during batch flushes to downstream writable streams, causing unbounded memory retention when downstream sinks are slow.\n\n### Task Objectives:\n1. Inspect `src/pipeline/event-hub.ts` and implement proper listener detachment (`removeListener` / `off`) and history cleanup when subscriptions are unsubscribed.\n2. Inspect `src/pipeline/stream-aggregator.ts` and implement proper backpressure flow control. When writing batches to a downstream `Writable` destination, check if `.write()` returns `false`. If it does, pause the transform stream and wait for the downstream destination's `'drain'` event before resuming (`pause` / `drain` handling).\n3. Ensure all lifecycle methods (like `destroy` and `_flush`) cleanly clear active timers and release retained references.\n4. Ensure strict type safety and verify that TypeScript compiles cleanly without errors.",
+  "workspace": {
+    "fixtures": {
+      "src/pipeline/stream-aggregator.ts": "import { Transform, type TransformCallback, type Writable } from \"node:stream\";\n\nexport interface AggregatorOptions {\n  readonly highWaterMark?: number;\n  readonly batchSize?: number;\n  readonly flushIntervalMs?: number;\n}\n\nexport interface MetricItem {\n  readonly id: string;\n  readonly timestamp: number;\n  readonly value: number;\n  readonly tags: Record<string, string>;\n}\n\nexport interface AggregatedBatch {\n  readonly batchId: string;\n  readonly count: number;\n  readonly totalValue: number;\n  readonly averageValue: number;\n  readonly items: readonly MetricItem[];\n  readonly createdAt: number;\n}\n\nexport class StreamAggregator extends Transform {\n  private buffer: MetricItem[] = [];\n  private readonly batchSize: number;\n  private readonly flushIntervalMs: number;\n  private timer: NodeJS.Timeout | null = null;\n  private batchCounter = 0;\n  private downstream: Writable | null = null;\n\n  constructor(options: AggregatorOptions = {}) {\n    super({\n      objectMode: true,\n      highWaterMark: options.highWaterMark ?? 64,\n    });\n    this.batchSize = options.batchSize ?? 100;\n    this.flushIntervalMs = options.flushIntervalMs ?? 1000;\n    this.startPeriodicFlush();\n  }\n\n  public setDownstream(writable: Writable): void {\n    this.downstream = writable;\n  }\n\n  private startPeriodicFlush(): void {\n    if (this.timer) {\n      clearInterval(this.timer);\n    }\n    this.timer = setInterval(() => {\n      if (this.buffer.length > 0) {\n        this.flushBuffer();\n      }\n    }, this.flushIntervalMs);\n  }\n\n  _transform(\n    chunk: MetricItem,\n    _encoding: BufferEncoding,\n    callback: TransformCallback\n  ): void {\n    this.buffer.push(chunk);\n    if (this.buffer.length >= this.batchSize) {\n      this.flushBuffer();\n    }\n    callback();\n  }\n\n  _flush(callback: TransformCallback): void {\n    if (this.timer) {\n      clearInterval(this.timer);\n      this.timer = null;\n    }\n    if (this.buffer.length > 0) {\n      this.flushBuffer();\n    }\n    callback();\n  }\n\n  private flushBuffer(): void {\n    if (this.buffer.length === 0) return;\n    const currentItems = this.buffer;\n    this.buffer = [];\n    this.batchCounter += 1;\n    const total = currentItems.reduce((acc, item) => acc + item.value, 0);\n    const batch: AggregatedBatch = {\n      batchId: `batch-${this.batchCounter}-${Date.now()}`,\n      count: currentItems.length,\n      totalValue: total,\n      averageValue: currentItems.length > 0 ? total / currentItems.length : 0,\n      items: currentItems,\n      createdAt: Date.now(),\n    };\n\n    if (this.downstream) {\n      this.downstream.write(batch);\n    } else {\n      this.push(batch);\n    }\n  }\n\n  public getPendingBufferSize(): number {\n    return this.buffer.length;\n  }\n\n  public destroy(error?: Error): this {\n    if (this.timer) {\n      clearInterval(this.timer);\n      this.timer = null;\n    }\n    return super.destroy(error);\n  }\n}\n",
+      "src/pipeline/event-hub.ts": "import { EventEmitter } from \"node:events\";\n\nexport interface PipelineEvent {\n  readonly topic: string;\n  readonly payload: unknown;\n  readonly timestamp: number;\n  readonly traceId: string;\n}\n\nexport type EventHandler = (event: PipelineEvent) => void | Promise<void>;\n\nexport interface SubscriptionHandle {\n  readonly subscriptionId: string;\n  readonly topic: string;\n  readonly unsubscribe: () => void;\n}\n\nexport class PipelineEventHub {\n  private readonly emitter = new EventEmitter();\n  private readonly subscriptions = new Map<string, { topic: string; handler: EventHandler }>();\n  private readonly retainedEventHistory: PipelineEvent[] = [];\n  private subscriptionCounter = 0;\n\n  constructor(maxListeners = 0) {\n    this.emitter.setMaxListeners(maxListeners);\n  }\n\n  public subscribe(topic: string, handler: EventHandler): SubscriptionHandle {\n    this.subscriptionCounter += 1;\n    const subscriptionId = `sub-${this.subscriptionCounter}-${Date.now()}`;\n    \n    const wrappedHandler: EventHandler = (event: PipelineEvent) => {\n      this.retainedEventHistory.push(event);\n      return handler(event);\n    };\n\n    this.emitter.on(topic, wrappedHandler);\n    this.subscriptions.set(subscriptionId, { topic, handler: wrappedHandler });\n\n    return {\n      subscriptionId,\n      topic,\n      unsubscribe: () => {\n        this.subscriptions.delete(subscriptionId);\n      },\n    };\n  }\n\n  public publish(topic: string, payload: unknown, traceId = \"\"): boolean {\n    const event: PipelineEvent = {\n      topic,\n      payload,\n      timestamp: Date.now(),\n      traceId: traceId || `trace-${Math.random().toString(36).substring(2, 11)}`,\n    };\n    return this.emitter.emit(topic, event);\n  }\n\n  public getActiveSubscriptionCount(): number {\n    return this.subscriptions.size;\n  }\n\n  public getRawListenerCount(topic: string): number {\n    return this.emitter.listenerCount(topic);\n  }\n\n  public clearHistory(): void {\n    this.retainedEventHistory.length = 0;\n  }\n}\n",
+      "src/pipeline/memory-monitor.ts": "export interface MemorySnapshot {\n  readonly timestamp: number;\n  readonly heapUsedMB: number;\n  readonly heapTotalMB: number;\n  readonly rssMB: number;\n  readonly externalMB: number;\n  readonly arrayBuffersMB: number;\n}\n\nexport interface LeakDiagnosticReport {\n  readonly durationMs: number;\n  readonly initialHeapMB: number;\n  readonly finalHeapMB: number;\n  readonly deltaHeapMB: number;\n  readonly growthRateMBPerSec: number;\n  readonly isLeakSuspected: boolean;\n  readonly snapshotCount: number;\n}\n\nexport class PipelineMemoryMonitor {\n  private readonly snapshots: MemorySnapshot[] = [];\n  private samplingInterval: NodeJS.Timeout | null = null;\n  private readonly growthThresholdMB: number;\n\n  constructor(growthThresholdMB = 50) {\n    this.growthThresholdMB = growthThresholdMB;\n  }\n\n  public captureSnapshot(): MemorySnapshot {\n    const mem = process.memoryUsage();\n    const bytesToMB = (bytes: number) => Math.round((bytes / 1024 / 1024) * 100) / 100;\n    const snapshot: MemorySnapshot = {\n      timestamp: Date.now(),\n      heapUsedMB: bytesToMB(mem.heapUsed),\n      heapTotalMB: bytesToMB(mem.heapTotal),\n      rssMB: bytesToMB(mem.rss),\n      externalMB: bytesToMB(mem.external),\n      arrayBuffersMB: bytesToMB(mem.arrayBuffers ?? 0),\n    };\n    this.snapshots.push(snapshot);\n    return snapshot;\n  }\n\n  public startSampling(intervalMs = 500): void {\n    if (this.samplingInterval) {\n      clearInterval(this.samplingInterval);\n    }\n    this.captureSnapshot();\n    this.samplingInterval = setInterval(() => {\n      this.captureSnapshot();\n    }, intervalMs);\n  }\n\n  public stopSampling(): LeakDiagnosticReport {\n    if (this.samplingInterval) {\n      clearInterval(this.samplingInterval);\n      this.samplingInterval = null;\n    }\n    this.captureSnapshot();\n\n    if (this.snapshots.length === 0) {\n      return {\n        durationMs: 0,\n        initialHeapMB: 0,\n        finalHeapMB: 0,\n        deltaHeapMB: 0,\n        growthRateMBPerSec: 0,\n        isLeakSuspected: false,\n        snapshotCount: 0,\n      };\n    }\n\n    const first = this.snapshots[0];\n    const last = this.snapshots[this.snapshots.length - 1];\n    const durationMs = Math.max(1, last.timestamp - first.timestamp);\n    const deltaHeapMB = Math.round((last.heapUsedMB - first.heapUsedMB) * 100) / 100;\n    const growthRateMBPerSec = Math.round((deltaHeapMB / (durationMs / 1000)) * 100) / 100;\n    const isLeakSuspected = deltaHeapMB > this.growthThresholdMB;\n\n    return {\n      durationMs,\n      initialHeapMB: first.heapUsedMB,\n      finalHeapMB: last.heapUsedMB,\n      deltaHeapMB,\n      growthRateMBPerSec,\n      isLeakSuspected,\n      snapshotCount: this.snapshots.length,\n    };\n  }\n\n  public getSnapshots(): readonly MemorySnapshot[] {\n    return [...this.snapshots];\n  }\n\n  public reset(): void {\n    if (this.samplingInterval) {\n      clearInterval(this.samplingInterval);\n      this.samplingInterval = null;\n    }\n    this.snapshots.length = 0;\n  }\n}\n",
+      "package.json": "{\n  \"name\": \"high-throughput-pipeline\",\n  \"version\": \"1.0.0\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"scripts\": {\n    \"build\": \"tsc --noEmit\",\n    \"typecheck\": \"tsc --noEmit\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^20.11.0\",\n    \"typescript\": \"^5.3.3\"\n  }\n}\n",
+      "tsconfig.json": "{\n  \"compilerOptions\": {\n    \"target\": \"ES2022\",\n    \"module\": \"NodeNext\",\n    \"moduleResolution\": \"NodeNext\",\n    \"lib\": [\"ES2022\"],\n    \"strict\": true,\n    \"esModuleInterop\": true,\n    \"skipLibCheck\": true,\n    \"forceConsistentCasingInFileNames\": true,\n    \"noImplicitAny\": true,\n    \"strictNullChecks\": true,\n    \"declaration\": true\n  },\n  \"include\": [\"src/**/*\"]\n}\n"
+    },
+    "initialGitCommit": "Initial commit for memory leak debugging benchmark fixture"
+  },
+  "limits": {
+    "maxTurns": 15,
+    "maxCostUSD": 1.0,
+    "maxWallClockTimeMs": 300000
+  },
+  "evaluation": {
+    "deterministicChecks": [
+      {
+        "id": "check-drain-listener",
+        "name": "Stream Drain Listener Check",
+        "type": "file_content",
+        "filePath": "src/pipeline/stream-aggregator.ts",
+        "fileContentPattern": "drain",
+        "weight": 0.35
+      },
+      {
+        "id": "check-remove-listener",
+        "name": "EventEmitter Cleanup Check",
+        "type": "file_content",
+        "filePath": "src/pipeline/event-hub.ts",
+        "fileContentPattern": "removeListener|off|removeAllListeners",
+        "weight": 0.35
+      },
+      {
+        "id": "check-bounded-queue",
+        "name": "Stream Flow Control and Backpressure Check",
+        "type": "file_content",
+        "filePath": "src/pipeline/stream-aggregator.ts",
+        "fileContentPattern": "pause|cork|uncork|isPaused",
+        "weight": 0.3
+      }
+    ],
+    "judgeRubrics": [
+      {
+        "name": "Root Cause Diagnosis Accuracy",
+        "category": "debugging",
+        "weight": 0.6,
+        "description": "Evaluates the agent's ability to precisely identify the two distinct root causes: unremoved EventEmitter listeners in PipelineEventHub and ignored backpressure/drain signals during downstream stream writes in StreamAggregator.",
+        "criteria": {
+          "1": "Fails to identify either root cause. Proposes irrelevant refactorings or introduces additional memory leaks.",
+          "3": "Identifies one of the root causes (e.g. event listener cleanup) but misses backpressure flow control on stream writes, or applies an incomplete workaround.",
+          "5": "Flawlessly identifies both root causes with surgical precision: implements proper event listener removal on unsubscribe, binds drain event handling with stream pause/resume for backpressure, and retains zero unintended references."
+        }
+      },
+      {
+        "name": "Code Quality and Non-Regression",
+        "category": "general",
+        "weight": 0.4,
+        "description": "Evaluates the clean, idiomatic TypeScript implementation, error handling, lifecycle teardown, and adherence to zero comments and strict typing without introducing regressions.",
+        "criteria": {
+          "1": "Produces broken TypeScript code with compilation errors, any types, or regresses existing stream and event hub behavior.",
+          "3": "Produces functional code that resolves leaks but includes suboptimal queue management or minor type safety compromises.",
+          "5": "Delivers production-grade, highly optimized TypeScript with strict typing, robust stream backpressure management, clean lifecycle teardown, and 0 lint or type errors."
+        }
+      }
+    ],
+    "passThreshold": 80
+  }
+}

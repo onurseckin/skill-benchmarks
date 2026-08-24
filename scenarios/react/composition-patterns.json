@@ -1,0 +1,78 @@
+{
+  "id": "react-composition-patterns",
+  "name": "React Compound Components and Slot Composition Patterns",
+  "category": "react",
+  "difficulty": "hard",
+  "targetSkill": "vercel-composition-patterns",
+  "baselineModel": "claude-3-7-sonnet-20250219",
+  "description": "Benchmark scenario evaluating an agent's mastery of modern React composition patterns (Vercel style), refactoring a monolithic, boolean-prop-polluted component into an elegant compound component architecture.",
+  "instructions": "Refactor the legacy monolithic card component in `src/components/mega-card.tsx` into a modern, composable compound component architecture in `src/components/card-compound.tsx`.\n\nKey Requirements:\n1. Inspect `src/types/card.ts` and `src/components/mega-card.tsx` to understand the full set of capabilities, styles, and props.\n2. In `src/components/card-compound.tsx`, implement a clean Compound Component architecture:\n   - Create and use a React context (`createContext`, `useContext`) to share styling and configuration (`variant`, `size`, `disabled`) across sub-components with safe default fallbacks.\n   - Implement the root `Card` container component wrapping its children with the context provider.\n   - Implement sub-components: `Card.Header`, `Card.Title`, `Card.Description`, `Card.Content`, `Card.Footer`, and `Card.Action`.\n   - Attach all sub-components directly onto `Card` (e.g. `Card.Header = CardHeader`, `Card.Content = CardContent`, etc.) for clean `Card.Subcomponent` JSX ergonomics.\n   - Ensure all sub-components accept `children?: ReactNode` or slot props and properly forward standard HTML element attributes without prop leakage.\n3. Maintain strict TypeScript type safety with no `any` types and no comment syntax.\n4. Verify that TypeScript compilation (`tsc --noEmit`) passes cleanly.",
+  "workspace": {
+    "fixtures": {
+      "package.json": "{\n  \"name\": \"react-composition-fixture\",\n  \"version\": \"1.0.0\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"scripts\": {\n    \"typecheck\": \"tsc --noEmit\"\n  },\n  \"dependencies\": {\n    \"react\": \"^18.3.1\",\n    \"react-dom\": \"^18.3.1\"\n  },\n  \"devDependencies\": {\n    \"@types/react\": \"^18.3.12\",\n    \"@types/react-dom\": \"^18.3.1\",\n    \"typescript\": \"^5.6.3\"\n  }\n}\n",
+      "tsconfig.json": "{\n  \"compilerOptions\": {\n    \"target\": \"ES2022\",\n    \"lib\": [\"DOM\", \"DOM.Iterable\", \"ES2022\"],\n    \"module\": \"ESNext\",\n    \"moduleResolution\": \"bundler\",\n    \"jsx\": \"react-jsx\",\n    \"strict\": true,\n    \"noEmit\": true,\n    \"skipLibCheck\": true,\n    \"isolatedModules\": true,\n    \"esModuleInterop\": true,\n    \"forceConsistentCasingInFileNames\": true\n  },\n  \"include\": [\"src\"]\n}\n",
+      "src/types/card.ts": "import type { ReactNode, HTMLAttributes, ButtonHTMLAttributes } from \"react\";\n\nexport type CardVariant = \"default\" | \"bordered\" | \"elevated\" | \"ghost\";\nexport type CardSize = \"sm\" | \"md\" | \"lg\";\n\nexport interface MegaCardProps extends HTMLAttributes<HTMLDivElement> {\n  variant?: CardVariant;\n  size?: CardSize;\n  title?: string;\n  subtitle?: string;\n  description?: string;\n  icon?: ReactNode;\n  badgeText?: string;\n  badgeColor?: \"primary\" | \"secondary\" | \"destructive\" | \"outline\";\n  showAvatar?: boolean;\n  avatarUrl?: string;\n  avatarFallback?: string;\n  hasHeader?: boolean;\n  hasFooter?: boolean;\n  hasBorder?: boolean;\n  hasShadow?: boolean;\n  isClickable?: boolean;\n  isDisabled?: boolean;\n  isLoading?: boolean;\n  primaryActionLabel?: string;\n  primaryActionOnClick?: () => void;\n  secondaryActionLabel?: string;\n  secondaryActionOnClick?: () => void;\n  showDismissButton?: boolean;\n  onDismiss?: () => void;\n  headerRightSlot?: ReactNode;\n  footerLeftSlot?: ReactNode;\n  content?: ReactNode;\n  tags?: string[];\n  footerNote?: string;\n}\n\nexport interface CardContextValue {\n  variant: CardVariant;\n  size: CardSize;\n  disabled?: boolean;\n}\n\nexport interface CardRootProps extends HTMLAttributes<HTMLDivElement> {\n  variant?: CardVariant;\n  size?: CardSize;\n  disabled?: boolean;\n  children?: ReactNode;\n}\n\nexport interface CardHeaderProps extends HTMLAttributes<HTMLDivElement> {\n  children?: ReactNode;\n}\n\nexport interface CardTitleProps extends HTMLAttributes<HTMLHeadingElement> {\n  children?: ReactNode;\n}\n\nexport interface CardDescriptionProps extends HTMLAttributes<HTMLParagraphElement> {\n  children?: ReactNode;\n}\n\nexport interface CardContentProps extends HTMLAttributes<HTMLDivElement> {\n  children?: ReactNode;\n}\n\nexport interface CardFooterProps extends HTMLAttributes<HTMLDivElement> {\n  children?: ReactNode;\n}\n\nexport interface CardActionProps extends ButtonHTMLAttributes<HTMLButtonElement> {\n  actionVariant?: \"primary\" | \"secondary\" | \"ghost\" | \"destructive\";\n  children?: ReactNode;\n}\n\nexport interface CardCompoundComponent {\n  (props: CardRootProps): JSX.Element;\n  Header: (props: CardHeaderProps) => JSX.Element;\n  Title: (props: CardTitleProps) => JSX.Element;\n  Description: (props: CardDescriptionProps) => JSX.Element;\n  Content: (props: CardContentProps) => JSX.Element;\n  Footer: (props: CardFooterProps) => JSX.Element;\n  Action: (props: CardActionProps) => JSX.Element;\n}\n",
+      "src/components/mega-card.tsx": "import type { ReactNode } from \"react\";\nimport type { MegaCardProps } from \"../types/card\";\n\nexport function MegaCard({\n  variant = \"default\",\n  size = \"md\",\n  title,\n  subtitle,\n  description,\n  icon,\n  badgeText,\n  badgeColor = \"primary\",\n  showAvatar = false,\n  avatarUrl,\n  avatarFallback,\n  hasHeader = true,\n  hasFooter = false,\n  hasBorder = true,\n  hasShadow = false,\n  isClickable = false,\n  isDisabled = false,\n  isLoading = false,\n  primaryActionLabel,\n  primaryActionOnClick,\n  secondaryActionLabel,\n  secondaryActionOnClick,\n  showDismissButton = false,\n  onDismiss,\n  headerRightSlot,\n  footerLeftSlot,\n  content,\n  tags,\n  footerNote,\n  className = \"\",\n  ...restProps\n}: MegaCardProps) {\n  const sizeClasses = {\n    sm: \"p-3 text-sm\",\n    md: \"p-5 text-base\",\n    lg: \"p-7 text-lg\",\n  }[size];\n\n  const variantClasses = {\n    default: \"bg-white text-gray-900\",\n    bordered: \"bg-white border border-gray-200 text-gray-900\",\n    elevated: \"bg-white shadow-lg text-gray-900\",\n    ghost: \"bg-transparent text-gray-900\",\n  }[variant];\n\n  const borderClass = hasBorder ? \"border border-gray-200\" : \"\";\n  const shadowClass = hasShadow ? \"shadow-md\" : \"\";\n  const cursorClass = isClickable ? \"cursor-pointer hover:border-gray-400 transition\" : \"\";\n  const disabledClass = isDisabled ? \"opacity-50 pointer-events-none\" : \"\";\n\n  return (\n    <div\n      className={`rounded-xl ${variantClasses} ${sizeClasses} ${borderClass} ${shadowClass} ${cursorClass} ${disabledClass} ${className}`}\n      {...restProps}\n    >\n      {isLoading ? (\n        <div className=\"flex items-center justify-center p-8\">\n          <div className=\"animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600\" />\n        </div>\n      ) : (\n        <>\n          {hasHeader && (\n            <div className=\"flex items-start justify-between pb-4 border-b border-gray-100 mb-4\">\n              <div className=\"flex items-center gap-3\">\n                {showAvatar && (\n                  <div className=\"h-10 w-10 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden\">\n                    {avatarUrl ? (\n                      <img src={avatarUrl} alt={title || \"avatar\"} className=\"h-full w-full object-cover\" />\n                    ) : (\n                      <span className=\"font-semibold text-gray-600\">{avatarFallback || \"U\"}</span>\n                    )}\n                  </div>\n                )}\n                {icon && <div className=\"text-indigo-600\">{icon}</div>}\n                <div>\n                  {title && <h3 className=\"font-semibold leading-tight\">{title}</h3>}\n                  {subtitle && <p className=\"text-xs text-gray-500\">{subtitle}</p>}\n                </div>\n                {badgeText && (\n                  <span\n                    className={`text-xs px-2 py-0.5 rounded-full font-medium ${\n                      badgeColor === \"destructive\"\n                        ? \"bg-red-100 text-red-700\"\n                        : badgeColor === \"secondary\"\n                        ? \"bg-gray-100 text-gray-700\"\n                        : \"bg-indigo-100 text-indigo-700\"\n                    }`}\n                  >\n                    {badgeText}\n                  </span>\n                )}\n              </div>\n              <div className=\"flex items-center gap-2\">\n                {headerRightSlot}\n                {showDismissButton && (\n                  <button\n                    type=\"button\"\n                    onClick={onDismiss}\n                    className=\"text-gray-400 hover:text-gray-600 p-1 rounded\"\n                    aria-label=\"Dismiss\"\n                  >\n                    ×\n                  </button>\n                )}\n              </div>\n            </div>\n          )}\n\n          <div className=\"space-y-3\">\n            {description && <p className=\"text-gray-600\">{description}</p>}\n            {content}\n            {tags && tags.length > 0 && (\n              <div className=\"flex flex-wrap gap-1.5 pt-2\">\n                {tags.map((tag) => (\n                  <span key={tag} className=\"text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded\">\n                    #{tag}\n                  </span>\n                ))}\n              </div>\n            )}\n          </div>\n\n          {hasFooter && (\n            <div className=\"flex items-center justify-between pt-4 border-t border-gray-100 mt-4\">\n              <div className=\"text-xs text-gray-500\">\n                {footerLeftSlot || footerNote}\n              </div>\n              <div className=\"flex items-center gap-2\">\n                {secondaryActionLabel && (\n                  <button\n                    type=\"button\"\n                    onClick={secondaryActionOnClick}\n                    className=\"px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition\"\n                  >\n                    {secondaryActionLabel}\n                  </button>\n                )}\n                {primaryActionLabel && (\n                  <button\n                    type=\"button\"\n                    onClick={primaryActionOnClick}\n                    className=\"px-3 py-1.5 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition\"\n                  >\n                    {primaryActionLabel}\n                  </button>\n                )}\n              </div>\n            </div>\n          )}\n        </>\n      )}\n    </div>\n  );\n}\n",
+      "src/components/card-compound.tsx": "import type { ReactNode } from \"react\";\nimport type { CardRootProps } from \"../types/card\";\n\nexport function Card({ children, ...props }: CardRootProps) {\n  return (\n    <div {...props}>\n      {children}\n    </div>\n  );\n}\n"
+    },
+    "initialGitCommit": "Initial commit for react composition patterns benchmark fixture"
+  },
+  "limits": {
+    "maxTurns": 15,
+    "maxCostUSD": 1.0,
+    "maxWallClockTimeMs": 300000
+  },
+  "evaluation": {
+    "deterministicChecks": [
+      {
+        "id": "check-compound-exports",
+        "name": "Compound Component Sub-component Attachment and Exports",
+        "type": "file_content",
+        "filePath": "src/components/card-compound.tsx",
+        "fileContentPattern": "Card\\.(Header|Content|Footer|Title)",
+        "weight": 0.35
+      },
+      {
+        "id": "check-context-provider",
+        "name": "React Context Creation and Provider Usage",
+        "type": "file_content",
+        "filePath": "src/components/card-compound.tsx",
+        "fileContentPattern": "createContext|useContext",
+        "weight": 0.35
+      },
+      {
+        "id": "check-slot-or-children",
+        "name": "Slot or Flexible Children Composition Typing",
+        "type": "file_content",
+        "filePath": "src/components/card-compound.tsx",
+        "fileContentPattern": "children.*ReactNode|Slot",
+        "weight": 0.3
+      }
+    ],
+    "judgeRubrics": [
+      {
+        "name": "Composition Elegance & Ergonomics",
+        "category": "react",
+        "weight": 0.6,
+        "description": "Evaluates the degree to which monolithic boolean flags are replaced by composable compound components with flexible slots and clean consumer ergonomics.",
+        "criteria": {
+          "1": "Monolithic boolean props are retained or replaced with brittle prop wrappers. No compound component hierarchy or sub-component attachments.",
+          "3": "Basic compound components created (e.g. Card.Header, Card.Content) but with tightly coupled styling, limited customization, or leaky context abstractions.",
+          "5": "Exemplary Vercel-style compound component architecture with flexible children/slots, well-isolated context, clean TypeScript types, customizable variants, and zero boolean-prop explosion."
+        }
+      },
+      {
+        "name": "TypeScript Generic Prop Safety",
+        "category": "general",
+        "weight": 0.4,
+        "description": "Evaluates TypeScript type safety, polymorphic slot props, HTML element prop forwarding, and elimination of any types.",
+        "criteria": {
+          "1": "Uses any, misses prop type declarations, or breaks HTML element attribute forwarding and ref types.",
+          "3": "Functional TypeScript types with basic ComponentProps or ReactNode, but missing comprehensive attribute forwarding or variant constraints.",
+          "5": "Strict, idiomatic TypeScript typing using ComponentProps, proper ReactNode children, polymorphic element support where appropriate, and 0 any/suppression comments."
+        }
+      }
+    ],
+    "passThreshold": 80
+  }
+}

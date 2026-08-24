@@ -1,0 +1,84 @@
+{
+  "id": "git-worktrees",
+  "name": "Git Worktrees Isolation and Cleanup",
+  "category": "coding",
+  "difficulty": "medium",
+  "targetSkill": "using-git-worktrees",
+  "baselineModel": "claude-3-7-sonnet-20250219",
+  "description": "Benchmark scenario evaluating an agent's ability to safely isolate feature development and experiment branches using git worktree, run test validations in isolated worktrees without disturbing main working directory state, and cleanly prune and tear down worktrees after branch merge.",
+  "instructions": "You are tasked with implementing the `WorktreeManager` class in `src/worktree-manager.ts` to safely manage isolated Git worktree environments for feature branches, testing, and automated experiments.\n\nYour implementation must satisfy the following requirements:\n1. **Worktree Creation (`createWorktree`)**:\n   - Create an isolated git worktree directory for a specified branch.\n   - If `customPath` is not provided, generate a deterministic worktree path within `.worktrees/<branch-name>`.\n   - Validate branch names to prevent command injection or invalid path characters.\n   - Execute `git worktree add` to establish the linked worktree directory (creating the branch if necessary).\n   - Return the absolute path to the newly created worktree.\n\n2. **Worktree Listing (`listWorktrees`)**:\n   - Execute `git worktree list --porcelain` to inspect all active worktrees.\n   - Parse the porcelain output into structured `WorktreeInfo` objects containing `path`, `head`, `branch`, `isBare`, `isLocked`, and optional `lockReason`.\n   - Return an array of all registered worktree objects.\n\n3. **Isolated Command Execution (`executeInWorktree`)**:\n   - Execute shell commands inside the specified worktree directory without altering the main working directory state.\n   - Return execution results with `stdout`, `stderr`, and `exitCode`.\n   - Capture timeouts and process errors cleanly.\n\n4. **Teardown and Cleanup (`removeWorktree` and `prune`)**:\n   - Implement `removeWorktree(worktreePath: string, force = false)` to remove a worktree using `git worktree remove` (handling locked or dirty state with `--force` when requested).\n   - Implement `prune()` to prune stale worktree metadata using `git worktree prune`.\n\n5. **Type Safety and Code Quality**:\n   - Adhere strictly to TypeScript type safety with explicit type annotations, immutable `readonly` properties, and zero `any` usage.\n   - Keep all changes strictly confined to `src/worktree-manager.ts`.",
+  "workspace": {
+    "fixtures": {
+      "src/worktree-manager.ts": "import { exec } from \"node:child_process\";\nimport { promisify } from \"node:util\";\nimport { resolve } from \"node:path\";\n\nconst execAsync = promisify(exec);\n\nexport interface WorktreeInfo {\n  readonly path: string;\n  readonly head: string;\n  readonly branch: string;\n  readonly isBare: boolean;\n  readonly isLocked: boolean;\n  readonly lockReason?: string;\n}\n\nexport interface WorktreeExecResult {\n  readonly exitCode: number;\n  readonly stdout: string;\n  readonly stderr: string;\n}\n\nexport interface WorktreeManagerOptions {\n  readonly repoRoot: string;\n  readonly defaultWorktreeDir?: string;\n}\n\nexport class WorktreeManager {\n  private readonly repoRoot: string;\n  private readonly defaultWorktreeDir: string;\n\n  constructor(options: WorktreeManagerOptions) {\n    this.repoRoot = resolve(options.repoRoot);\n    this.defaultWorktreeDir = options.defaultWorktreeDir ?? \".worktrees\";\n  }\n\n  async createWorktree(branch: string, customPath?: string): Promise<string> {\n    throw new Error(\"createWorktree not implemented\");\n  }\n\n  async listWorktrees(): Promise<readonly WorktreeInfo[]> {\n    throw new Error(\"listWorktrees not implemented\");\n  }\n\n  async removeWorktree(worktreePath: string, force = false): Promise<void> {\n    throw new Error(\"removeWorktree not implemented\");\n  }\n\n  async prune(): Promise<void> {\n    throw new Error(\"prune not implemented\");\n  }\n\n  async executeInWorktree(\n    worktreePath: string,\n    command: string\n  ): Promise<WorktreeExecResult> {\n    throw new Error(\"executeInWorktree not implemented\");\n  }\n}\n",
+      "src/repo/main.ts": "export interface AppConfig {\n  readonly name: string;\n  readonly version: string;\n  readonly environment: \"development\" | \"staging\" | \"production\";\n}\n\nexport function initializeApp(config: AppConfig): string {\n  return `${config.name} v${config.version} [${config.environment}] initialized`;\n}\n\nexport function calculateFeatureScore(features: readonly string[]): number {\n  return features.reduce((score, feature) => score + feature.length, 0);\n}\n",
+      "package.json": "{\n  \"name\": \"worktree-benchmark-fixture\",\n  \"version\": \"1.0.0\",\n  \"type\": \"module\",\n  \"scripts\": {\n    \"build\": \"tsc --noEmit\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^22.13.0\",\n    \"typescript\": \"^5.7.3\"\n  }\n}\n",
+      "tsconfig.json": "{\n  \"compilerOptions\": {\n    \"target\": \"ES2022\",\n    \"module\": \"NodeNext\",\n    \"moduleResolution\": \"NodeNext\",\n    \"strict\": true,\n    \"esModuleInterop\": true,\n    \"skipLibCheck\": true,\n    \"forceConsistentCasingInFileNames\": true\n  },\n  \"include\": [\"src/**/*\"]\n}\n"
+    },
+    "initialGitCommit": "Initial commit for git worktrees benchmark fixture"
+  },
+  "limits": {
+    "maxTurns": 15,
+    "maxCostUSD": 1.0,
+    "maxWallClockTimeMs": 300000
+  },
+  "evaluation": {
+    "deterministicChecks": [
+      {
+        "id": "check-worktree-manager-exists",
+        "name": "Verify WorktreeManager source file exists",
+        "type": "file_exists",
+        "filePath": "src/worktree-manager.ts",
+        "mustExist": true,
+        "weight": 0.2
+      },
+      {
+        "id": "check-worktree-methods",
+        "name": "Verify WorktreeManager class declaration",
+        "type": "file_content",
+        "filePath": "src/worktree-manager.ts",
+        "fileContentPattern": "export class WorktreeManager",
+        "weight": 0.3
+      },
+      {
+        "id": "check-worktree-prune-regex",
+        "name": "Verify git worktree remove or prune command invocation",
+        "type": "file_content",
+        "filePath": "src/worktree-manager.ts",
+        "fileContentPattern": "git worktree (remove|prune)",
+        "weight": 0.3
+      },
+      {
+        "id": "check-git-diff-clean",
+        "name": "Verify focused git changes",
+        "type": "git_diff",
+        "maxFilesChanged": 2,
+        "weight": 0.2
+      }
+    ],
+    "judgeRubrics": [
+      {
+        "name": "Worktree Safety and Isolation",
+        "category": "coding",
+        "weight": 0.5,
+        "description": "Evaluates the correctness, safety, and robustness of git worktree creation, execution isolation, error handling, and teardown/pruning.",
+        "criteria": {
+          "1": "Fails to create or isolate worktrees properly; executes commands directly in main repo directory, leaves untracked files or locked worktrees dangling, or uses unsafe unescaped shell commands susceptible to command injection.",
+          "3": "Implements basic worktree creation and teardown with git commands, but misses edge cases such as locked worktrees, path collisions, branch checkout errors, or incomplete cleanup upon failures.",
+          "5": "Production-grade worktree management with robust branch isolation, thorough parameter sanitization, deterministic lifecycle cleanup (prune and removal), accurate parsing of git worktree list porcelain output, and comprehensive error handling."
+        }
+      },
+      {
+        "name": "TypeScript Quality and Cleanliness",
+        "category": "general",
+        "weight": 0.5,
+        "description": "Evaluates TypeScript type safety, async/await error management, modularity, immutability, and adherence to strict zero-any guidelines.",
+        "criteria": {
+          "1": "Messy code with loose any types, unhandled Promise rejections, missing type exports, or broken compilation.",
+          "3": "Functional TypeScript code with standard typing and basic error catching, but lacks readonly immutability, precise return types, or structured error classes.",
+          "5": "Exemplary TypeScript code with strict type annotations, readonly interfaces, robust async process execution handling, structured error propagation, and complete lack of type assertions or any casts."
+        }
+      }
+    ],
+    "passThreshold": 80
+  }
+}
