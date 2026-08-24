@@ -5,5 +5,8 @@ export * from "./replay/index.js";
 export * from "./ci/index.js";
 export * from "./server/index.js";
 export * from "./fuzzer/index.js";
+export * from "./generator/index.js";
+export * from "./dashboard-ui/index.js";
+export * from "./arena/index.js";
 export { runCli };
 export default runCli;

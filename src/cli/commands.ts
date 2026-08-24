@@ -25,6 +25,7 @@ import { SkillRegistry } from "../skills/registry.js";
 import { TelemetryDatabase } from "../reporting/db.js";
 import { generateMarkdownLeaderboard } from "../reporting/markdown-leaderboard.js";
 import { generateHtmlDashboard } from "../reporting/html-dashboard.js";
+import { generateStandaloneSpaHtml } from "../dashboard-ui/index.js";
 import {
   aggregateAllSkills,
   buildLeaderboardEntries,
@@ -38,6 +39,7 @@ import { exportWebReplayHtml } from "../replay/web-player.js";
 import type { ReplaySession } from "../replay/types.js";
 import { FuzzerEngine } from "../fuzzer/fuzzer-engine.js";
 import type { FuzzingStrategy, MutationSeverity } from "../fuzzer/types.js";
+import { ScenarioSynthesizer } from "../generator/index.js";
 import type { ScenarioDefinition } from "../runner/types.js";
 
 export async function runBenchmarkCommand(args: CliParsedArgs): Promise<CliCommandResult> {
