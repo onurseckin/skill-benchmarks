@@ -1,0 +1,86 @@
+{
+  "id": "zero-alloc-pipeline",
+  "name": "Zero-Allocation Streaming Data Pipeline and Heap Profiling",
+  "category": "optimization",
+  "difficulty": "hard",
+  "targetSkill": "performance-optimization",
+  "baselineModel": "claude-3-7-sonnet",
+  "description": "High-performance optimization benchmark scenario evaluating an agent's capability to refactor a high-throughput Go streaming pipeline into a zero-allocation architecture using sync.Pool, byte slice recycling, custom arena allocators, and pprof heap profile verification.",
+  "instructions": "You are tasked with refactoring a high-throughput Go telemetry pipeline to eliminate heap allocations and prevent GC pauses during peak ingestion.\n\n### 1. Buffer Pool Implementation (`pipeline/buffer_pool.go`):\n- Implement a high-performance buffer pool using `sync.Pool` for byte slices and event structures.\n- Ensure buffers are properly reset (`Reset()`) upon retrieval (`Get()`) and returned (`Put()`) cleanly after processing.\n- Prevent slice header escaping to heap.\n\n### 2. Stream Processor Refactoring (`pipeline/stream.go`):\n- Replace per-event heap allocations with pooled buffers.\n- Process incoming binary stream packets with zero allocations per event (`0 B/op`, `0 allocs/op`).\n- Implement backpressure handling with bounded worker channels.\n\n### 3. Zero-Copy Parser (`pipeline/parser.go`):\n- Implement `FastParser` that decodes structured telemetry frames directly from byte slices without string allocations or reflection.\n- Use fixed-size struct fields and stack-allocated framing.\n\n### 4. Memory Profiling Integration (`pipeline/profiler.go`):\n- Integrate `runtime/pprof` to capture heap allocations and profile snapshots programmatically.\n- Implement `CaptureHeapSnapshot` and `VerifyZeroAllocations` methods.\n\n### 5. Invariants and Quality:\n- Clean idiomatic Go code with proper error handling.\n- Zero comments throughout all files.",
+  "workspace": {
+    "fixtures": {
+      "go.mod": "module skillbench/zero-alloc-pipeline\n\ngo 1.22\n",
+      "pipeline/buffer_pool.go": "package pipeline\n\nimport (\n\t\"sync\"\n)\n\ntype Buffer struct {\n\tData []byte\n}\n\nfunc (b *Buffer) Reset() {\n\tb.Data = b.Data[:0]\n}\n\ntype BufferPool struct {\n\tpool sync.Pool\n}\n\nfunc NewBufferPool(capacity int) *BufferPool {\n\treturn &BufferPool{\n\t\tpool: sync.Pool{\n\t\t\tNew: func() any {\n\t\t\t\treturn &Buffer{\n\t\t\t\t\tData: make([]byte, 0, capacity),\n\t\t\t\t}\n\t\t\t},\n\t\t},\n\t}\n}\n\nfunc (p *BufferPool) Get() *Buffer {\n\tbuf := p.pool.Get().(*Buffer)\n\tbuf.Reset()\n\treturn buf\n}\n\nfunc (p *BufferPool) Put(buf *Buffer) {\n\tif buf != nil {\n\t\tp.pool.Put(buf)\n\t}\n}\n",
+      "pipeline/parser.go": "package pipeline\n\nimport (\n\t\"encoding/binary\"\n\t\"errors\"\n)\n\ntype Event struct {\n\tTimestamp int64\n\tSensorID  uint32\n\tValue     float64\n}\n\ntype FastParser struct{}\n\nfunc NewFastParser() *FastParser {\n\treturn &FastParser{}\n}\n\nfunc (p *FastParser) ParseEvent(data []byte, out *Event) error {\n\tif len(data) < 20 {\n\t\treturn errors.New(\"insufficient packet length\")\n\t}\n\tout.Timestamp = int64(binary.BigEndian.Uint64(data[0:8]))\n\tout.SensorID = binary.BigEndian.Uint32(data[8:12])\n\tout.Value = float64(binary.BigEndian.Uint64(data[12:20]))\n\treturn nil\n}\n",
+      "pipeline/stream.go": "package pipeline\n\nimport (\n\t\"context\"\n\t\"io\"\n)\n\ntype StreamProcessor struct {\n\tpool   *BufferPool\n\tparser *FastParser\n}\n\nfunc NewStreamProcessor(bufCap int) *StreamProcessor {\n\treturn &StreamProcessor{\n\t\tpool:   NewBufferPool(bufCap),\n\t\tparser: NewFastParser(),\n\t}\n}\n\nfunc (s *StreamProcessor) ProcessStream(ctx context.Context, reader io.Reader, handler func(Event)) error {\n\tbuf := s.pool.Get()\n\tdefer s.pool.Put(buf)\n\n\tvar event Event\n\ttempBuf := make([]byte, 20)\n\tfor {\n\t\tselect {\n\t\tcase <-ctx.Done():\n\t\t\treturn ctx.Err()\n\t\tdefault:\n\t\t}\n\t\t_, err := io.ReadFull(reader, tempBuf)\n\t\tif err == io.EOF || err == io.ErrUnexpectedEOF {\n\t\t\tbreak\n\t\t}\n\t\tif err != nil {\n\t\t\treturn err\n\t\t}\n\t\tif err := s.parser.ParseEvent(tempBuf, &event); err != nil {\n\t\t\tcontinue\n\t\t}\n\t\thandler(event)\n\t}\n\treturn nil\n}\n",
+      "pipeline/profiler.go": "package pipeline\n\nimport (\n\t\"bytes\"\n\t\"runtime\"\n\t\"runtime/pprof\"\n)\n\ntype ProfileSnapshot struct {\n\tAllocBytes uint64\n\tTotalAlloc uint64\n\tNumGC      uint32\n}\n\ntype Profiler struct{}\n\nfunc NewProfiler() *Profiler {\n\treturn &Profiler{}\n}\n\nfunc (p *Profiler) CaptureHeapProfile() (*ProfileSnapshot, error) {\n\truntime.GC()\n\tvar m runtime.MemStats\n\truntime.ReadMemStats(&m)\n\tvar buf bytes.Buffer\n\tif err := pprof.WriteHeapProfile(&buf); err != nil {\n\t\treturn nil, err\n\t}\n\treturn &ProfileSnapshot{\n\t\tAllocBytes: m.Alloc,\n\t\tTotalAlloc: m.TotalAlloc,\n\t\tNumGC:      m.NumGC,\n\t},\n\tnil\n}\n"
+    },
+    "initialGitCommit": "Initial commit for zero-alloc pipeline optimization fixture"
+  },
+  "limits": {
+    "maxTurns": 15,
+    "maxCostUSD": 1.0,
+    "maxWallClockTimeMs": 300000
+  },
+  "evaluation": {
+    "deterministicChecks": [
+      {
+        "id": "check-sync-pool-usage",
+        "name": "Verify sync.Pool buffer recycling implementation",
+        "type": "file_content",
+        "filePath": "pipeline/buffer_pool.go",
+        "fileContentPattern": "sync\\.Pool",
+        "weight": 0.3
+      },
+      {
+        "id": "check-zero-alloc-stream",
+        "name": "Verify buffer recycling methods Get Put Reset",
+        "type": "file_content",
+        "filePath": "pipeline/stream.go",
+        "fileContentPattern": "Get|Put|Reset",
+        "weight": 0.3
+      },
+      {
+        "id": "check-pprof-profiling",
+        "name": "Verify runtime pprof heap profile hooks",
+        "type": "file_content",
+        "filePath": "pipeline/profiler.go",
+        "fileContentPattern": "runtime/pprof|pprof\\.WriteHeapProfile",
+        "weight": 0.2
+      },
+      {
+        "id": "check-parser-zerocopy",
+        "name": "Verify fast zero-copy struct parser implementation",
+        "type": "file_content",
+        "filePath": "pipeline/parser.go",
+        "fileContentPattern": "type FastParser struct|ParseEvent",
+        "weight": 0.2
+      }
+    ],
+    "judgeRubrics": [
+      {
+        "name": "Zero-Allocation Architecture and Buffer Recycling",
+        "category": "general",
+        "weight": 0.5,
+        "description": "Evaluates the design and implementation of zero-allocation streaming processing, sync.Pool buffer recycling, slice reuse, and elimination of escape-to-heap vectors.",
+        "criteria": {
+          "1": "Retains naive heap allocations on every event iteration or causes data corruption through un-reset recycled buffers.",
+          "3": "Uses sync.Pool for buffer recycling but retains secondary allocations in string conversions or closure captures.",
+          "5": "Zero-allocation processing loop: robust sync.Pool recycling, clean slice reset semantics, zero escaping variables, and 0 B/op in steady state."
+        }
+      },
+      {
+        "name": "Go Low-Level Performance and Profiling Verification",
+        "category": "general",
+        "weight": 0.5,
+        "description": "Evaluates the implementation of binary parsing, memory alignment, pprof heap profile captures, and deterministic allocation benchmarking.",
+        "criteria": {
+          "1": "Produces broken profiling hooks or incorrect binary byte indexing causing out-of-bounds panics.",
+          "3": "Implements binary parsing and pprof capture but lacks thorough bounds checking or runtime GC synchronization before snapshots.",
+          "5": "High-performance binary framing with rigorous bounds checks, accurate runtime memory statistics inspection, and clean pprof profile reporting."
+        }
+      }
+    ],
+    "passThreshold": 80
+  }
+}

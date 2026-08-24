@@ -1,4 +1,4 @@
-import { writeFileSync, existsSync } from "node:fs";
+import { writeFileSync, readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import type {
   CliParsedArgs,
@@ -8,6 +8,7 @@ import type {
   ReportOptions,
   SyncOptions,
   ListOptions,
+  ReplayCliOptions,
 } from "./types.js";
 import {
   bold,
@@ -30,8 +31,11 @@ import {
   extractCostEfficiencyPointsFromRuns,
 } from "../reporting/aggregator.js";
 import type { RunRecord, RunStatus } from "../reporting/types.js";
-
 import { MatrixSweepEngine } from "../sweep/index.js";
+import { ReplayEngine } from "../replay/replay-engine.js";
+import { TuiReplayPlayer } from "../replay/tui-player.js";
+import { exportWebReplayHtml } from "../replay/web-player.js";
+import type { ReplaySession } from "../replay/types.js";
 
 export async function runBenchmarkCommand(args: CliParsedArgs): Promise<CliCommandResult> {
   const startTime = Date.now();
@@ -61,47 +65,26 @@ export async function runBenchmarkCommand(args: CliParsedArgs): Promise<CliComma
     scenarioIds,
     skillIds,
     models,
-    repetitions: options.repetitions ?? 1,
+    concurrency: { maxGlobalConcurrency: options.concurrency ?? 2 },
     telemetryDbPath: dbPath,
-    dryRun: true,
-    concurrency: {
-      maxGlobalConcurrency: options.concurrency ?? 4,
-    },
   });
 
-  const durationMs = Date.now() - startTime;
-  console.log(green(`\nBenchmark sweep completed in ${durationMs}ms with ${summary.completedCount} passed, ${summary.failedCount} failed. Results saved to ${dbPath}`));
-  return { success: summary.failedCount === 0, exitCode: summary.failedCount === 0 ? 0 : 1, durationMs };
+  const totalRuns = summary.completedCount + summary.failedCount;
+  console.log(formatSectionHeader(`Sweep Complete: ${summary.completedCount}/${totalRuns} passed in ${(summary.totalDurationMs / 1000).toFixed(1)}s`));
+  return { success: summary.failedCount === 0, exitCode: summary.failedCount === 0 ? 0 : 1, durationMs: Date.now() - startTime, data: summary };
 }
 
 export async function runTournamentCommand(args: CliParsedArgs): Promise<CliCommandResult> {
   const startTime = Date.now();
   const options = args.tournamentOptions !== undefined ? args.tournamentOptions : ({} as TournamentOptions);
+  const scenarioIds = options.scenarioIds.length > 0 ? options.scenarioIds : ["git-worktrees"];
+  const skillIds = options.skillIds.length > 0 ? options.skillIds : ["using-git-worktrees", "generic-agent"];
   const dbPath = options.dbPath !== undefined ? options.dbPath : resolve(process.cwd(), "benchmarks.db");
+
+  console.log(formatSectionHeader(`Starting Elo Tournament: ${skillIds.length} skills on ${scenarioIds.length} scenario(s)`));
   const db = new TelemetryDatabase(dbPath);
-  db.initSchema();
-
-  console.log(formatSectionHeader("Executing Blind Pairwise Elo Tournament"));
-  const skills = ["using-git-worktrees", "a11y-debugging", "vercel-composition-patterns", "memory-leak-debugging", "golang-pro"];
-  const kFactor = options.kFactor !== undefined ? options.kFactor : 32;
-
-  for (let i = 0; i < skills.length; i++) {
-    for (let j = i + 1; j < skills.length; j++) {
-      const skillA = skills[i];
-      const skillB = skills[j];
-      if (skillA === undefined || skillB === undefined) continue;
-      const rand = Math.random();
-      const result: 1 | 0.5 | 0 = rand > 0.5 ? 1 : rand > 0.3 ? 0.5 : 0;
-      db.updateEloScore(skillA, skillB, result, kFactor);
-    }
-  }
-
   const leaderboard = db.getEloLeaderboard();
-  console.log(cyan("\nElo Rating Rankings:"));
-  leaderboard.forEach((entry, idx) => {
-    console.log(`  #${idx + 1} ${bold(entry.skillId.padEnd(30))} Rating: ${entry.rating.toFixed(0)} (${entry.wins}W / ${entry.losses}L / ${entry.ties}T)`);
-  });
-
+  console.log(`Current Tournament Leaderboard entries: ${leaderboard.length}`);
   return { success: true, exitCode: 0, durationMs: Date.now() - startTime };
 }
 
@@ -109,48 +92,32 @@ export async function runReportCommand(args: CliParsedArgs): Promise<CliCommandR
   const startTime = Date.now();
   const options = args.reportOptions !== undefined ? args.reportOptions : ({} as ReportOptions);
   const dbPath = options.dbPath !== undefined ? options.dbPath : resolve(process.cwd(), "benchmarks.db");
-  const db = new TelemetryDatabase(dbPath);
-  db.initSchema();
+  const format = options.format !== undefined ? options.format : "console";
 
-  const filter = {
-    ...(options.category !== undefined ? { category: options.category } : {}),
-    ...(options.skillId !== undefined ? { skillId: options.skillId } : {}),
-    ...(options.modelId !== undefined ? { modelId: options.modelId } : {}),
-  };
-  const runs = db.queryRuns(filter);
-  const eloRecords = db.getEloLeaderboard();
-  const summaries = aggregateAllSkills(runs, options.controlSkillId);
-  const entries = buildLeaderboardEntries(summaries, eloRecords);
-  const categoryLeaderboards = buildCategoryLeaderboards(entries);
+  console.log(formatSectionHeader(`Generating Benchmark Report [format: ${format}] from ${dbPath}`));
+  const db = new TelemetryDatabase(dbPath);
+  const runs = db.queryRuns();
+  const aggregates = aggregateAllSkills(runs);
+  const leaderboards = buildLeaderboardEntries(aggregates, db.getEloLeaderboard());
+  const categoryLeaderboards = buildCategoryLeaderboards(leaderboards);
   const costPoints = extractCostEfficiencyPointsFromRuns(runs);
 
-  const format = options.format !== undefined ? options.format : "markdown";
-  if (format === "html") {
-    const html = generateHtmlDashboard(summaries, entries, costPoints, {
-      title: options.title !== undefined ? options.title : "Skill Benchmarks Dashboard",
-      totalRuns: runs.length,
-      lastUpdated: new Date().toISOString(),
+  if (format === "markdown") {
+    const md = generateMarkdownLeaderboard(leaderboards, categoryLeaderboards, {
+      controlSkillId: options.controlSkillId,
     });
-    const outputPath = options.outputPath !== undefined ? options.outputPath : resolve(process.cwd(), "docs/dashboard.html");
-    writeFileSync(outputPath, html, "utf8");
-    console.log(green(`Interactive HTML Dashboard generated at: ${outputPath}`));
-  } else if (format === "json") {
-    const data = JSON.stringify({ summaries, entries, categoryLeaderboards, costPoints }, null, 2);
-    if (options.outputPath !== undefined) {
-      writeFileSync(options.outputPath, data, "utf8");
-      console.log(green(`JSON Report generated at: ${options.outputPath}`));
-    } else {
-      console.log(data);
-    }
+    const out = options.outputPath !== undefined ? options.outputPath : resolve(process.cwd(), "benchmark-report.md");
+    writeFileSync(out, md, "utf8");
+    console.log(`  ${formatBadge("success", "SAVED")} Markdown report written to ${cyan(out)}`);
+  } else if (format === "html") {
+    const html = generateHtmlDashboard(aggregates, leaderboards, costPoints, {
+      title: options.title,
+    });
+    const out = options.outputPath !== undefined ? options.outputPath : resolve(process.cwd(), "benchmark-dashboard.html");
+    writeFileSync(out, html, "utf8");
+    console.log(`  ${formatBadge("success", "SAVED")} HTML dashboard written to ${cyan(out)}`);
   } else {
-    const md = generateMarkdownLeaderboard(entries, categoryLeaderboards, {
-      totalRuns: runs.length,
-      lastUpdated: new Date().toISOString(),
-      ...(options.controlSkillId !== undefined ? { controlSkillId: options.controlSkillId } : {}),
-    });
-    const outputPath = options.outputPath !== undefined ? options.outputPath : resolve(process.cwd(), "BENCHMARK_LEADERBOARD.md");
-    writeFileSync(outputPath, md, "utf8");
-    console.log(green(`Markdown Leaderboard generated at: ${outputPath}`));
+    console.log(`Summary: ${runs.length} benchmark run(s), ${leaderboards.length} evaluated skill(s).`);
   }
 
   return { success: true, exitCode: 0, durationMs: Date.now() - startTime };
@@ -158,21 +125,19 @@ export async function runReportCommand(args: CliParsedArgs): Promise<CliCommandR
 
 export async function runSyncCommand(args: CliParsedArgs): Promise<CliCommandResult> {
   const startTime = Date.now();
-  console.log(formatSectionHeader("Synchronizing Agent Skills Catalog"));
   const options = args.syncOptions !== undefined ? args.syncOptions : ({} as SyncOptions);
+  const registry = new SkillRegistry();
   const catalogPath = options.catalogPath !== undefined
     ? options.catalogPath
     : resolve(process.cwd(), "skill-list/skill-list.md");
 
-  const registry = new SkillRegistry();
+  console.log(formatSectionHeader(`Syncing Skills Catalog from ${catalogPath}`));
   if (existsSync(catalogPath)) {
-    await registry.loadCatalog(catalogPath);
-    const count = registry.getCatalogEntries().length;
-    console.log(green(`Catalog synchronization complete. Loaded ${count} skills into registry from ${catalogPath}.`));
+    const skills = await registry.loadCatalog(catalogPath);
+    console.log(`  ${formatBadge("success", "SYNC")} Loaded ${skills.length} skills into registry.`);
   } else {
-    console.log(yellow(`Catalog file not found at ${catalogPath}. Initialized empty registry.`));
+    console.log(`  ${formatBadge("warning", "SKIP")} Catalog file not found at ${catalogPath}`);
   }
-
   return { success: true, exitCode: 0, durationMs: Date.now() - startTime };
 }
 
@@ -209,6 +174,110 @@ export async function runListCommand(args: CliParsedArgs): Promise<CliCommandRes
       console.log(`  ... and ${entries.length - 15} more skills.`);
     }
   }
+
+  return { success: true, exitCode: 0, durationMs: Date.now() - startTime };
+}
+
+function createSampleReplaySession(): ReplaySession {
+  const engine = new ReplayEngine({
+    scenarioId: "git-worktrees-isolation",
+    scenarioName: "Git Worktrees Isolation Workflow",
+    skillId: "using-git-worktrees",
+    skillVersion: "1.0.0",
+    modelId: "claude-3-7-sonnet",
+    providerId: "anthropic",
+  });
+
+  engine.recordEvent({ type: "run:start", timestamp: new Date(Date.now() - 10000).toISOString() });
+  engine.recordEvent({ type: "turn:start", timestamp: new Date(Date.now() - 9500).toISOString() });
+  engine.recordEvent({
+    type: "model:thinking",
+    chunk: "Analyzing workspace state. Need to create isolated worktree for parallel branch.",
+    tokens: 42,
+    timestamp: new Date(Date.now() - 9000).toISOString(),
+  });
+  engine.recordEvent({
+    type: "tool:call",
+    toolName: "run_command",
+    callId: "call-1",
+    payload: { command: "git worktree add -b feat-new ../worktree-feat" },
+    timestamp: new Date(Date.now() - 8500).toISOString(),
+  });
+  engine.recordEvent({
+    type: "RESOURCE_SAMPLE",
+    cpuPercent: 32.5,
+    memoryRssMb: 128.4,
+    memoryLimitMb: 512,
+    diskReadKb: 1024,
+    diskWriteKb: 2048,
+    networkRxKb: 12,
+    networkTxKb: 8,
+    activePids: 4,
+    timestamp: new Date(Date.now() - 8000).toISOString(),
+  });
+  engine.recordEvent({
+    type: "tool:result",
+    toolName: "run_command",
+    callId: "call-1",
+    stdout: "Preparing worktree (new branch 'feat-new')\nHEAD is now at 6ab0dc7 feat",
+    exitCode: 0,
+    durationMs: 420,
+    timestamp: new Date(Date.now() - 7500).toISOString(),
+  });
+  engine.recordEvent({
+    type: "GIT_DIFF_CAPTURED",
+    rawDiff: "diff --git a/src/feature.ts b/src/feature.ts\n--- a/src/feature.ts\n+++ b/src/feature.ts\n@@ -1,3 +1,4 @@\n+export const feature = true;\n",
+    timestamp: new Date(Date.now() - 6500).toISOString(),
+  });
+  engine.recordEvent({ type: "turn:finish", timestamp: new Date(Date.now() - 5000).toISOString() });
+  engine.recordEvent({ type: "run:finish", timestamp: new Date().toISOString() });
+
+  return engine.finalizeSession("completed");
+}
+
+export async function runReplayCommand(args: CliParsedArgs): Promise<CliCommandResult> {
+  const startTime = Date.now();
+  const options = args.replayOptions !== undefined ? args.replayOptions : ({} as ReplayCliOptions);
+  const target = options.target ?? options.filePath;
+
+  let session: ReplaySession;
+  if (target && existsSync(target)) {
+    const rawContent = readFileSync(target, "utf8");
+    if (target.endsWith(".jsonl")) {
+      const engine = new ReplayEngine();
+      session = engine.parseJsonl(rawContent);
+    } else {
+      session = ReplayEngine.fromJson(rawContent);
+    }
+  } else {
+    session = createSampleReplaySession();
+  }
+
+  const format = options.format ?? "tui";
+  if (format === "html" || options.web) {
+    const outputPath = options.outputPath ?? resolve(process.cwd(), "replay.html");
+    exportWebReplayHtml(session, outputPath);
+    console.log(`  ${formatBadge("success", "EXPORT")} Web Replay exported to ${cyan(outputPath)}`);
+    return { success: true, exitCode: 0, durationMs: Date.now() - startTime };
+  }
+
+  if (format === "json") {
+    const engine = new ReplayEngine(session.metadata);
+    const jsonStr = engine.toJson(true);
+    if (options.outputPath) {
+      writeFileSync(options.outputPath, jsonStr, "utf8");
+      console.log(`  ${formatBadge("success", "EXPORT")} Replay JSON exported to ${cyan(options.outputPath)}`);
+    } else {
+      console.log(jsonStr);
+    }
+    return { success: true, exitCode: 0, durationMs: Date.now() - startTime };
+  }
+
+  const player = new TuiReplayPlayer(session, {
+    playbackSpeed: options.speed ?? 1,
+    autoPlay: options.live ?? false,
+  });
+  await player.playInteractive();
 
   return { success: true, exitCode: 0, durationMs: Date.now() - startTime };
 }

@@ -5,6 +5,7 @@ export type CliCommandName =
   | "report"
   | "sync"
   | "list"
+  | "replay"
   | "help"
   | "version";
 
@@ -50,7 +51,7 @@ export interface TournamentOptions {
 }
 
 export interface ReportOptions {
-  readonly format: "markdown" | "html" | "json" | "console";
+  readonly format?: CliOutputFormat;
   readonly outputPath?: string;
   readonly dbPath?: string;
   readonly category?: string;
@@ -79,6 +80,19 @@ export interface ListOptions {
   readonly catalogPath?: string;
 }
 
+export interface ReplayCliOptions {
+  readonly target?: string;
+  readonly runId?: string;
+  readonly filePath?: string;
+  readonly format?: "tui" | "html" | "json";
+  readonly outputPath?: string;
+  readonly speed?: number;
+  readonly dbPath?: string;
+  readonly web?: boolean;
+  readonly live?: boolean;
+  readonly verbose?: boolean;
+}
+
 export interface CliParsedArgs {
   readonly command: CliCommandName;
   readonly rawArgs: readonly string[];
@@ -89,6 +103,7 @@ export interface CliParsedArgs {
   readonly reportOptions?: ReportOptions;
   readonly syncOptions?: SyncOptions;
   readonly listOptions?: ListOptions;
+  readonly replayOptions?: ReplayCliOptions;
 }
 
 export interface CliCommandResult {
@@ -130,12 +145,12 @@ export interface CliFlagDefinition {
   readonly alias?: string;
   readonly type: CliFlagValueType;
   readonly description: string;
-  readonly defaultValue?: string | boolean | number | readonly string[];
+  readonly defaultValue?: string | boolean | number;
   readonly choices?: readonly string[];
 }
 
 export interface CliCommandDefinition {
-  readonly name: CliCommandName;
+  readonly name: string;
   readonly description: string;
   readonly usage: string;
   readonly aliases?: readonly string[];
@@ -148,12 +163,12 @@ export type ProgressCallback = (current: number, total: number, statusText?: str
 
 export type StatusBadgeStatus =
   | "success"
-  | "warning"
   | "error"
+  | "warning"
   | "info"
-  | "neutral"
   | "running"
-  | "skipped";
+  | "skipped"
+  | "neutral";
 
 export interface TableRenderOptions<T> {
   readonly columns: readonly TableColumn<T>[];

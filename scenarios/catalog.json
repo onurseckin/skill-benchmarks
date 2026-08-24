@@ -1,8 +1,17 @@
 {
   "version": "1.0.0",
-  "generatedAt": "2026-08-24T18:18:00.000Z",
-  "totalScenarios": 5,
-  "categories": ["coding", "frontend", "react", "debugging", "system"],
+  "generatedAt": "2026-08-24T20:03:00.000Z",
+  "totalScenarios": 8,
+  "categories": [
+    "coding",
+    "frontend",
+    "react",
+    "debugging",
+    "system",
+    "composite",
+    "security",
+    "optimization"
+  ],
   "scenarios": [
     {
       "id": "git-worktrees",
@@ -48,6 +57,33 @@
       "targetSkill": "golang-pro",
       "path": "scenarios/system/golang-concurrency.json",
       "description": "Refactor an unbounded goroutine pipeline into a robust bounded worker pool using context and errgroup."
+    },
+    {
+      "id": "fullstack-refactor",
+      "name": "Full-Stack React Modernization, Go Concurrent Backend, and Docker Isolation",
+      "category": "composite",
+      "difficulty": "hard",
+      "targetSkill": "fullstack-refactor",
+      "path": "scenarios/composite/fullstack-refactor.json",
+      "description": "Comprehensive composite benchmark scenario evaluating an agent's capability to execute a multi-tier refactor across a legacy React UI component, a concurrent Go streaming backend API, and a secure Docker cgroup container execution profile."
+    },
+    {
+      "id": "polyglot-sanitization",
+      "name": "Cross-Boundary Polyglot Input Sanitization and Exploit Triage",
+      "category": "security",
+      "difficulty": "hard",
+      "targetSkill": "security-triage",
+      "path": "scenarios/security/polyglot-sanitization.json",
+      "description": "Adversarial security scenario testing an agent's capability to audit, diagnose, and remediate prototype pollution vulnerabilities in TypeScript services and path traversal / command injection exploits across Python sidecars and foreign function boundaries."
+    },
+    {
+      "id": "zero-alloc-pipeline",
+      "name": "Zero-Allocation Streaming Data Pipeline and Heap Profiling",
+      "category": "optimization",
+      "difficulty": "hard",
+      "targetSkill": "performance-optimization",
+      "path": "scenarios/optimization/zero-alloc-pipeline.json",
+      "description": "High-performance optimization benchmark scenario evaluating an agent's capability to refactor a high-throughput Go streaming pipeline into a zero-allocation architecture using sync.Pool, byte slice recycling, custom arena allocators, and pprof heap profile verification."
     }
   ]
 }

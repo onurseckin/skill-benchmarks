@@ -1,0 +1,105 @@
+{
+  "id": "fullstack-refactor",
+  "name": "Full-Stack React Modernization, Go Concurrent Backend, and Docker Isolation",
+  "category": "composite",
+  "difficulty": "hard",
+  "targetSkill": "fullstack-refactor",
+  "baselineModel": "claude-3-7-sonnet",
+  "description": "Comprehensive composite benchmark scenario evaluating an agent's capability to execute a multi-tier refactor across a legacy React UI component, a concurrent Go streaming backend API, and a secure Docker cgroup container execution profile.",
+  "instructions": "You are tasked with executing a multi-tier full-stack refactoring across frontend, backend, and infrastructure layers.\n\n### 1. Frontend Modernization (`src/frontend/TelemetryWidget.tsx`):\n- Refactor the legacy class component into a modern React functional component with TypeScript.\n- Replace imperative timer and DOM bindings with idiomatic React hooks (`useState`, `useEffect`, `useCallback`, `useMemo`).\n- Implement accessible ARIA landmarks (`role=\"region\"`, `aria-live=\"polite\"`, descriptive labels).\n- Ensure proper unmounting cleanup to prevent memory leaks.\n\n### 2. Go Backend Concurrency (`backend/api/server.go`):\n- Modernize the single-threaded polling endpoint into a concurrent event broadcaster using goroutines, channels, and `sync.RWMutex`.\n- Implement graceful shutdown with `context.Context` cancellation.\n- Ensure thread-safe subscriber registration and message broadcasting without goroutine leaks.\n\n### 3. Container Resource Isolation (`deploy/docker-compose.yml`):\n- Configure strict cgroup resource constraints (`cpus: \"2.0\"`, `mem_limit: 512m`).\n- Enforce unprivileged user execution (`user: \"10001:10001\"`) and read-only root filesystem (`read_only: true`).\n\n### 4. Quality and Invariants:\n- Adhere strictly to TypeScript type safety with zero `any` types and zero compiler suppressions.\n- Maintain zero comments throughout all modified files.",
+  "workspace": {
+    "fixtures": {
+      "src/frontend/TelemetryWidget.tsx": "import React from \"react\";\n\nexport interface TelemetryMetric {\n  readonly timestamp: number;\n  readonly cpuUsage: number;\n  readonly memoryUsage: number;\n  readonly requestCount: number;\n}\n\nexport interface TelemetryWidgetProps {\n  readonly endpointUrl: string;\n  readonly refreshIntervalMs?: number;\n  readonly onAlert?: (metric: TelemetryMetric) => void;\n}\n\nexport class TelemetryWidgetLegacy extends React.Component<TelemetryWidgetProps, { metrics: TelemetryMetric[]; isConnected: boolean }> {\n  private intervalId: NodeJS.Timeout | null = null;\n\n  constructor(props: TelemetryWidgetProps) {\n    super(props);\n    this.state = { metrics: [], isConnected: false };\n  }\n\n  componentDidMount() {\n    this.intervalId = setInterval(() => {\n      this.fetchMetrics();\n    }, this.props.refreshIntervalMs ?? 2000);\n  }\n\n  componentWillUnmount() {\n    if (this.intervalId) {\n      clearInterval(this.intervalId);\n    }\n  }\n\n  fetchMetrics() {\n    fetch(this.props.endpointUrl)\n      .then((res) => res.json())\n      .then((data: TelemetryMetric) => {\n        this.setState((prev) => ({\n          metrics: [...prev.metrics.slice(-19), data],\n          isConnected: true,\n        }));\n        if (data.cpuUsage > 90 && this.props.onAlert) {\n          this.props.onAlert(data);\n        }\n      })\n      .catch(() => {\n        this.setState({ isConnected: false });\n      });\n  }\n\n  render() {\n    return (\n      <div className=\"telemetry-widget\">\n        <h3>System Telemetry ({this.state.isConnected ? \"Connected\" : \"Disconnected\"})</h3>\n        <ul>\n          {this.state.metrics.map((m, idx) => (\n            <li key={idx}>CPU: {m.cpuUsage}% | MEM: {m.memoryUsage}MB</li>\n          ))}\n        </ul>\n      </div>\n    );\n  }\n}\n",
+      "backend/api/server.go": "package main\n\nimport (\n\t\"encoding/json\"\n\t\"net/http\"\n\t\"time\"\n)\n\ntype MetricEvent struct {\n\tTimestamp    int64   `json:\"timestamp\"`\n\tCPUUsage     float64 `json:\"cpuUsage\"`\n\tMemoryUsage  float64 `json:\"memoryUsage\"`\n\tRequestCount int     `json:\"requestCount\"`\n}\n\ntype TelemetryServer struct {\n\tmetrics []MetricEvent\n}\n\nfunc NewTelemetryServer() *TelemetryServer {\n\treturn &TelemetryServer{\n\t\tmetrics: make([]MetricEvent, 0),\n\t}\n}\n\nfunc (s *TelemetryServer) HandleTelemetry(w http.ResponseWriter, r *http.Request) {\n\tevent := MetricEvent{\n\t\tTimestamp:    time.Now().UnixMilli(),\n\t\tCPUUsage:     42.5,\n\t\tMemoryUsage:  256.0,\n\t\tRequestCount: 1200,\n\t}\n\ts.metrics = append(s.metrics, event)\n\tw.Header().Set(\"Content-Type\", \"application/json\")\n\tjson.NewEncoder(w).Encode(event)\n}\n\nfunc main() {\n\tserver := NewTelemetryServer()\n\thttp.HandleFunc(\"/api/telemetry\", server.HandleTelemetry)\n\thttp.ListenAndServe(\":8080\", nil)\n}\n",
+      "backend/api/go.mod": "module skillbench/fullstack-refactor\n\ngo 1.22\n",
+      "deploy/docker-compose.yml": "version: \"3.8\"\nservices:\n  backend:\n    build: ./backend/api\n    ports:\n      - \"8080:8080\"\n    environment:\n      - PORT=8080\n      - ENVIRONMENT=production\n  frontend:\n    build: ./frontend\n    ports:\n      - \"3000:3000\"\n    depends_on:\n      - backend\n",
+      "package.json": "{\n  \"name\": \"fullstack-composite-fixture\",\n  \"version\": \"1.0.0\",\n  \"type\": \"module\",\n  \"scripts\": {\n    \"build\": \"tsc --noEmit\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^22.13.0\",\n    \"@types/react\": \"^18.3.0\",\n    \"react\": \"^18.3.0\",\n    \"typescript\": \"^5.7.3\"\n  }\n}\n",
+      "tsconfig.json": "{\n  \"compilerOptions\": {\n    \"target\": \"ES2022\",\n    \"module\": \"NodeNext\",\n    \"moduleResolution\": \"NodeNext\",\n    \"jsx\": \"react-jsx\",\n    \"strict\": true,\n    \"esModuleInterop\": true,\n    \"skipLibCheck\": true,\n    \"forceConsistentCasingInFileNames\": true\n  },\n  \"include\": [\"src/**/*\"]\n}\n"
+    },
+    "initialGitCommit": "Initial commit for full-stack composite refactor fixture"
+  },
+  "limits": {
+    "maxTurns": 20,
+    "maxCostUSD": 1.5,
+    "maxWallClockTimeMs": 450000
+  },
+  "evaluation": {
+    "deterministicChecks": [
+      {
+        "id": "check-frontend-component-modern",
+        "name": "Verify modern functional React component",
+        "type": "file_content",
+        "filePath": "src/frontend/TelemetryWidget.tsx",
+        "fileContentPattern": "export (?:function|const) TelemetryWidget",
+        "weight": 0.25
+      },
+      {
+        "id": "check-frontend-hooks",
+        "name": "Verify idiomatic React hooks usage and ARIA landmarks",
+        "type": "file_content",
+        "filePath": "src/frontend/TelemetryWidget.tsx",
+        "fileContentPattern": "useEffect|useCallback|useMemo",
+        "weight": 0.2
+      },
+      {
+        "id": "check-go-server-concurrency",
+        "name": "Verify Go concurrent broadcaster and context handling",
+        "type": "file_content",
+        "filePath": "backend/api/server.go",
+        "fileContentPattern": "sync\\.RWMutex|sync\\.WaitGroup|context\\.Context",
+        "weight": 0.25
+      },
+      {
+        "id": "check-docker-cgroup-limits",
+        "name": "Verify Docker cgroup resource limits and isolation",
+        "type": "file_content",
+        "filePath": "deploy/docker-compose.yml",
+        "fileContentPattern": "cpus:|mem_limit:|resources:",
+        "weight": 0.15
+      },
+      {
+        "id": "check-git-diff-scope",
+        "name": "Verify scoped modifications across tiers",
+        "type": "git_diff",
+        "maxFilesChanged": 4,
+        "weight": 0.15
+      }
+    ],
+    "judgeRubrics": [
+      {
+        "name": "Frontend Modernization and React Architecture",
+        "category": "general",
+        "weight": 0.35,
+        "description": "Evaluates the functional modernization of the React telemetry widget, lifecycle cleanup, memoization, TypeScript typing, and accessibility ARIA landmarks.",
+        "criteria": {
+          "1": "Retains legacy class component patterns or introduces hook bugs, missing cleanup on unmount, missing accessibility, or broken TypeScript types.",
+          "3": "Functional component with basic hooks and cleanup, but lacks deep memoization or comprehensive accessibility landmarks.",
+          "5": "Exemplary functional component with idiomatic hooks, resilient polling/websocket lifecycle cleanup, strict readonly props, full ARIA live region support, and memoized rendering."
+        }
+      },
+      {
+        "name": "Go Concurrency and Streaming API Design",
+        "category": "general",
+        "weight": 0.35,
+        "description": "Evaluates Go backend refactoring for high concurrency, subscriber safety with mutexes, context cancellation propagation, and leak prevention.",
+        "criteria": {
+          "1": "Maintains single-threaded synchronous state or introduces data races, deadlocks, or unbounded goroutine leaks.",
+          "3": "Implements concurrent broadcasting with mutex protection, but handles shutdown imperfectly or risks channel blocking under backpressure.",
+          "5": "Robust concurrent broadcaster with fine-grained RWMutex locking, graceful context-driven shutdown, bounded channels, and zero goroutine leaks."
+        }
+      },
+      {
+        "name": "Docker Resource Isolation and Security Posture",
+        "category": "security",
+        "weight": 0.3,
+        "description": "Evaluates container deployment configuration for cgroup CPU/memory constraints, non-root user isolation, and security best practices.",
+        "criteria": {
+          "1": "Omits cgroup resource constraints or retains privileged root execution profiles.",
+          "3": "Configures basic memory or CPU limits but misses security hardening such as read-only root filesystem or non-root user mapping.",
+          "5": "Strict cgroup resource boundaries (CPU and memory limits), non-root unprivileged user execution, read-only root filesystems, and minimal attack surface."
+        }
+      }
+    ],
+    "passThreshold": 80
+  }
+}

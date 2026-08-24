@@ -1,0 +1,87 @@
+{
+  "id": "polyglot-sanitization",
+  "name": "Cross-Boundary Polyglot Input Sanitization and Exploit Triage",
+  "category": "security",
+  "difficulty": "hard",
+  "targetSkill": "security-triage",
+  "baselineModel": "claude-3-7-sonnet",
+  "description": "Adversarial security scenario testing an agent's capability to audit, diagnose, and remediate prototype pollution vulnerabilities in TypeScript services and path traversal / command injection exploits across Python sidecars and foreign function boundaries.",
+  "instructions": "You are tasked with auditing and remediating critical security vulnerabilities across a TypeScript API service and a Python file-ingestion sidecar.\n\n### 1. TypeScript Prototype Pollution Remediation (`src/security/object-merger.ts`):\n- The deep merge function is vulnerable to Object prototype pollution via `__proto__`, `constructor.prototype`, and prototype-poisoning keys.\n- Harden `deepMerge` to reject or filter out prototype modification keys.\n- Use `Object.create(null)` or safe property descriptor assignments.\n\n### 2. Input Sanitization Engine (`src/security/sanitizer.ts`):\n- Implement `sanitizeInput` and `validateObjectKeys` to validate untrusted nested JSON structures.\n- Ensure keys match strict alphanumeric and allowable underscore/dash patterns.\n- Enforce maximum object depth and payload byte limits.\n\n### 3. Python File Processor Sidecar (`services/ingest/file_processor.py`):\n- Remediate path traversal vulnerabilities allowing escape from the designated `/sandbox/storage` directory.\n- Use `os.path.commonpath` or `pathlib.Path.resolve()` to verify that resolved destination paths stay strictly within the target root directory.\n- Reject null bytes (`\\x00`), parent traversal tokens (`..`), and malicious symlinks.\n\n### 4. IPC Bridge Schema Validation (`src/security/bridge.ts`):\n- Validate and sanitize payloads before dispatching IPC subprocess messages to the Python worker.\n- Return structured error diagnostics on schema or path validation failure.\n\n### 5. Invariants and Quality:\n- Strict TypeScript typing with zero `any` types and zero compiler suppressions.\n- Zero comments throughout all files.",
+  "workspace": {
+    "fixtures": {
+      "src/security/object-merger.ts": "export interface MergeOptions {\n  readonly maxDepth?: number;\n  readonly allowPrototypeMutation?: boolean;\n}\n\nexport function isPlainObject(value: unknown): value is Record<string, unknown> {\n  return typeof value === \"object\" && value !== null && !Array.isArray(value);\n}\n\nexport function deepMerge<T extends Record<string, unknown>>(\n  target: T,\n  source: Record<string, unknown>,\n  options: MergeOptions = {}\n): T {\n  const maxDepth = options.maxDepth ?? 10;\n  \n  function mergeRecursive(dst: Record<string, unknown>, src: Record<string, unknown>, depth: number): Record<string, unknown> {\n    if (depth > maxDepth) {\n      return dst;\n    }\n    for (const key of Object.keys(src)) {\n      const srcVal = src[key];\n      if (isPlainObject(srcVal)) {\n        if (!isPlainObject(dst[key])) {\n          dst[key] = {};\n        }\n        mergeRecursive(dst[key] as Record<string, unknown>, srcVal, depth + 1);\n      } else {\n        dst[key] = srcVal;\n      }\n    }\n    return dst;\n  }\n\n  return mergeRecursive(target, source, 0) as T;\n}\n",
+      "src/security/sanitizer.ts": "export interface SanitizationResult {\n  readonly isValid: boolean;\n  readonly sanitizedPayload: Record<string, unknown>;\n  readonly violations: readonly string[];\n}\n\nexport function validateObjectKeys(obj: Record<string, unknown>): readonly string[] {\n  const violations: string[] = [];\n  const dangerousKeys = new Set([\"__proto__\", \"constructor\", \"prototype\"]);\n  for (const key of Object.keys(obj)) {\n    if (dangerousKeys.has(key)) {\n      violations.push(`Dangerous key detected: ${key}`);\n    }\n  }\n  return violations;\n}\n\nexport function sanitizeInput(rawInput: unknown): SanitizationResult {\n  if (typeof rawInput !== \"object\" || rawInput === null || Array.isArray(rawInput)) {\n    return {\n      isValid: false,\n      sanitizedPayload: {},\n      violations: [\"Root payload must be an object\"],\n    };\n  }\n  const violations = validateObjectKeys(rawInput as Record<string, unknown>);\n  return {\n    isValid: violations.length === 0,\n    sanitizedPayload: rawInput as Record<string, unknown>,\n    violations,\n  };\n}\n",
+      "src/security/bridge.ts": "import { sanitizeInput, type SanitizationResult } from \"./sanitizer.js\";\nimport { deepMerge } from \"./object-merger.js\";\n\nexport interface BridgeMessage {\n  readonly id: string;\n  readonly action: string;\n  readonly params: Record<string, unknown>;\n}\n\nexport class PolyglotBridge {\n  public validatePayload(message: BridgeMessage): SanitizationResult {\n    return sanitizeInput(message.params);\n  }\n\n  public mergeConfig(base: Record<string, unknown>, override: Record<string, unknown>): Record<string, unknown> {\n    const sanitized = sanitizeInput(override);\n    if (!sanitized.isValid) {\n      throw new Error(`Invalid override payload: ${sanitized.violations.join(\", \")}`);\n    }\n    return deepMerge(base, override);\n  }\n}\n",
+      "services/ingest/file_processor.py": "import os\nimport sys\nfrom pathlib import Path\n\nSTORAGE_ROOT = Path(\"/sandbox/storage\").resolve()\n\ndef process_uploaded_file(relative_path: str, content: bytes) -> str:\n  if \"\\x00\" in relative_path:\n    raise ValueError(\"Null byte detected in path\")\n  \n  target_path = (STORAGE_ROOT / relative_path).resolve()\n  if not str(target_path).startswith(str(STORAGE_ROOT)):\n    raise PermissionError(f\"Path traversal attempt detected: {relative_path}\")\n  \n  target_path.parent.mkdir(parents=True, exist_ok=True)\n  target_path.write_bytes(content)\n  return str(target_path)\n\ndef read_stored_file(relative_path: str) -> bytes:\n  target_path = (STORAGE_ROOT / relative_path).resolve()\n  try:\n    common = os.path.commonpath([str(STORAGE_ROOT), str(target_path)])\n    if common != str(STORAGE_ROOT):\n      raise PermissionError(f\"Access denied: {relative_path}\")\n  except ValueError:\n    raise PermissionError(f\"Drive boundary violation: {relative_path}\")\n  \n  return target_path.read_bytes()\n",
+      "package.json": "{\n  \"name\": \"polyglot-sanitization-fixture\",\n  \"version\": \"1.0.0\",\n  \"type\": \"module\",\n  \"scripts\": {\n    \"build\": \"tsc --noEmit\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^22.13.0\",\n    \"typescript\": \"^5.7.3\"\n  }\n}\n",
+      "tsconfig.json": "{\n  \"compilerOptions\": {\n    \"target\": \"ES2022\",\n    \"module\": \"NodeNext\",\n    \"moduleResolution\": \"NodeNext\",\n    \"strict\": true,\n    \"esModuleInterop\": true,\n    \"skipLibCheck\": true,\n    \"forceConsistentCasingInFileNames\": true\n  },\n  \"include\": [\"src/**/*\"]\n}\n"
+    },
+    "initialGitCommit": "Initial commit for polyglot security sanitization fixture"
+  },
+  "limits": {
+    "maxTurns": 18,
+    "maxCostUSD": 1.25,
+    "maxWallClockTimeMs": 360000
+  },
+  "evaluation": {
+    "deterministicChecks": [
+      {
+        "id": "check-proto-pollution-guard",
+        "name": "Verify prototype pollution guard against proto and constructor",
+        "type": "file_content",
+        "filePath": "src/security/object-merger.ts",
+        "fileContentPattern": "__proto__|constructor|prototype",
+        "weight": 0.25
+      },
+      {
+        "id": "check-sanitizer-exports",
+        "name": "Verify input sanitization exports",
+        "type": "file_content",
+        "filePath": "src/security/sanitizer.ts",
+        "fileContentPattern": "export function sanitizeInput|export function validateObjectKeys",
+        "weight": 0.25
+      },
+      {
+        "id": "check-python-traversal-guard",
+        "name": "Verify Python path traversal defense with commonpath or resolve",
+        "type": "file_content",
+        "filePath": "services/ingest/file_processor.py",
+        "fileContentPattern": "os\\.path\\.commonpath|Path\\.resolve|os\\.path\\.realpath",
+        "weight": 0.25
+      },
+      {
+        "id": "check-bridge-ipc-validation",
+        "name": "Verify bridge IPC schema validation",
+        "type": "file_content",
+        "filePath": "src/security/bridge.ts",
+        "fileContentPattern": "validatePayload|sanitizePayload",
+        "weight": 0.25
+      }
+    ],
+    "judgeRubrics": [
+      {
+        "name": "Prototype Pollution and Memory Integrity Remediation",
+        "category": "security",
+        "weight": 0.5,
+        "description": "Evaluates the agent's ability to identify and remediate JavaScript/TypeScript prototype pollution vectors across recursive object merges and property assignments.",
+        "criteria": {
+          "1": "Leaves prototype pollution vectors unpatched or introduces naive blacklists that can be bypassed with case variation or nested constructor targets.",
+          "3": "Remediates __proto__ access but fails on constructor.prototype chaining or misses deep property descriptor validation.",
+          "5": "Robust, defense-in-depth prototype pollution protection: blocks __proto__, constructor, and prototype keys across all recursive depths, safely handling prototypes with Object.create(null)."
+        }
+      },
+      {
+        "name": "Path Traversal and Polyglot Boundary Defense",
+        "category": "security",
+        "weight": 0.5,
+        "description": "Evaluates the prevention of directory traversal, null-byte injections, symlink escapes, and IPC schema bypasses across the TypeScript/Python boundary.",
+        "criteria": {
+          "1": "Allows directory escape via relative path sequences, encoded dots, or unvalidated IPC message arguments.",
+          "3": "Implements basic path normalization but fails on symlink resolution or platform-specific separator edge cases.",
+          "5": "Ironclad path boundary enforcement using canonical realpath/commonpath checks, null-byte rejection, and strict IPC contract validation."
+        }
+      }
+    ],
+    "passThreshold": 85
+  }
+}

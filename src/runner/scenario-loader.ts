@@ -112,7 +112,16 @@ export class ScenarioLoader {
     if (existsSync(directPath)) {
       return directPath;
     }
-    const categories = ["coding", "frontend", "react", "debugging", "system"];
+    const categories = [
+      "coding",
+      "frontend",
+      "react",
+      "debugging",
+      "system",
+      "composite",
+      "security",
+      "optimization",
+    ];
     for (const cat of categories) {
       const catPath = join(this.scenariosDir, cat, `${scenarioId}.json`);
       if (existsSync(catPath)) {

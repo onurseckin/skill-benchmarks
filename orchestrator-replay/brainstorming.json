@@ -1,0 +1,298 @@
+{
+  "prompt": "Build Live Interactive Replay Visualizer subsystem for skill-benchmarks in src/replay/ and integrate replay subcommand into CLI.",
+  "roundsExecuted": 3,
+  "vectors": [
+    {
+      "id": "EMPTY_PAYLOAD",
+      "name": "Empty / Whitespace / Malformed Payload Handling",
+      "description": "Handling empty payloads, whitespace-only input, missing files, or syntactically malformed structures",
+      "focus": "Null checks, empty strings, missing properties, malformed JSON/YAML payloads"
+    },
+    {
+      "id": "TIMEOUT_STAGNATION",
+      "name": "Timeout / Process Hang / Stagnation States",
+      "description": "Handling process timeouts, infinite execution loops, hung subprocesses, and stagnation states",
+      "focus": "Deadlocks, unbounded waits, heartbeat checks, watchdog timers, graceful aborts"
+    },
+    {
+      "id": "CONCURRENCY_MUTATION",
+      "name": "Concurrent File / Lock / Memory Mutation Races",
+      "description": "Handling race conditions, parallel file access, shared memory mutations, and lock contention",
+      "focus": "Atomic operations, file locking, state isolation, transactional edits, collision avoidance"
+    },
+    {
+      "id": "HOST_BOUNDARY",
+      "name": "Host Tool vs CLI Protocol Boundaries & Anti-Hallucination",
+      "description": "Enforcing strict host tool boundaries, CLI argument protocols, and path existence validation",
+      "focus": "Protocol conformance, CLI argument validation, path normalization, anti-hallucination guards"
+    },
+    {
+      "id": "STATE_TRANSITION",
+      "name": "State Machine Invalid-Transition Recovery",
+      "description": "Enforcing valid lifecycle states and recovering safely from corrupted or out-of-order state transitions",
+      "focus": "Lifecycle prerequisites, invalid state transitions, crash recovery, rollback mechanisms"
+    },
+    {
+      "id": "TYPE_INVARIANT",
+      "name": "Strict Type Invariants (0 any, 0 suppressions)",
+      "description": "Enforcing strict zero-any TypeScript guarantees, runtime schema guards, and no lint suppressions",
+      "focus": "0 any annotations, 0 @ts-ignore, 0 @ts-expect-error, 0 eslint-disable, runtime schema validation"
+    },
+    {
+      "id": "CLI_TELEMETRY",
+      "name": "CLI Formatting & Actionable Diagnostic Telemetry",
+      "description": "Providing structured error reporting, actionable diagnostic feedback, and parseable CLI output",
+      "focus": "Structured error logging, human-readable diagnostics, deterministic exit codes, telemetry events"
+    },
+    {
+      "id": "ADVERSARIAL_GATE",
+      "name": "Negative Counterfactual Tests (Adversarial Gate Proofs)",
+      "description": "Verifying failure modes via counterfactual tests, adversarial inputs, and negative gate proofs",
+      "focus": "Negative test cases, boundary breach detection, tamper-proofing, false-positive gate elimination"
+    }
+  ],
+  "expandedItems": [
+    {
+      "id": "brainstorm-r1-empty_payload-1",
+      "vectorId": "EMPTY_PAYLOAD",
+      "vectorName": "Empty / Whitespace / Malformed Payload Handling",
+      "round": 1,
+      "sourceRequirement": "Build Live Interactive Replay Visualizer subsystem for skill-benchmarks in src/replay/ and integrate replay subcommand into CLI.",
+      "risk": "Empty, whitespace-only, or missing payload when processing requirement \"Build Live Interactive Replay Visualizer subsystem for skill-benchmarks in sr...\" causes unhandled null/undefined exceptions.",
+      "mitigation": "Validate input schemas upfront with non-empty assertions and return explicit INVALID_ARGUMENT error before processing.",
+      "targetInvariant": "INVARIANT-EMPTY-01: Reject null or blank inputs with structured diagnostic error."
+    },
+    {
+      "id": "brainstorm-r1-timeout_stagnation-1",
+      "vectorId": "TIMEOUT_STAGNATION",
+      "vectorName": "Timeout / Process Hang / Stagnation States",
+      "round": 1,
+      "sourceRequirement": "Build Live Interactive Replay Visualizer subsystem for skill-benchmarks in src/replay/ and integrate replay subcommand into CLI.",
+      "risk": "Async task or subprocess execution for \"Build Live Interactive Replay Visualizer subsystem for skill-benchmarks in sr...\" hangs indefinitely without a bounded execution deadline.",
+      "mitigation": "Enforce bounded timeout promises and AbortController signals on all asynchronous execution paths.",
+      "targetInvariant": "INVARIANT-TIMEOUT-01: Bounded execution timeouts with explicit cancellation handlers."
+    },
+    {
+      "id": "brainstorm-r1-concurrency_mutation-1",
+      "vectorId": "CONCURRENCY_MUTATION",
+      "vectorName": "Concurrent File / Lock / Memory Mutation Races",
+      "round": 1,
+      "sourceRequirement": "Build Live Interactive Replay Visualizer subsystem for skill-benchmarks in src/replay/ and integrate replay subcommand into CLI.",
+      "risk": "Concurrent file system modifications or shared state mutations during \"Build Live Interactive Replay Visualizer subsystem for skill-benchmarks in sr...\" cause race conditions or torn writes.",
+      "mitigation": "Utilize atomic write-rename patterns and file locking mechanisms for all disk modifications.",
+      "targetInvariant": "INVARIANT-CONCURRENCY-01: Atomic file operations and mutual exclusion guards."
+    },
+    {
+      "id": "brainstorm-r1-host_boundary-1",
+      "vectorId": "HOST_BOUNDARY",
+      "vectorName": "Host Tool vs CLI Protocol Boundaries & Anti-Hallucination",
+      "round": 1,
+      "sourceRequirement": "Build Live Interactive Replay Visualizer subsystem for skill-benchmarks in src/replay/ and integrate replay subcommand into CLI.",
+      "risk": "Subprocess execution or path resolution for \"Build Live Interactive Replay Visualizer subsystem for skill-benchmarks in sr...\" escapes the repository root or hallucinates external tools.",
+      "mitigation": "Validate all target paths against canonical repository root and enforce strict command whitelist policy.",
+      "targetInvariant": "INVARIANT-HOST-01: Strict path containment within workspace boundary."
+    },
+    {
+      "id": "brainstorm-r1-state_transition-1",
+      "vectorId": "STATE_TRANSITION",
+      "vectorName": "State Machine Invalid-Transition Recovery",
+      "round": 1,
+      "sourceRequirement": "Build Live Interactive Replay Visualizer subsystem for skill-benchmarks in src/replay/ and integrate replay subcommand into CLI.",
+      "risk": "Out-of-order lifecycle execution in \"Build Live Interactive Replay Visualizer subsystem for skill-benchmarks in sr...\" bypasses required prerequisite verification stages.",
+      "mitigation": "Enforce finite state machine guard assertions that require prerequisite event receipts in events.jsonl.",
+      "targetInvariant": "INVARIANT-STATE-01: Strict state machine transition validation with prerequisite receipts."
+    },
+    {
+      "id": "brainstorm-r1-type_invariant-1",
+      "vectorId": "TYPE_INVARIANT",
+      "vectorName": "Strict Type Invariants (0 any, 0 suppressions)",
+      "round": 1,
+      "sourceRequirement": "Build Live Interactive Replay Visualizer subsystem for skill-benchmarks in src/replay/ and integrate replay subcommand into CLI.",
+      "risk": "Type coercion or implicit 'any' types in \"Build Live Interactive Replay Visualizer subsystem for skill-benchmarks in sr...\" lead to runtime TypeError exceptions.",
+      "mitigation": "Enforce zero 'any' annotations, complete interface definitions, and strict TypeScript compiler settings.",
+      "targetInvariant": "INVARIANT-TYPE-01: Strict TypeScript compilation with 0 any annotations."
+    },
+    {
+      "id": "brainstorm-r1-cli_telemetry-1",
+      "vectorId": "CLI_TELEMETRY",
+      "vectorName": "CLI Formatting & Actionable Diagnostic Telemetry",
+      "round": 1,
+      "sourceRequirement": "Build Live Interactive Replay Visualizer subsystem for skill-benchmarks in src/replay/ and integrate replay subcommand into CLI.",
+      "risk": "Failures during execution of \"Build Live Interactive Replay Visualizer subsystem for skill-benchmarks in sr...\" produce cryptic stack traces without actionable diagnostic guidance.",
+      "mitigation": "Format CLI error messages with distinct error codes, clear descriptions, and actionable fix suggestions.",
+      "targetInvariant": "INVARIANT-TELEMETRY-01: Actionable error formatting with specific error codes and remediation hints."
+    },
+    {
+      "id": "brainstorm-r1-adversarial_gate-1",
+      "vectorId": "ADVERSARIAL_GATE",
+      "vectorName": "Negative Counterfactual Tests (Adversarial Gate Proofs)",
+      "round": 1,
+      "sourceRequirement": "Build Live Interactive Replay Visualizer subsystem for skill-benchmarks in src/replay/ and integrate replay subcommand into CLI.",
+      "risk": "Gate verification for \"Build Live Interactive Replay Visualizer subsystem for skill-benchmarks in sr...\" passes trivially due to missing negative test assertions (false positive).",
+      "mitigation": "Implement counterfactual adversarial tests that intentionally violate requirements to prove gate rejection.",
+      "targetInvariant": "INVARIANT-GATE-01: Mandatory negative counterfactual tests proving failure detection."
+    },
+    {
+      "id": "brainstorm-r2-empty_payload-1",
+      "vectorId": "EMPTY_PAYLOAD",
+      "vectorName": "Empty / Whitespace / Malformed Payload Handling",
+      "round": 2,
+      "sourceRequirement": "Build Live Interactive Replay Visualizer subsystem for skill-benchmarks in src/replay/ and integrate replay subcommand into CLI.",
+      "risk": "Malformed or truncated payload structure in \"Build Live Interactive Replay Visualizer subsystem for skill-benchmarks in sr...\" bypasses basic existence checks and corrupts internal parser state.",
+      "mitigation": "Implement deep structural schema parsing and type-guarded validation functions for all incoming payloads.",
+      "targetInvariant": "INVARIANT-EMPTY-02: Enforce structural schema validation before deserialization."
+    },
+    {
+      "id": "brainstorm-r2-timeout_stagnation-1",
+      "vectorId": "TIMEOUT_STAGNATION",
+      "vectorName": "Timeout / Process Hang / Stagnation States",
+      "round": 2,
+      "sourceRequirement": "Build Live Interactive Replay Visualizer subsystem for skill-benchmarks in src/replay/ and integrate replay subcommand into CLI.",
+      "risk": "Retry loops or recursive execution for \"Build Live Interactive Replay Visualizer subsystem for skill-benchmarks in sr...\" stagnates silently without emitting heartbeat telemetry.",
+      "mitigation": "Introduce maximum retry limits, exponential backoff, and periodic heartbeat notifications to prevent silent stagnation.",
+      "targetInvariant": "INVARIANT-TIMEOUT-02: Stagnation watchdog with heartbeat tracking and bounded retries."
+    },
+    {
+      "id": "brainstorm-r2-concurrency_mutation-1",
+      "vectorId": "CONCURRENCY_MUTATION",
+      "vectorName": "Concurrent File / Lock / Memory Mutation Races",
+      "round": 2,
+      "sourceRequirement": "Build Live Interactive Replay Visualizer subsystem for skill-benchmarks in src/replay/ and integrate replay subcommand into CLI.",
+      "risk": "Shared in-memory state modified simultaneously across worker processes in \"Build Live Interactive Replay Visualizer subsystem for skill-benchmarks in sr...\" causes inconsistent read views.",
+      "mitigation": "Enforce immutable data structures and deterministic state snapshots for inter-agent data passing.",
+      "targetInvariant": "INVARIANT-CONCURRENCY-02: Immutable state transitions and deep copies on message boundaries."
+    },
+    {
+      "id": "brainstorm-r2-host_boundary-1",
+      "vectorId": "HOST_BOUNDARY",
+      "vectorName": "Host Tool vs CLI Protocol Boundaries & Anti-Hallucination",
+      "round": 2,
+      "sourceRequirement": "Build Live Interactive Replay Visualizer subsystem for skill-benchmarks in src/replay/ and integrate replay subcommand into CLI.",
+      "risk": "Environment differences across host platforms (macOS vs Linux) in \"Build Live Interactive Replay Visualizer subsystem for skill-benchmarks in sr...\" cause subtle CLI argument or path failures.",
+      "mitigation": "Normalize file paths, shell delimiters, and argument arrays using platform-agnostic standard library utilities.",
+      "targetInvariant": "INVARIANT-HOST-02: Cross-platform path and environment normalization."
+    },
+    {
+      "id": "brainstorm-r2-state_transition-1",
+      "vectorId": "STATE_TRANSITION",
+      "vectorName": "State Machine Invalid-Transition Recovery",
+      "round": 2,
+      "sourceRequirement": "Build Live Interactive Replay Visualizer subsystem for skill-benchmarks in src/replay/ and integrate replay subcommand into CLI.",
+      "risk": "Partial failure during state update in \"Build Live Interactive Replay Visualizer subsystem for skill-benchmarks in sr...\" leaves the system in an unrecoverable corrupted intermediate state.",
+      "mitigation": "Implement transactional rollback and deterministic recovery from last verified state snapshot.",
+      "targetInvariant": "INVARIANT-STATE-02: Transactional state updates with atomic rollbacks on failure."
+    },
+    {
+      "id": "brainstorm-r2-type_invariant-1",
+      "vectorId": "TYPE_INVARIANT",
+      "vectorName": "Strict Type Invariants (0 any, 0 suppressions)",
+      "round": 2,
+      "sourceRequirement": "Build Live Interactive Replay Visualizer subsystem for skill-benchmarks in src/replay/ and integrate replay subcommand into CLI.",
+      "risk": "Use of '@ts-ignore', '@ts-expect-error', or type assertions in \"Build Live Interactive Replay Visualizer subsystem for skill-benchmarks in sr...\" masks underlying type mismatches.",
+      "mitigation": "Ban all compiler suppression directives and implement comprehensive type narrowing guards.",
+      "targetInvariant": "INVARIANT-TYPE-02: Zero compiler suppression directives (@ts-ignore / @ts-expect-error)."
+    },
+    {
+      "id": "brainstorm-r2-cli_telemetry-1",
+      "vectorId": "CLI_TELEMETRY",
+      "vectorName": "CLI Formatting & Actionable Diagnostic Telemetry",
+      "round": 2,
+      "sourceRequirement": "Build Live Interactive Replay Visualizer subsystem for skill-benchmarks in src/replay/ and integrate replay subcommand into CLI.",
+      "risk": "Silent execution or missing progress indicators in \"Build Live Interactive Replay Visualizer subsystem for skill-benchmarks in sr...\" leave users and automation agents uninformed.",
+      "mitigation": "Emit structured progress telemetry events and clean ASCII summary output throughout execution.",
+      "targetInvariant": "INVARIANT-TELEMETRY-02: Structured real-time event streaming and ASCII summary tables."
+    },
+    {
+      "id": "brainstorm-r2-adversarial_gate-1",
+      "vectorId": "ADVERSARIAL_GATE",
+      "vectorName": "Negative Counterfactual Tests (Adversarial Gate Proofs)",
+      "round": 2,
+      "sourceRequirement": "Build Live Interactive Replay Visualizer subsystem for skill-benchmarks in src/replay/ and integrate replay subcommand into CLI.",
+      "risk": "Test assertions for \"Build Live Interactive Replay Visualizer subsystem for skill-benchmarks in sr...\" only validate happy path scenarios, leaving critical edge cases unexercised.",
+      "mitigation": "Design boundary-value and extreme condition test matrices covering all declared failure vectors.",
+      "targetInvariant": "INVARIANT-GATE-02: Exhaustive boundary value and stress test coverage."
+    },
+    {
+      "id": "brainstorm-r3-empty_payload-1",
+      "vectorId": "EMPTY_PAYLOAD",
+      "vectorName": "Empty / Whitespace / Malformed Payload Handling",
+      "round": 3,
+      "sourceRequirement": "Build Live Interactive Replay Visualizer subsystem for skill-benchmarks in src/replay/ and integrate replay subcommand into CLI.",
+      "risk": "Adversarial nested empty structures or unicode whitespace in \"Build Live Interactive Replay Visualizer subsystem for skill-benchmarks in sr...\" leads to silent no-op execution instead of expected failure.",
+      "mitigation": "Add negative unit tests asserting rejection of complex empty payload variants and boundary values.",
+      "targetInvariant": "INVARIANT-EMPTY-03: Negative counterfactual tests for empty and boundary payloads."
+    },
+    {
+      "id": "brainstorm-r3-timeout_stagnation-1",
+      "vectorId": "TIMEOUT_STAGNATION",
+      "vectorName": "Timeout / Process Hang / Stagnation States",
+      "round": 3,
+      "sourceRequirement": "Build Live Interactive Replay Visualizer subsystem for skill-benchmarks in src/replay/ and integrate replay subcommand into CLI.",
+      "risk": "Concurrent deadlocks or resource starvation during execution of \"Build Live Interactive Replay Visualizer subsystem for skill-benchmarks in sr...\" causes harness lockup.",
+      "mitigation": "Implement watchdog timer monitors that forcibly abort and record diagnostic stack traces upon stagnation.",
+      "targetInvariant": "INVARIANT-TIMEOUT-03: Hard watchdog interlock with diagnostic dump on timeout."
+    },
+    {
+      "id": "brainstorm-r3-concurrency_mutation-1",
+      "vectorId": "CONCURRENCY_MUTATION",
+      "vectorName": "Concurrent File / Lock / Memory Mutation Races",
+      "round": 3,
+      "sourceRequirement": "Build Live Interactive Replay Visualizer subsystem for skill-benchmarks in src/replay/ and integrate replay subcommand into CLI.",
+      "risk": "Interleaved read-modify-write operations in \"Build Live Interactive Replay Visualizer subsystem for skill-benchmarks in sr...\" silently overwrite concurrent updates from peer tasks.",
+      "mitigation": "Apply optimistic concurrency checks with revision tokens and transactional replay capability.",
+      "targetInvariant": "INVARIANT-CONCURRENCY-03: Optimistic concurrency control with revision token verification."
+    },
+    {
+      "id": "brainstorm-r3-host_boundary-1",
+      "vectorId": "HOST_BOUNDARY",
+      "vectorName": "Host Tool vs CLI Protocol Boundaries & Anti-Hallucination",
+      "round": 3,
+      "sourceRequirement": "Build Live Interactive Replay Visualizer subsystem for skill-benchmarks in src/replay/ and integrate replay subcommand into CLI.",
+      "risk": "Unsanitized user-supplied strings passed to shell subprocesses in \"Build Live Interactive Replay Visualizer subsystem for skill-benchmarks in sr...\" create command injection vulnerabilities.",
+      "mitigation": "Mandate structured argv arrays instead of raw shell strings and audit command arguments against RBAC policy.",
+      "targetInvariant": "INVARIANT-HOST-03: Structured argv execution and shell-injection prevention."
+    },
+    {
+      "id": "brainstorm-r3-state_transition-1",
+      "vectorId": "STATE_TRANSITION",
+      "vectorName": "State Machine Invalid-Transition Recovery",
+      "round": 3,
+      "sourceRequirement": "Build Live Interactive Replay Visualizer subsystem for skill-benchmarks in src/replay/ and integrate replay subcommand into CLI.",
+      "risk": "Re-entrant or duplicate event processing in \"Build Live Interactive Replay Visualizer subsystem for skill-benchmarks in sr...\" causes inconsistent multiple transitions.",
+      "mitigation": "Ensure all state transition handlers are idempotent and guarded by unique transition IDs.",
+      "targetInvariant": "INVARIANT-STATE-03: Idempotent state transitions guarded by deterministic event deduplication."
+    },
+    {
+      "id": "brainstorm-r3-type_invariant-1",
+      "vectorId": "TYPE_INVARIANT",
+      "vectorName": "Strict Type Invariants (0 any, 0 suppressions)",
+      "round": 3,
+      "sourceRequirement": "Build Live Interactive Replay Visualizer subsystem for skill-benchmarks in src/replay/ and integrate replay subcommand into CLI.",
+      "risk": "Untyped external JSON data parsed in \"Build Live Interactive Replay Visualizer subsystem for skill-benchmarks in sr...\" violates expected internal interface contracts.",
+      "mitigation": "Validate all parsed JSON inputs with runtime schema predicates before casting or passing to internal functions.",
+      "targetInvariant": "INVARIANT-TYPE-03: Runtime type guards and validation schemas for external data."
+    },
+    {
+      "id": "brainstorm-r3-cli_telemetry-1",
+      "vectorId": "CLI_TELEMETRY",
+      "vectorName": "CLI Formatting & Actionable Diagnostic Telemetry",
+      "round": 3,
+      "sourceRequirement": "Build Live Interactive Replay Visualizer subsystem for skill-benchmarks in src/replay/ and integrate replay subcommand into CLI.",
+      "risk": "Inconsistent CLI exit codes in \"Build Live Interactive Replay Visualizer subsystem for skill-benchmarks in sr...\" cause CI automation pipelines to miss critical failure states.",
+      "mitigation": "Map every distinct failure category to a standardized, deterministic non-zero exit code.",
+      "targetInvariant": "INVARIANT-TELEMETRY-03: Deterministic CLI exit code mapping for CI/CD compatibility."
+    },
+    {
+      "id": "brainstorm-r3-adversarial_gate-1",
+      "vectorId": "ADVERSARIAL_GATE",
+      "vectorName": "Negative Counterfactual Tests (Adversarial Gate Proofs)",
+      "round": 3,
+      "sourceRequirement": "Build Live Interactive Replay Visualizer subsystem for skill-benchmarks in src/replay/ and integrate replay subcommand into CLI.",
+      "risk": "Security or safety constraints in \"Build Live Interactive Replay Visualizer subsystem for skill-benchmarks in sr...\" bypassed through manipulated inputs or skipped validation steps.",
+      "mitigation": "Enforce mechanical two-key validation gates and immutable cryptographic hashes on test outputs.",
+      "targetInvariant": "INVARIANT-GATE-03: Two-key validation gate with tamper-proof verification receipts."
+    }
+  ],
+  "totalExpandedItems": 24,
+  "createdAt": "2026-08-24T19:54:23.363Z"
+}
