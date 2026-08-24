@@ -28,7 +28,13 @@
     }
   },
   "files": [
-    "src/providers/types.ts"
+    "src/providers/types.ts",
+    "src/providers/anthropic.ts",
+    "src/providers/gemini.ts",
+    "src/providers/openai.ts",
+    "src/providers/pricing.ts",
+    "src/providers/factory.ts",
+    "src/providers/index.ts"
   ],
   "include": [
     "src/**/*"
