@@ -1,0 +1,53 @@
+{
+  "version": "1.0.0",
+  "generatedAt": "2026-08-24T18:18:00.000Z",
+  "totalScenarios": 5,
+  "categories": ["coding", "frontend", "react", "debugging", "system"],
+  "scenarios": [
+    {
+      "id": "git-worktrees",
+      "name": "Isolated Worktree Feature Branching",
+      "category": "coding",
+      "difficulty": "medium",
+      "targetSkill": "using-git-worktrees",
+      "path": "scenarios/coding/git-worktrees.json",
+      "description": "Implement an isolated feature branch using git worktrees without mutating the main working copy."
+    },
+    {
+      "id": "a11y-audit",
+      "name": "Comprehensive WCAG 2.1 AA Accessibility Audit & Remediation",
+      "category": "frontend",
+      "difficulty": "medium",
+      "targetSkill": "a11y-debugging",
+      "path": "scenarios/frontend/a11y-audit.json",
+      "description": "Audit and remediate inaccessible interactive frontend elements adhering to WCAG 2.1 AA criteria."
+    },
+    {
+      "id": "composition-patterns",
+      "name": "React Compound Component Refactoring",
+      "category": "react",
+      "difficulty": "hard",
+      "targetSkill": "vercel-composition-patterns",
+      "path": "scenarios/react/composition-patterns.json",
+      "description": "Refactor a monolithic React component with boolean prop proliferation into composable compound components."
+    },
+    {
+      "id": "memory-leak",
+      "name": "Event Stream Memory Leak Diagnosis and Fix",
+      "category": "debugging",
+      "difficulty": "hard",
+      "targetSkill": "memory-leak-debugging",
+      "path": "scenarios/debugging/memory-leak.json",
+      "description": "Diagnose and fix a subtle closure retention memory leak in a high-throughput event processing pipeline."
+    },
+    {
+      "id": "golang-concurrency",
+      "name": "Bounded Concurrency Worker Pool with Graceful Shutdown",
+      "category": "system",
+      "difficulty": "hard",
+      "targetSkill": "golang-pro",
+      "path": "scenarios/system/golang-concurrency.json",
+      "description": "Refactor an unbounded goroutine pipeline into a robust bounded worker pool using context and errgroup."
+    }
+  ]
+}

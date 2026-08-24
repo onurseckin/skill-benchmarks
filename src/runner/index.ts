@@ -65,3 +65,9 @@ export {
   type MatrixCellDescriptor,
   type MatrixRunnerOptions,
 } from "./matrix-runner.js";
+
+export {
+  ScenarioLoader,
+  type ScenarioQueryFilter,
+} from "./scenario-loader.js";
+

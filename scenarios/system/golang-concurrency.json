@@ -1,0 +1,77 @@
+{
+  "id": "golang-concurrency",
+  "name": "Bounded Concurrency Worker Pool with Graceful Shutdown",
+  "category": "system",
+  "difficulty": "hard",
+  "targetSkill": "golang-pro",
+  "baselineModel": "claude-3-7-sonnet",
+  "description": "Refactor an unbounded, leaky goroutine pipeline into a robust bounded worker pool using errgroup, sync.WaitGroup, context cancellation, and error propagation.",
+  "instructions": "The current Go service in worker.go spawns unbounded goroutines upon every incoming message, leaking memory and causing data races under load. Refactor worker.go to use a bounded worker pool of configurable size N with context.Context cancellation and proper sync.WaitGroup / errgroup synchronization. Ensure all unit and race detector checks pass without goroutine leaks.",
+  "workspace": {
+    "fixtures": {
+      "go.mod": "module skillbench/golang-concurrency\n\ngo 1.22\n",
+      "worker.go": "package main\n\nimport (\n\t\"context\"\n\t\"errors\"\n\t\"sync\"\n\t\"time\"\n)\n\ntype Job struct {\n\tID   string\n\tData []byte\n}\n\ntype Result struct {\n\tJobID string\n\tErr   error\n}\n\ntype Pool struct {\n\tworkers int\n\tjobs    chan Job\n\tresults chan Result\n\twg      sync.WaitGroup\n}\n\nfunc NewPool(workers int) *Pool {\n\treturn &Pool{\n\t\tworkers: workers,\n\t\tjobs:    make(chan Job, workers*2),\n\t\tresults: make(chan Result, workers*2),\n\t}\n}\n\nfunc (p *Pool) Process(ctx context.Context, job Job) Result {\n\tselect {\n\tcase <-ctx.Done():\n\t\treturn Result{JobID: job.ID, Err: ctx.Err()}\n\tcase p.jobs <- job:\n\t}\n\tselect {\n\tcase <-ctx.Done():\n\t\treturn Result{JobID: job.ID, Err: ctx.Err()}\n\tcase res := <-p.results:\n\t\treturn res\n\t}\n}\n",
+      "worker_test.go": "package main\n\nimport (\n\t\"context\"\n\t\"fmt\"\n\t\"testing\"\n\t\"time\"\n)\n\nfunc TestPoolConcurrency(t *testing.T) {\n\tctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)\n\tdefer cancel()\n\n\tpool := NewPool(4)\n\tfor i := 0; i < 10; i++ {\n\t\tjob := Job{ID: fmt.Sprintf(\"job-%d\", i)}\n\t\tgo func(j Job) {\n\t\t\t_ = pool.Process(ctx, j)\n\t\t}(job)\n\t}\n}\n"
+    },
+    "initialGitCommit": true
+  },
+  "limits": {
+    "maxTurns": 10,
+    "maxCostUSD": 0.50,
+    "maxWallClockTimeMs": 180000
+  },
+  "evaluation": {
+    "deterministicChecks": [
+      {
+        "id": "check-bounded-pool-struct",
+        "name": "Verify bounded worker pool struct definition",
+        "type": "file_content",
+        "weight": 25,
+        "filePath": "worker.go",
+        "fileContentPattern": "type\\s+Pool\\s+struct"
+      },
+      {
+        "id": "check-context-propagation",
+        "name": "Verify context.Context cancellation support",
+        "type": "file_content",
+        "weight": 25,
+        "filePath": "worker.go",
+        "fileContentPattern": "context\\.Context"
+      },
+      {
+        "id": "check-sync-group",
+        "name": "Verify WaitGroup or errgroup synchronization",
+        "type": "file_content",
+        "weight": 25,
+        "filePath": "worker.go",
+        "fileContentPattern": "sync\\.WaitGroup|errgroup\\.Group"
+      },
+      {
+        "id": "check-clean-teardown",
+        "name": "Verify Close or Shutdown method exists",
+        "type": "file_content",
+        "weight": 25,
+        "filePath": "worker.go",
+        "fileContentPattern": "func\\s+\\(.*\\)\\s+(?:Close|Shutdown|Stop)"
+      }
+    ],
+    "judgeRubrics": [
+      {
+        "dimension": "concurrency_safety",
+        "weight": 35,
+        "rubric": "Evaluates prevention of data races, goroutine leaks, and deadlock avoidance."
+      },
+      {
+        "dimension": "error_handling",
+        "weight": 35,
+        "rubric": "Evaluates context cancellation propagation and worker error collection."
+      },
+      {
+        "dimension": "idiomatic_go",
+        "weight": 30,
+        "rubric": "Evaluates adherence to Go concurrency idioms, channel directionality, and clean package API."
+      }
+    ],
+    "passThreshold": 75
+  }
+}

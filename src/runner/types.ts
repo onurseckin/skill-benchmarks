@@ -281,3 +281,41 @@ export interface MatrixExecutionSummary {
   readonly results: ReadonlyArray<ScenarioResult>;
   readonly timestamp: string;
 }
+
+export interface ScenarioDefinition {
+  readonly id: string;
+  readonly name: string;
+  readonly category: string;
+  readonly difficulty: string;
+  readonly targetSkill?: string;
+  readonly baselineModel?: string;
+  readonly description: string;
+  readonly instructions: string;
+  readonly tags?: readonly string[];
+  readonly workspace?: {
+    readonly fixtures?: Record<string, string>;
+    readonly initialGitCommit?: string;
+  };
+  readonly limits?: Partial<ExecutionLimits>;
+  readonly evaluation?: Record<string, unknown>;
+  readonly metadata?: Record<string, unknown>;
+}
+
+export interface ScenarioCatalogEntry {
+  readonly id: string;
+  readonly name: string;
+  readonly category: string;
+  readonly difficulty?: string;
+  readonly targetSkill?: string;
+  readonly path: string;
+  readonly description: string;
+}
+
+export interface ScenarioCatalog {
+  readonly version: string;
+  readonly generatedAt: string;
+  readonly totalScenarios: number;
+  readonly categories: readonly string[];
+  readonly scenarios: readonly ScenarioCatalogEntry[];
+}
+
