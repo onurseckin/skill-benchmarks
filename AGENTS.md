@@ -31,3 +31,12 @@
   ```bash
   bun run src/scripts/quality-gate.ts
   ```
+
+## 6. Atomic Per-Task Git Commit & Push
+- When completing any specific capsule, task group, or verifiable subtask, agents must:
+  1. Verify code passes `bun run src/scripts/quality-gate.ts` and `bun run typecheck`.
+  2. Stage all verified deliverables.
+  3. Create a Conventional Commit (`feat(...)`, `fix(...)`, `docs(...)`) adhering to imperative mood and <= 70 characters.
+  4. Immediately push the commit to remote (`git push origin main`).
+- Never leave verified work uncommitted or unpushed between task boundaries.
+
