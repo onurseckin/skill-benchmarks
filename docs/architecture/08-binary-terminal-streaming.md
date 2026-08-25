@@ -112,4 +112,10 @@ To render flicker-free terminal sessions in headless or terminal UI environments
 
 ---
 
+## 5. Binary Protocol Interoperability Summary
+
+The binary protocol ensures zero-overhead multiplexing of PTY terminal sessions and execution metrics across CLI players and web dashboards.
+
+---
+
 [← Previous: 07. Scenario Fuzzing & Chaos](07-fuzzing-and-chaos.md) | [Architecture Index](README.md)

@@ -90,4 +90,10 @@ Agent resilience under chaos is quantified through three standardized indices ([
 
 ---
 
+## 5. Automated Fault Scenarios Summary
+
+The benchmark harness includes pre-configured chaos injection scenarios covering network partitions, sudden SIGKILL interrupts during file writes, and hard cgroup memory constraints to guarantee rigorous agent evaluation.
+
+---
+
 [← Previous: 06. Telemetry & Reporting](06-telemetry-and-reporting.md) | [Architecture Index](README.md) | [Next: 08. Binary Terminal Streaming →](08-binary-terminal-streaming.md)

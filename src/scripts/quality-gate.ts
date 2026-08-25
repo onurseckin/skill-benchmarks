@@ -191,13 +191,13 @@ function runQualityAudit(): void {
     process.exit(1);
   }
   const chaosContent = readFileSync(archChaos, "utf8");
-  if (!chaosContent.includes("## 4. Chaos & Fuzzing Module Reference")) {
-    process.stderr.write("Chaos doc missing module reference section.\n");
+  if (!chaosContent.includes("## 5. Automated Fault Scenarios Summary")) {
+    process.stderr.write("Chaos doc missing automated fault scenarios summary section.\n");
     process.exit(1);
   }
   const streamContent = readFileSync(archStreaming, "utf8");
-  if (!streamContent.includes("## 4. Streaming & Tunnel Module Reference")) {
-    process.stderr.write("Streaming doc missing module reference section.\n");
+  if (!streamContent.includes("## 5. Binary Protocol Interoperability Summary")) {
+    process.stderr.write("Streaming doc missing binary protocol interoperability summary section.\n");
     process.exit(1);
   }
 
