@@ -1,12 +1,10 @@
-import { randomUUID } from "node:crypto";
-import { existsSync, linkSync, lstatSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
-import { link, rm, writeFile } from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
+import { closeSync, existsSync, fsyncSync, lstatSync, openSync, readdirSync, unlinkSync } from "node:fs";
+import { join } from "node:path";
 import type { RunArtifactLayout } from "../infrastructure/workspace/types.js";
 import type { RunRecord, RunStatus } from "../reporting/types.js";
 import type { ScenarioResult, RunTerminationReason } from "../runner/types.js";
 import type { ExecutionMode } from "../shared/execution-mode.js";
-import { sanitizeBenchmarkArtifactValue } from "../shared/artifact-sanitization.js";
+import { commitAtomicEvidenceJson, EvidenceCommitError, removeAtomicEvidence, writeAtomicEvidenceJson } from "./atomic-evidence-writer.js";
 
 export interface RunEvidenceContext {
   readonly sweepId: string;
@@ -30,18 +28,10 @@ export interface TerminalRunEvidence {
   readonly completedAt: string;
 }
 
-export class EvidenceCommitError extends Error {
-  public readonly targetCommitted: boolean;
-
-  public constructor(targetCommitted: boolean) {
-    super("terminal evidence persistence failed");
-    this.name = "EvidenceCommitError";
-    this.targetCommitted = targetCommitted;
-  }
-}
+export { EvidenceCommitError } from "./atomic-evidence-writer.js";
 
 export async function writeRunManifest(layout: RunArtifactLayout, context: RunEvidenceContext): Promise<void> {
-  await writeAtomicJson(layout.manifestPath, { schemaVersion: "1.0.0", artifactKind: "manifest", ...context, timestamp: context.startedAt });
+  await writeAtomicEvidenceJson(layout, layout.manifestPath, { schemaVersion: "1.0.0", artifactKind: "manifest", ...context, timestamp: context.startedAt });
 }
 
 export function commitRunResult(
@@ -52,7 +42,7 @@ export function commitRunResult(
   attemptCount: number,
   durationMs: number
 ): void {
-  commitAtomicJson(layout.resultPath, createRunResultValue(context, terminal, result, attemptCount, durationMs, "result"));
+  commitAtomicEvidenceJson(layout, layout.resultPath, createRunResultValue(context, terminal, result, attemptCount, durationMs, "result"));
 }
 
 export function commitTerminalFailure(
@@ -66,20 +56,18 @@ export function commitTerminalFailure(
 ): string {
   if (preferResultPath) {
     try {
-      commitAtomicJson(layout.resultPath, createRunResultValue(context, terminal, result, attemptCount, durationMs, "result"));
+      commitAtomicEvidenceJson(layout, layout.resultPath, createRunResultValue(context, terminal, result, attemptCount, durationMs, "result"));
       return layout.resultPath;
     } catch (error) {
       if (error instanceof EvidenceCommitError && error.targetCommitted) throw error;
     }
   }
-  commitAtomicJson(layout.terminalFailurePath, createRunResultValue(context, terminal, result, attemptCount, durationMs, "terminal-failure"));
+  commitAtomicEvidenceJson(layout, layout.terminalFailurePath, createRunResultValue(context, terminal, result, attemptCount, durationMs, "terminal-failure"));
   return layout.terminalFailurePath;
 }
 
 export function discardCommittedRunResult(layout: RunArtifactLayout): void {
-  const stats = lstatSync(layout.resultPath);
-  if (!stats.isFile() || stats.isSymbolicLink()) throw new EvidenceCommitError(true);
-  unlinkSync(layout.resultPath);
+  removeAtomicEvidence(layout, layout.resultPath);
 }
 
 export function removeStaleRunEvidenceTemporaryFiles(layout: RunArtifactLayout): void {
@@ -90,6 +78,16 @@ export function removeStaleRunEvidenceTemporaryFiles(layout: RunArtifactLayout):
     const stats = lstatSync(path);
     if (!stats.isFile() || stats.isSymbolicLink()) throw new TypeError("Terminal evidence temporary artifact is unsafe");
     unlinkSync(path);
+    syncRunDirectory(layout.runDirectory);
+  }
+}
+
+function syncRunDirectory(path: string): void {
+  const descriptor = openSync(path, "r");
+  try {
+    fsyncSync(descriptor);
+  } finally {
+    closeSync(descriptor);
   }
 }
 
@@ -190,50 +188,4 @@ function createRunResultValue(
     totalTurns: result?.turns ?? 0,
     toolErrorCount: result === undefined ? 0 : countToolErrors(result),
   };
-}
-
-async function writeAtomicJson(path: string, value: unknown): Promise<void> {
-  const temporaryPath = createTemporaryPath(path);
-  let targetCommitted = false;
-  try {
-    await writeFile(temporaryPath, serializeEvidence(value), { encoding: "utf8", flag: "wx" });
-    await link(temporaryPath, path);
-    targetCommitted = true;
-  } catch {
-    throw new EvidenceCommitError(targetCommitted);
-  } finally {
-    try {
-      await rm(temporaryPath, { force: true });
-    } catch {
-      throw new EvidenceCommitError(targetCommitted);
-    }
-  }
-}
-
-function commitAtomicJson(path: string, value: unknown): void {
-  const temporaryPath = createTemporaryPath(path);
-  let targetCommitted = false;
-  try {
-    writeFileSync(temporaryPath, serializeEvidence(value), { encoding: "utf8", flag: "wx" });
-    linkSync(temporaryPath, path);
-    targetCommitted = true;
-  } catch {
-    throw new EvidenceCommitError(targetCommitted);
-  } finally {
-    if (existsSync(temporaryPath)) {
-      try {
-        unlinkSync(temporaryPath);
-      } catch {
-        throw new EvidenceCommitError(targetCommitted);
-      }
-    }
-  }
-}
-
-function createTemporaryPath(path: string): string {
-  return join(dirname(path), `.${basename(path)}.${randomUUID()}.tmp`);
-}
-
-function serializeEvidence(value: unknown): string {
-  return JSON.stringify(sanitizeBenchmarkArtifactValue(value), null, 2);
 }

@@ -51,7 +51,7 @@ export async function executeSweepCell(input: CellExecutionInput): Promise<Matri
     simulated: executionMode === "fake",
     startedAt,
   } as const;
-  const artifactLayout = createCellArtifactLayout(cell);
+  let artifactLayout = createCellArtifactLayout(cell);
   try {
     telemetryDb.claimRunIdentity(cell.runId, cell.sweepId, cell.cellId);
   } catch (error) {
@@ -65,7 +65,7 @@ export async function executeSweepCell(input: CellExecutionInput): Promise<Matri
   let workspace: DisposableWorkspace | undefined;
 
   try {
-    await prepareRunArtifactLayout(artifactLayout);
+    artifactLayout = await prepareRunArtifactLayout(artifactLayout);
     assertEmbeddedAdapterMatchesMode(cell, executionMode);
     const scenarioDefinition = scenarioLoader.loadScenario(cell.scenarioId);
     evidenceCategory = scenarioDefinition.category;

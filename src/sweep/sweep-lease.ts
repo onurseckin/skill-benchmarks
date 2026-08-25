@@ -6,6 +6,7 @@ import { link, lstat, open, rename } from "node:fs/promises";
 import { hostname } from "node:os";
 import { join } from "node:path";
 import { openSweepLeaseNamespace, type SweepLeaseNamespace } from "./sweep-lease-namespace.js";
+import { bindSweepPlan } from "./sweep-plan.js";
 
 export const sweepLeaseFileName = ".owner.lock";
 export const sweepLeaseConflictMessage = "Sweep identity is already running in this output root";
@@ -51,7 +52,7 @@ export interface SweepLeaseProbeHooks {
 }
 
 export interface SweepLease {
-  readonly planPath: string;
+  bindPlan(sweepId: string, fingerprint: string, autoResume: boolean): Promise<void>;
   release(): Promise<void>;
 }
 
@@ -105,7 +106,12 @@ function createLease(
   let recoveryRetirement: RetirementState | undefined;
   let releaseHookCalled = false;
   return {
-    planPath: join(namespaceDirectory, "plan.json"),
+    async bindPlan(sweepId: string, fingerprint: string, autoResume: boolean): Promise<void> {
+      if (released) throw conflict();
+      await assertPublishedPath(lockPath, ownedFile, namespaceDirectory);
+      await bindSweepPlan(leaseNamespace, sweepLeaseFileName, sweepId, fingerprint, autoResume);
+      await assertPublishedPath(lockPath, ownedFile, namespaceDirectory);
+    },
     async release(): Promise<void> {
       if (released) return;
       if (releaseRecovery === undefined) {

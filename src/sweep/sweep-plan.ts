@@ -1,7 +1,10 @@
-import { createHash } from "node:crypto";
-import { readdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { createHash, randomUUID } from "node:crypto";
+import { constants } from "node:fs";
+import type { FileHandle } from "node:fs/promises";
+import { link, open, readdir, unlink } from "node:fs/promises";
+import { join, resolve } from "node:path";
 import type { MatrixCellDescriptor, MatrixSweepConfig, ModelMatrixEntry } from "./types.js";
+import type { SweepLeaseNamespace } from "./sweep-lease-namespace.js";
 
 export const incompatibleSweepPlanMessage = "Sweep plan is incompatible with the existing sweep identity";
 export const occupiedSweepNamespaceMessage = "Sweep identity already owns an existing benchmark namespace";
@@ -19,6 +22,21 @@ interface SweepPlanBinding {
   readonly sweepId: string;
   readonly fingerprint: string;
 }
+
+interface PlanFileIdentity {
+  readonly device: number;
+  readonly inode: number;
+  readonly linkCount: number;
+}
+
+interface InspectedPlanBinding {
+  readonly binding: SweepPlanBinding;
+  readonly identity: PlanFileIdentity;
+}
+
+const planFileName = "plan.json";
+const planCandidatePrefix = ".plan.stage.";
+const maximumPlanBytes = 4096;
 
 export function createSweepPlanFingerprint(input: SweepPlanFingerprintInput): string {
   const fingerprintInput = {
@@ -87,26 +105,30 @@ export function createModelEntryPlanIdentity(model: ModelMatrixEntry): Readonly<
 }
 
 export async function bindSweepPlan(
-  planPath: string,
+  leaseNamespace: SweepLeaseNamespace,
   lockFileName: string,
   sweepId: string,
   fingerprint: string,
   autoResume: boolean
 ): Promise<void> {
+  const planPath = join(leaseNamespace.path, planFileName);
+  await leaseNamespace.sync();
   const existingBinding = await readBinding(planPath);
   if (existingBinding !== undefined) {
-    if (existingBinding.sweepId !== sweepId || existingBinding.fingerprint !== fingerprint) {
+    if (existingBinding.binding.sweepId !== sweepId || existingBinding.binding.fingerprint !== fingerprint) {
       throw new TypeError(incompatibleSweepPlanMessage);
     }
     if (!autoResume) throw new TypeError(occupiedSweepNamespaceMessage);
+    await leaseNamespace.sync();
+    await requirePlanIdentity(planPath, existingBinding.identity, 1);
     return;
   }
-  const namespaceEntries = await readdir(dirname(planPath));
+  const namespaceEntries = await readdir(leaseNamespace.path);
   if (namespaceEntries.some((entry) => !isLeaseNamespaceEntry(entry, lockFileName))) {
     throw new TypeError(occupiedSweepNamespaceMessage);
   }
   const binding: SweepPlanBinding = { version: "2", sweepId, fingerprint };
-  await writeFile(planPath, JSON.stringify(binding, null, 2), { encoding: "utf8", flag: "wx" });
+  await publishBinding(leaseNamespace, planPath, binding);
 }
 
 function isLeaseNamespaceEntry(entry: string, lockFileName: string): boolean {
@@ -197,21 +219,136 @@ function canonicalNumber(value: number): readonly unknown[] {
   return ["number", "finite", value];
 }
 
-async function readBinding(planPath: string): Promise<SweepPlanBinding | undefined> {
+async function publishBinding(
+  leaseNamespace: SweepLeaseNamespace,
+  planPath: string,
+  binding: SweepPlanBinding
+): Promise<void> {
+  const candidatePath = join(leaseNamespace.path, `${planCandidatePrefix}${randomUUID()}`);
+  let handle: FileHandle | undefined;
+  let candidateIdentity: PlanFileIdentity | undefined;
+  let published = false;
   try {
-    const raw = await readFile(planPath, "utf8");
+    handle = await open(candidatePath, "wx", 0o600);
+    candidateIdentity = await inspectCandidateHandle(handle, 1);
+    await handle.writeFile(JSON.stringify(binding, null, 2), "utf8");
+    await handle.sync();
+    candidateIdentity = await inspectCandidateHandle(handle, 1);
+    await handle.close();
+    handle = undefined;
+    await leaseNamespace.sync();
+    await requirePlanIdentity(candidatePath, candidateIdentity, 1);
+    try {
+      await link(candidatePath, planPath);
+      published = true;
+    } catch (error) {
+      if (isExistingPathError(error)) throw new TypeError(occupiedSweepNamespaceMessage);
+      throw error;
+    }
+    await leaseNamespace.sync();
+    await requirePlanIdentity(planPath, candidateIdentity, 2);
+  } catch (error) {
+    if (handle !== undefined) await handle.close().catch(() => {});
+    throw error;
+  } finally {
+    if (candidateIdentity !== undefined) {
+      await removeOwnedCandidate(candidatePath, candidateIdentity, published ? 2 : 1, leaseNamespace);
+    }
+  }
+  await leaseNamespace.sync();
+  await requirePlanIdentity(planPath, candidateIdentity, 1);
+}
+
+async function readBinding(planPath: string): Promise<InspectedPlanBinding | undefined> {
+  let handle: FileHandle | undefined;
+  try {
+    handle = await open(planPath, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+    const initial = await inspectPlanHandle(handle, 1);
+    const raw = await handle.readFile("utf8");
+    const confirmed = await inspectPlanHandle(handle, 1);
+    if (!samePlanIdentity(initial, confirmed)) throw new TypeError(incompatibleSweepPlanMessage);
     const value = JSON.parse(raw) as Partial<SweepPlanBinding>;
     if (value.version !== "2" || typeof value.sweepId !== "string" || typeof value.fingerprint !== "string") {
       throw new TypeError(incompatibleSweepPlanMessage);
     }
-    return value as SweepPlanBinding;
+    return { binding: value as SweepPlanBinding, identity: confirmed };
   } catch (error) {
     if (isMissingPathError(error)) return undefined;
-    if (error instanceof TypeError && error.message === incompatibleSweepPlanMessage) throw error;
+    throw new TypeError(incompatibleSweepPlanMessage);
+  } finally {
+    if (handle !== undefined) await handle.close().catch(() => {});
+  }
+}
+
+async function requirePlanIdentity(path: string, expected: PlanFileIdentity, linkCount: number): Promise<void> {
+  let handle: FileHandle | undefined;
+  try {
+    handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+    const identity = await inspectPlanHandle(handle, linkCount);
+    if (!samePlanIdentity(identity, expected)) throw new TypeError(incompatibleSweepPlanMessage);
+  } catch {
+    throw new TypeError(incompatibleSweepPlanMessage);
+  } finally {
+    if (handle !== undefined) await handle.close().catch(() => {});
+  }
+}
+
+async function removeOwnedCandidate(
+  candidatePath: string,
+  expected: PlanFileIdentity,
+  linkCount: number,
+  leaseNamespace: SweepLeaseNamespace
+): Promise<void> {
+  await requireCandidateIdentity(candidatePath, expected, linkCount);
+  await unlink(candidatePath);
+  await leaseNamespace.sync();
+}
+
+async function requireCandidateIdentity(path: string, expected: PlanFileIdentity, linkCount: number): Promise<void> {
+  let handle: FileHandle | undefined;
+  try {
+    handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+    const identity = await inspectCandidateHandle(handle, linkCount);
+    if (!samePlanIdentity(identity, expected)) throw new TypeError(incompatibleSweepPlanMessage);
+  } catch {
+    throw new TypeError(incompatibleSweepPlanMessage);
+  } finally {
+    if (handle !== undefined) await handle.close().catch(() => {});
+  }
+}
+
+async function inspectPlanHandle(handle: FileHandle, linkCount: number): Promise<PlanFileIdentity> {
+  const value = await handle.stat();
+  const processUserId = process.getuid?.();
+  if (!value.isFile() || value.size <= 0 || value.size > maximumPlanBytes || value.nlink !== linkCount
+    || !hasSafeOwnerMode(value.mode) || (processUserId !== undefined && value.uid !== processUserId)) {
     throw new TypeError(incompatibleSweepPlanMessage);
   }
+  return { device: value.dev, inode: value.ino, linkCount: value.nlink };
+}
+
+async function inspectCandidateHandle(handle: FileHandle, linkCount: number): Promise<PlanFileIdentity> {
+  const value = await handle.stat();
+  const processUserId = process.getuid?.();
+  if (!value.isFile() || value.size > maximumPlanBytes || value.nlink !== linkCount
+    || !hasSafeOwnerMode(value.mode) || (processUserId !== undefined && value.uid !== processUserId)) {
+    throw new TypeError(incompatibleSweepPlanMessage);
+  }
+  return { device: value.dev, inode: value.ino, linkCount: value.nlink };
+}
+
+function hasSafeOwnerMode(mode: number): boolean {
+  return (mode & 0o077) === 0 && (mode & 0o400) !== 0;
+}
+
+function samePlanIdentity(left: PlanFileIdentity, right: PlanFileIdentity): boolean {
+  return left.device === right.device && left.inode === right.inode;
 }
 
 function isMissingPathError(error: unknown): boolean {
   return typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT";
+}
+
+function isExistingPathError(error: unknown): boolean {
+  return typeof error === "object" && error !== null && "code" in error && error.code === "EEXIST";
 }

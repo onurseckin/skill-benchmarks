@@ -5,7 +5,9 @@ import type {
   TelemetryEventType,
   ResourceProfileSample,
 } from "./types.js";
-import { BenchmarkArtifactTextStreamSanitizer, BenchmarkArtifactValueStreamSanitizer } from "../../shared/artifact-sanitization.js";
+import { BenchmarkArtifactValueStreamSanitizer } from "../../shared/artifact-sanitization.js";
+import { ArtifactTextStreamSanitizers } from "../../shared/artifact-stream-sanitizers.js";
+import { initializeEventArtifactFiles } from "./event-artifact-files.js";
 
 export const DEFAULT_MAX_OUTPUT_BYTES_PER_COMMAND = 5 * 1024 * 1024;
 export const DEFAULT_BATCH_SIZE = 50;
@@ -71,8 +73,9 @@ export class EventScribe {
 
   private flushTimer: ReturnType<typeof setInterval> | null = null;
   private isClosed: boolean = false;
+  private artifactsInitialized: boolean = false;
   private writeLock: Promise<void> = Promise.resolve();
-  private readonly textSanitizer = new BenchmarkArtifactTextStreamSanitizer();
+  private readonly textSanitizers = new ArtifactTextStreamSanitizers();
   private readonly valueSanitizer = new BenchmarkArtifactValueStreamSanitizer();
 
   constructor(options: EventScribeOptions) {
@@ -118,6 +121,7 @@ export class EventScribe {
     commandId: string,
     payload: Readonly<Record<string, unknown>> = {}
   ): TelemetryEvent {
+    this.textSanitizers.clear(commandId);
     this.commandByteCounts.set(commandId, 0);
     this.commandTruncated.delete(commandId);
 
@@ -179,7 +183,7 @@ export class EventScribe {
       this.commandTruncated.add(commandId);
     }
 
-    const textToWrite = this.textSanitizer.sanitize(bufferToWrite.toString("utf-8"));
+    const textToWrite = this.textSanitizers.get(commandId, "stdout").sanitize(bufferToWrite.toString("utf-8"));
     const newTotal = currentCount + bytesToWrite;
     this.commandByteCounts.set(commandId, newTotal);
 
@@ -255,7 +259,7 @@ export class EventScribe {
       this.commandTruncated.add(commandId);
     }
 
-    const textToWrite = this.textSanitizer.sanitize(bufferToWrite.toString("utf-8"));
+    const textToWrite = this.textSanitizers.get(commandId, "stderr").sanitize(bufferToWrite.toString("utf-8"));
     const newTotal = currentCount + bytesToWrite;
     this.commandByteCounts.set(commandId, newTotal);
 
@@ -288,7 +292,7 @@ export class EventScribe {
     const totalBytes = this.commandByteCounts.get(commandId) ?? 0;
     const wasTruncated = this.commandTruncated.has(commandId);
 
-    return this.emit("TOOL_CALL_COMPLETED", {
+    const event = this.emit("TOOL_CALL_COMPLETED", {
       commandId,
       exitCode,
       durationMs,
@@ -296,6 +300,8 @@ export class EventScribe {
       totalBytes,
       ...payload,
     });
+    this.textSanitizers.clear(commandId);
+    return event;
   }
 
   public recordResourceSample(
@@ -324,7 +330,7 @@ export class EventScribe {
 
   public async flush(): Promise<void> {
     this.writeLock = this.writeLock.then(async () => {
-      if (this.eventBuffer.length === 0 && this.rawLogBuffer.length === 0) {
+      if (this.artifactsInitialized && this.eventBuffer.length === 0 && this.rawLogBuffer.length === 0) {
         return;
       }
 
@@ -333,6 +339,10 @@ export class EventScribe {
 
       try {
         await fs.promises.mkdir(this.outputDir, { recursive: true });
+        if (!this.artifactsInitialized) {
+          await initializeEventArtifactFiles(this.eventsFilePath, this.rawLogFilePath);
+          this.artifactsInitialized = true;
+        }
 
         if (eventsToWrite.length > 0) {
           await fs.promises.appendFile(
@@ -371,6 +381,7 @@ export class EventScribe {
     }
 
     await this.flush();
+    this.textSanitizers.clearAll();
   }
 
   private appendRecentLines(target: string[], text: string): void {

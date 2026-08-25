@@ -1,6 +1,6 @@
-import { mkdir } from "node:fs/promises";
-import { join, resolve } from "node:path";
-import type { RunArtifactLayout } from "./types.js";
+import { lstat, mkdir } from "node:fs/promises";
+import { join, relative, resolve } from "node:path";
+import type { RunArtifactDirectoryIdentity, RunArtifactLayout } from "./types.js";
 
 const outputRootDirectories = ["db", "runs", "sweeps", "exports"] as const;
 
@@ -37,9 +37,55 @@ export function createRunArtifactLayout(
 export async function prepareRunArtifactLayout(
   layout: RunArtifactLayout
 ): Promise<RunArtifactLayout> {
-  await Promise.all([
-    ...outputRootDirectories.map((directory) => mkdir(join(layout.outputRoot, directory), { recursive: true })),
-    mkdir(layout.runDirectory, { recursive: true }),
-  ]);
-  return layout;
+  await ensureArtifactDirectory(layout.outputRoot, true);
+  await assertNoSymlinkComponents(layout.outputRoot, layout.runDirectory);
+  for (const directory of outputRootDirectories) {
+    await ensureArtifactDirectory(join(layout.outputRoot, directory));
+  }
+  await ensureArtifactDirectory(layout.runDirectory);
+  await assertNoSymlinkComponents(layout.outputRoot, layout.runDirectory);
+  const runsDirectory = join(layout.outputRoot, "runs");
+  return {
+    ...layout,
+    authority: {
+      outputRoot: await inspectArtifactDirectory(layout.outputRoot),
+      runsDirectory: await inspectArtifactDirectory(runsDirectory),
+      runDirectory: await inspectArtifactDirectory(layout.runDirectory),
+    },
+  };
+}
+
+async function ensureArtifactDirectory(path: string, recursive: boolean = true): Promise<void> {
+  await mkdir(path, { recursive });
+  const stats = await lstat(path);
+  if (!stats.isDirectory() || stats.isSymbolicLink()) throw new TypeError("Benchmark artifact directory is unsafe");
+}
+
+async function inspectArtifactDirectory(path: string): Promise<RunArtifactDirectoryIdentity> {
+  const stats = await lstat(path);
+  if (!stats.isDirectory() || stats.isSymbolicLink()) throw new TypeError("Benchmark artifact directory is unsafe");
+  return { device: stats.dev, inode: stats.ino };
+}
+
+async function assertNoSymlinkComponents(rootPath: string, targetPath: string): Promise<void> {
+  const resolvedRoot = resolve(rootPath);
+  const relativeTarget = relative(resolvedRoot, resolve(targetPath));
+  if (relativeTarget === ".." || relativeTarget.startsWith("../")) throw new TypeError("Benchmark artifact path is unsafe");
+  const segments = relativeTarget.split(/[\\/]+/).filter(Boolean);
+  let currentPath = resolvedRoot;
+  const rootStats = await lstat(currentPath);
+  if (!rootStats.isDirectory() || rootStats.isSymbolicLink()) throw new TypeError("Benchmark artifact path is unsafe");
+  for (const segment of segments) {
+    currentPath = join(currentPath, segment);
+    try {
+      if ((await lstat(currentPath)).isSymbolicLink()) throw new TypeError("Benchmark artifact path is unsafe");
+    } catch (error) {
+      if (isMissingPathError(error)) return;
+      throw error;
+    }
+  }
+}
+
+function isMissingPathError(error: unknown): boolean {
+  return typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT";
 }

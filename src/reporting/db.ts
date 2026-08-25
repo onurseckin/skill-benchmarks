@@ -11,8 +11,9 @@ import type {
   TelemetryEventRecord,
 } from "./types.js";
 import type { ExecutionMode } from "../shared/execution-mode.js";
-import { BenchmarkArtifactValueStreamSanitizer, sanitizeBenchmarkArtifactValue } from "../shared/artifact-sanitization.js";
+import { sanitizeBenchmarkArtifactValue } from "../shared/artifact-sanitization.js";
 import { claimTerminalRunIdentity, TerminalRunIdentityConflictError } from "./run-identity.js";
+import { TelemetryArtifactSanitizer } from "./telemetry-artifact-sanitizer.js";
 export { TerminalRunIdentityConflictError } from "./run-identity.js";
 interface RunRow {
   readonly sweep_id: string | null;
@@ -49,7 +50,6 @@ interface RunRow {
   readonly evaluation_json: string | null;
   readonly commit_sha: string | null;
 }
-
 interface EloRow {
   readonly skill_id: string;
   readonly rating: number;
@@ -59,7 +59,6 @@ interface EloRow {
   readonly ties: number;
   readonly last_updated: string;
 }
-
 interface TrendRow {
   readonly timestamp: string;
   readonly commit_sha: string | null;
@@ -129,7 +128,7 @@ function computeConfidenceInterval(wins: number, ties: number, matches: number):
 
 export class TelemetryDatabase {
   private readonly db: Database;
-  private readonly telemetrySanitizer = new BenchmarkArtifactValueStreamSanitizer();
+  private readonly telemetrySanitizer = new TelemetryArtifactSanitizer();
 
   public constructor(dbPath: string = ":memory:", options?: { readonly readonly?: boolean }) {
     this.db = options?.readonly === true ? new Database(dbPath, { readonly: true }) : new Database(dbPath);

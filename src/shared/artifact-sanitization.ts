@@ -4,6 +4,7 @@ const redactedSensitiveContent = "redacted sensitive content";
 const credentialPattern = /(?:authorization\s*:\s*bearer\s+\S+|bearer\s+[a-zA-Z0-9_.-]{12,}|(?:api[_-]?key|token|secret|password)\s*[=:]\s*\S+|["']?[a-z0-9_-]*(?:key|token)["']?\s*[=:]\s*\S+|sk-[a-zA-Z0-9_-]+)/i;
 const completeBasicAuthorizationPattern = /authorization\s*:\s*basic\s+\S+/gi;
 const completeBasicAuthorizationAtEndPattern = /authorization\s*:\s*basic\s+\S+$/i;
+const standaloneBasicTokenPattern = /(^|[\r\n])([ \t]*basic[ \t]+)(\S+)/gi;
 const incompleteBasicAuthorizationPattern = /authorization\s*:\s*basic\s*$/i;
 const incompleteAuthorizationPattern = /authorization\s*:\s*$/i;
 const errorKeyPattern = /^(?:error|exception|stack|failure)|(?:Error|Exception|Stack|Failure)$/;
@@ -31,6 +32,12 @@ class BasicAuthorizationSequenceNormalizer {
       this.credentialMayContinue = completeBasicAuthorizationAtEndPattern.test(value);
       this.reset();
       return completeRedaction;
+    }
+    const standaloneRedaction = redactStandaloneBasicCredentials(value);
+    if (standaloneRedaction.value !== value) {
+      this.credentialMayContinue = standaloneRedaction.continues;
+      this.reset();
+      return standaloneRedaction.value;
     }
     if (incompleteBasicAuthorizationPattern.test(value)) {
       this.expect("credential");
@@ -205,4 +212,20 @@ function isSensitiveArtifactPropertyKey(key: string): boolean {
 
 function normalizeArtifactKey(key: string): string {
   return key.replace(/[^a-z0-9]+/gi, "").toLowerCase();
+}
+
+function redactStandaloneBasicCredentials(value: string): { readonly value: string; readonly continues: boolean } {
+  let continues = false;
+  const sanitized = value.replace(standaloneBasicTokenPattern, (match, boundary: string, prefix: string, token: string) => {
+    if (!isCredentialShapedBasicToken(token)) return match;
+    const tokenEnd = (match.indexOf(token) + token.length);
+    continues ||= value.endsWith(match) && tokenEnd === match.length;
+    return `${boundary}${prefix}${redactedSensitiveContent}`;
+  });
+  return { value: sanitized, continues };
+}
+
+function isCredentialShapedBasicToken(value: string): boolean {
+  if (value.length < 12 || !/^[a-zA-Z0-9+/_.=-]+$/.test(value)) return false;
+  return /[0-9+/_.=-]/.test(value) || (/[a-z]/.test(value) && /[A-Z]/.test(value));
 }

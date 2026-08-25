@@ -28,7 +28,10 @@ export function writeCheckpointSnapshot(filePath: string, serialized: string, ma
     renameSync(temporaryPath, filePath);
     syncDirectory(parentDirectory);
   } finally {
-    if (existsSync(temporaryPath)) unlinkSync(temporaryPath);
+    if (existsSync(temporaryPath)) {
+      unlinkSync(temporaryPath);
+      syncDirectory(parentDirectory);
+    }
   }
 }
 
@@ -43,6 +46,7 @@ export function validateCheckpointTemporaryFiles(filePath: string): void {
 function inspectCheckpointTemporaryFiles(filePath: string, remove: boolean): void {
   const parentDirectory = dirname(filePath);
   if (!existsSync(parentDirectory)) return;
+  let removed = false;
   const escapedName = escapeRegularExpression(basename(filePath));
   const currentPattern = new RegExp(`^\\.${escapedName}\\.[0-9a-f-]{36}\\.tmp$`);
   const legacyPattern = new RegExp(`^${escapedName}\\.tmp\\.[0-9]+\\.[a-z0-9]{1,16}$`);
@@ -51,8 +55,12 @@ function inspectCheckpointTemporaryFiles(filePath: string, remove: boolean): voi
     const path = join(parentDirectory, entry);
     const stats = lstatSync(path);
     if (!stats.isFile() || stats.isSymbolicLink()) throw new TypeError("Checkpoint temporary artifact is unsafe");
-    if (remove) unlinkSync(path);
+    if (remove) {
+      unlinkSync(path);
+      removed = true;
+    }
   }
+  if (removed) syncDirectory(parentDirectory);
 }
 
 function preserveCheckpointBackup(filePath: string): void {
@@ -68,7 +76,10 @@ function preserveCheckpointBackup(filePath: string): void {
     linkSync(temporaryPath, backupPath);
     syncDirectory(dirname(filePath));
   } finally {
-    if (existsSync(temporaryPath)) unlinkSync(temporaryPath);
+    if (existsSync(temporaryPath)) {
+      unlinkSync(temporaryPath);
+      syncDirectory(dirname(filePath));
+    }
   }
 }
 

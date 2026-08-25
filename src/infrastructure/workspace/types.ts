@@ -77,6 +77,18 @@ export interface RunArtifactLayout {
   readonly diffManifestPath: string;
   readonly resultPath: string;
   readonly terminalFailurePath: string;
+  readonly authority?: RunArtifactDirectoryAuthority;
+}
+
+export interface RunArtifactDirectoryIdentity {
+  readonly device: number;
+  readonly inode: number;
+}
+
+export interface RunArtifactDirectoryAuthority {
+  readonly outputRoot: RunArtifactDirectoryIdentity;
+  readonly runsDirectory: RunArtifactDirectoryIdentity;
+  readonly runDirectory: RunArtifactDirectoryIdentity;
 }
 
 export interface DisposableWorkspace {

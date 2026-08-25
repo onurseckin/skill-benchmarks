@@ -116,6 +116,14 @@ function commitImmutableJson(path: string, value: unknown): void {
       closeSync(directoryDescriptor);
     }
   } finally {
-    if (existsSync(temporaryPath)) unlinkSync(temporaryPath);
+    if (existsSync(temporaryPath)) {
+      unlinkSync(temporaryPath);
+      const directoryDescriptor = openSync(dirname(path), "r");
+      try {
+        fsyncSync(directoryDescriptor);
+      } finally {
+        closeSync(directoryDescriptor);
+      }
+    }
   }
 }

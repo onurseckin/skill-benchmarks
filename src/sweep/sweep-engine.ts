@@ -20,8 +20,8 @@ import { ScenarioLoader } from "../runner/scenario-loader.js";
 import { TelemetryDatabase } from "../reporting/db.js";
 import { createSafeArtifactPathSegment } from "../shared/artifact-sanitization.js";
 import { executeSweepCell } from "./cell-execution.js";
-import { acquireSweepLease, sweepLeaseFileName } from "./sweep-lease.js";
-import { bindSweepPlan, createSweepPlanFingerprint } from "./sweep-plan.js";
+import { acquireSweepLease } from "./sweep-lease.js";
+import { createSweepPlanFingerprint } from "./sweep-plan.js";
 import { validateMatrixSweepConfig } from "./sweep-config-validation.js";
 import { cleanupValidatedTerminalEvidence, validateCheckpointTerminalEvidence, validateSweepOutcomeEvidence } from "./terminal-reconciliation.js";
 import { generateMatrixCells } from "./matrix-cell-planner.js";
@@ -171,13 +171,7 @@ export class MatrixSweepEngine implements IMatrixSweepEngine {
     }
     const sweepLease = await acquireSweepLease(config.runtimeConfig.outputRoot, this.sweepId);
     try {
-    await bindSweepPlan(
-      sweepLease.planPath,
-      sweepLeaseFileName,
-      this.sweepId,
-      planFingerprint,
-      config.checkpoint?.autoResume === true
-    );
+    await sweepLease.bindPlan(this.sweepId, planFingerprint, config.checkpoint?.autoResume === true);
     let telemetryDb: TelemetryDatabase;
     try {
       await mkdir(join(config.runtimeConfig.outputRoot, "db"), { recursive: true });

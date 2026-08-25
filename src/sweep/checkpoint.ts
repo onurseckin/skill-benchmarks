@@ -10,7 +10,7 @@ import type {
   SweepExecutionStatus,
 } from "./types.js";
 import type { TokenUsage } from "../runner/types.js";
-import { BenchmarkArtifactValueStreamSanitizer } from "../shared/artifact-sanitization.js";
+import { sanitizeBenchmarkArtifactStreamValue } from "../shared/artifact-stream-sanitizers.js";
 import { incompatibleSweepPlanMessage } from "./sweep-plan.js";
 import { writeCheckpointSnapshot } from "./checkpoint-storage.js";
 
@@ -22,7 +22,6 @@ export class CheckpointLedger implements ICheckpointLedger {
   private readonly planFingerprint: string;
   private state: CheckpointState;
   private writeLock: Promise<void> = Promise.resolve();
-  private readonly artifactSanitizer = new BenchmarkArtifactValueStreamSanitizer();
 
   constructor(
     filePath: string,
@@ -122,7 +121,7 @@ export class CheckpointLedger implements ICheckpointLedger {
           updatedAt: new Date().toISOString(),
         },
       };
-      const serialized = JSON.stringify(this.artifactSanitizer.sanitize(updatedState), null, 2);
+      const serialized = JSON.stringify(sanitizeBenchmarkArtifactStreamValue(updatedState), null, 2);
       writeCheckpointSnapshot(this.filePath, serialized, this.maxBackups);
       this.state = updatedState;
     } finally {
