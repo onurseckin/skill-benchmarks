@@ -90,9 +90,9 @@ export async function runBenchmarkCommand(args: CliParsedArgs): Promise<CliComma
     repetitions: options.repetitions ?? 1,
     dryRun: options.dryRun,
     defaultExecutionLimits: {
-      maxTurns: options.maxTurns,
-      maxCostUSD: options.maxCostUSD,
-      maxWallClockTimeMs: options.timeoutSeconds ? options.timeoutSeconds * 1000 : undefined,
+      ...(options.maxTurns === undefined ? {} : { maxTurns: options.maxTurns }),
+      ...(options.maxCostUSD === undefined ? {} : { maxCostUSD: options.maxCostUSD }),
+      ...(options.timeoutSeconds === undefined ? {} : { maxWallClockTimeMs: options.timeoutSeconds * 1000 }),
     },
     concurrency: { maxGlobalConcurrency: options.concurrency ?? 2 },
     telemetryDbPath: dbPath,
