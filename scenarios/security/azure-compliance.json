@@ -1,0 +1,86 @@
+{
+  "id": "azure-compliance",
+  "name": "Azure Policy and Cloud Security Compliance Guardrails Engine",
+  "category": "security",
+  "difficulty": "hard",
+  "targetSkill": "azure-compliance",
+  "baselineModel": "claude-3-7-sonnet-20250219",
+  "description": "Cloud security and regulatory compliance benchmark scenario evaluating an agent's ability to build an automated Azure Policy compliance engine (validating CIS Microsoft Azure Foundations Benchmark, NIST SP 800-53, and GDPR controls) against ARM/Bicep infrastructure manifests and resource topologies.",
+  "instructions": "You are tasked with implementing the `AzureComplianceEngine` in `src/compliance/policy-engine.ts` and standard security rules in `src/compliance/rules.ts` to audit Azure cloud infrastructure against CIS Microsoft Azure Foundations Benchmark and NIST SP 800-53 standards.\n\n### Task Objectives:\n1. **Policy Rule Definition (`src/compliance/rules.ts`)**:\n   - Implement standard compliance rules:\n     - `CIS-Azure-1.1`: Ensure minimum TLS version for App Services and Storage Accounts is set to `1.2` or `1.3`.\n     - `CIS-Azure-2.1`: Ensure Azure Key Vault and SQL Databases have `publicNetworkAccess` set to `Disabled` with mandatory Private Endpoints.\n     - `CIS-Azure-3.1`: Audit Network Security Groups (NSGs) to flag any inbound security rules permitting port `22` (SSH) or `3389` (RDP) from source `*`, `0.0.0.0/0`, or `Internet`.\n     - `CIS-Azure-4.1`: Ensure Managed Identity (`SystemAssigned` or `UserAssigned`) is enabled on compute resources instead of static access keys.\n     - `CIS-Azure-5.1`: Ensure Virtual Machine OS and data disks have encryption enabled with Customer-Managed Keys (CMK).\n\n2. **Compliance Engine Evaluation (`AzureComplianceEngine.evaluateResourceGraph`)**:\n   - Ingest an array of Azure resource definitions (`ARM/Bicep` parsed JSON format).\n   - Execute registered compliance policies across resources.\n   - Calculate overall compliance score (percentage of passing rules) and group violations by resource type and severity (`Low`, `Medium`, `High`, `Critical`).\n\n3. **Remediation Plan Synthesis (`generateRemediationPlan`)**:\n   - For every non-compliant finding, generate deterministic ARM / Azure CLI remediation steps (e.g. `az storage account update --min-tls-version TLS1_2`).\n\n4. **Type Safety and Zero Regressions**:\n   - Adhere strictly to TypeScript type safety with explicit type annotations, immutable `readonly` properties, and zero `any` usage.",
+  "workspace": {
+    "fixtures": {
+      "src/compliance/types.ts": "export type ComplianceSeverity = \"Low\" | \"Medium\" | \"High\" | \"Critical\";\n\nexport type ComplianceStandard = \"CIS-Azure-Foundations-v2.0\" | \"NIST-SP-800-53-R5\" | \"GDPR\" | \"PCI-DSS-v4.0\";\n\nexport interface AzureResourceDefinition {\n  readonly id: string;\n  readonly name: string;\n  readonly type: string;\n  readonly location: string;\n  readonly properties: Readonly<Record<string, unknown>>;\n  readonly tags?: Readonly<Record<string, string>>;\n  readonly identity?: {\n    readonly type?: \"None\" | \"SystemAssigned\" | \"UserAssigned\" | \"SystemAssigned, UserAssigned\";\n  };\n}\n\nexport interface ComplianceViolation {\n  readonly ruleId: string;\n  readonly ruleName: string;\n  readonly standard: ComplianceStandard;\n  readonly severity: ComplianceSeverity;\n  readonly resourceId: string;\n  readonly resourceType: string;\n  readonly message: string;\n  readonly remediationGuide: string;\n  readonly remediationCliCommand?: string;\n}\n\nexport interface CompliancePolicyRule {\n  readonly id: string;\n  readonly name: string;\n  readonly standard: ComplianceStandard;\n  readonly severity: ComplianceSeverity;\n  readonly targetResourceTypes: readonly string[];\n  evaluate(resource: AzureResourceDefinition): ComplianceViolation | null;\n}\n\nexport interface ComplianceAuditReport {\n  readonly auditId: string;\n  readonly evaluatedAt: string;\n  readonly totalResourcesAudited: number;\n  readonly compliantResourceCount: number;\n  readonly nonCompliantResourceCount: number;\n  readonly complianceScorePercentage: number;\n  readonly violations: readonly ComplianceViolation[];\n  readonly violationsBySeverity: Readonly<Record<ComplianceSeverity, number>>;\n}\n",
+      "src/compliance/rules.ts": "import type { CompliancePolicyRule, AzureResourceDefinition, ComplianceViolation } from \"./types.js\";\n\nexport class MinTlsVersionRule implements CompliancePolicyRule {\n  readonly id = \"CIS-Azure-1.1\";\n  readonly name = \"Enforce TLS 1.2+ Minimum Version\";\n  readonly standard = \"CIS-Azure-Foundations-v2.0\" as const;\n  readonly severity = \"High\" as const;\n  readonly targetResourceTypes = [\n    \"Microsoft.Web/sites\",\n    \"Microsoft.Storage/storageAccounts\",\n  ] as const;\n\n  evaluate(resource: AzureResourceDefinition): ComplianceViolation | null {\n    throw new Error(\"MinTlsVersionRule.evaluate not implemented\");\n  }\n}\n\nexport class KeyVaultPublicAccessRule implements CompliancePolicyRule {\n  readonly id = \"CIS-Azure-2.1\";\n  readonly name = \"Disable Public Network Access for Key Vault\";\n  readonly standard = \"CIS-Azure-Foundations-v2.0\" as const;\n  readonly severity = \"Critical\" as const;\n  readonly targetResourceTypes = [\"Microsoft.KeyVault/vaults\"] as const;\n\n  evaluate(resource: AzureResourceDefinition): ComplianceViolation | null {\n    throw new Error(\"KeyVaultPublicAccessRule.evaluate not implemented\");\n  }\n}\n\nexport class NsgOpenPortsRule implements CompliancePolicyRule {\n  readonly id = \"CIS-Azure-3.1\";\n  readonly name = \"Restrict Inbound SSH and RDP Access\";\n  readonly standard = \"CIS-Azure-Foundations-v2.0\" as const;\n  readonly severity = \"Critical\" as const;\n  readonly targetResourceTypes = [\"Microsoft.Network/networkSecurityGroups\"] as const;\n\n  evaluate(resource: AzureResourceDefinition): ComplianceViolation | null {\n    throw new Error(\"NsgOpenPortsRule.evaluate not implemented\");\n  }\n}\n",
+      "src/compliance/policy-engine.ts": "import type {\n  AzureResourceDefinition,\n  CompliancePolicyRule,\n  ComplianceAuditReport,\n  ComplianceViolation,\n} from \"./types.js\";\n\nexport class AzureComplianceEngine {\n  private readonly rules: Map<string, CompliancePolicyRule> = new Map();\n\n  public registerRule(rule: CompliancePolicyRule): void {\n    this.rules.set(rule.id, rule);\n  }\n\n  public registerRules(rules: readonly CompliancePolicyRule[]): void {\n    for (const rule of rules) {\n      this.registerRule(rule);\n    }\n  }\n\n  public evaluateResourceGraph(\n    resources: readonly AzureResourceDefinition[],\n    auditId = `audit-${Date.now()}`\n  ): ComplianceAuditReport {\n    throw new Error(\"evaluateResourceGraph not implemented\");\n  }\n\n  public filterViolationsBySeverity(\n    violations: readonly ComplianceViolation[],\n    severity: string\n  ): readonly ComplianceViolation[] {\n    return violations.filter((v) => v.severity === severity);\n  }\n}\n",
+      "package.json": "{\n  \"name\": \"azure-compliance-fixture\",\n  \"version\": \"1.0.0\",\n  \"type\": \"module\",\n  \"scripts\": {\n    \"build\": \"tsc --noEmit\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^22.13.0\",\n    \"typescript\": \"^5.7.3\"\n  }\n}\n",
+      "tsconfig.json": "{\n  \"compilerOptions\": {\n    \"target\": \"ES2022\",\n    \"module\": \"NodeNext\",\n    \"moduleResolution\": \"NodeNext\",\n    \"strict\": true,\n    \"esModuleInterop\": true,\n    \"skipLibCheck\": true,\n    \"forceConsistentCasingInFileNames\": true,\n    \"declaration\": true\n  },\n  \"include\": [\"src/**/*\"]\n}\n"
+    },
+    "initialGitCommit": "Initial commit for azure compliance benchmark fixture"
+  },
+  "limits": {
+    "maxTurns": 15,
+    "maxCostUSD": 1.0,
+    "maxWallClockTimeMs": 300000
+  },
+  "evaluation": {
+    "deterministicChecks": [
+      {
+        "id": "check-policy-engine-exists",
+        "name": "Verify AzureComplianceEngine source exists",
+        "type": "file_exists",
+        "filePath": "src/compliance/policy-engine.ts",
+        "mustExist": true,
+        "weight": 0.2
+      },
+      {
+        "id": "check-compliance-rules-exists",
+        "name": "Verify compliance rules source exists",
+        "type": "file_exists",
+        "filePath": "src/compliance/rules.ts",
+        "mustExist": true,
+        "weight": 0.2
+      },
+      {
+        "id": "check-tls-rule-evaluation",
+        "name": "Verify TLS 1.2+ minimum version evaluation logic",
+        "type": "file_content",
+        "filePath": "src/compliance/rules.ts",
+        "fileContentPattern": "MinTlsVersionRule|minTlsVersion|TLS1_2|TLS1_3",
+        "weight": 0.3
+      },
+      {
+        "id": "check-nsg-rule-evaluation",
+        "name": "Verify NSG open ports restriction rule logic",
+        "type": "file_content",
+        "filePath": "src/compliance/rules.ts",
+        "fileContentPattern": "NsgOpenPortsRule|22|3389|Internet|0.0.0.0",
+        "weight": 0.3
+      }
+    ],
+    "judgeRubrics": [
+      {
+        "name": "Compliance Policy Coverage and Security Rigor",
+        "category": "security",
+        "weight": 0.6,
+        "description": "Evaluates the agent's accuracy in mapping regulatory security benchmarks (CIS Azure, NIST SP 800-53) to concrete infrastructure attribute checks, detecting misconfigurations (unencrypted disks, public Key Vaults, open SSH/RDP ports), and generating actionable remediation CLI instructions.",
+        "criteria": {
+          "1": "Fails to correctly identify basic cloud security misconfigurations or generates broken remediation commands.",
+          "3": "Implements standard property checks but misses edge cases (such as wildcard source addresses in NSG security rules, subnets with service endpoints vs private endpoints, or composite identity schemas).",
+          "5": "Industrial-grade security audit engine: comprehensively audits cloud topology graphs against CIS standards, identifies nuanced policy violations, handles deep property navigation safely, and generates deterministic Azure CLI remediation commands."
+        }
+      },
+      {
+        "name": "TypeScript Engine Architecture",
+        "category": "general",
+        "weight": 0.4,
+        "description": "Evaluates TypeScript type design, extensibility of the rule engine pattern, readonly immutability, and zero-any compliance.",
+        "criteria": {
+          "1": "Brittle rule design with any casts, compilation errors, or lack of structured violation types.",
+          "3": "Functional TypeScript implementation with basic rule interfaces, but lacks immutable audit reporting or extensible rule registry abstractions.",
+          "5": "Production-grade engine design with clean strategy/rule patterns, strictly typed schemas, immutable audit results, and zero any types."
+        }
+      }
+    ],
+    "passThreshold": 80
+  }
+}

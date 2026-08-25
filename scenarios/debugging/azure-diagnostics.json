@@ -1,0 +1,86 @@
+{
+  "id": "azure-diagnostics",
+  "name": "Azure Cloud Telemetry and Diagnostics Anomaly Triage",
+  "category": "debugging",
+  "difficulty": "hard",
+  "targetSkill": "azure-diagnostics",
+  "baselineModel": "claude-3-7-sonnet-20250219",
+  "description": "Cloud diagnostic benchmark scenario evaluating an agent's capability to ingest, correlate, and triage multi-dimensional Azure Monitor metrics, App Insights telemetry traces, dependency failure cascades, and HTTP 5xx throttling exceptions across distributed Azure microservices.",
+  "instructions": "You are tasked with implementing the `AzureTelemetryAnalyzer` and `KqlQueryParser` in `src/diagnostics/telemetry-analyzer.ts` and `src/diagnostics/kql-parser.ts` to diagnose distributed microservice outages, latency anomalies, and dependency failures in Azure App Insights and Azure Monitor telemetry.\n\n### Task Objectives:\n1. **Telemetry Ingestion & Filtering (`AzureTelemetryAnalyzer.analyzeTelemetry`)**:\n   - Ingest raw Azure Monitor metric points and App Insights trace events.\n   - Filter traces by time window, severity level (`Information`, `Warning`, `Error`, `Critical`), and component role.\n   - Detect HTTP 5xx error spikes, 429 throttling anomalies, and database dependency latency breaches against statistical thresholds (Z-score > 2.5 or latency > 99th percentile baseline).\n\n2. **Distributed Trace Correlation (`correlateTraces`)**:\n   - Correlate child spans to root operation traces using standard W3C `traceparent` (`00-<trace-id>-<span-id>-<trace-flags>`) and Azure `operation_Id` / `operation_ParentId` semantics.\n   - Construct a directed invocation graph and pinpoint the exact failing root dependency span responsible for cascade failure propagation.\n\n3. **Kusto Query Language (KQL) Parsing (`KqlQueryParser.parseQuery`)**:\n   - Parse KQL query strings targeting tables such as `requests`, `dependencies`, `exceptions`, `traces`, and `customMetrics`.\n   - Support pipe operators: `where`, `summarize`, `project`, `extend`, `order by`, and `take`.\n   - Return a structured AST representation of the query for deterministic mock evaluation.\n\n4. **Structured Root-Cause Report Generation (`generateDiagnosticReport`)**:\n   - Synthesize a comprehensive diagnostic report containing: `incidentSummary`, `anomaliesDetected`, `failingDependency`, `impactedEndpoints`, and actionable `remediationRecommendations`.\n\n5. **Type Safety and Zero Regressions**:\n   - Adhere strictly to TypeScript type safety with explicit type annotations, immutable `readonly` properties, and zero `any` usage.",
+  "workspace": {
+    "fixtures": {
+      "src/diagnostics/types.ts": "export type SeverityLevel = \"Verbose\" | \"Information\" | \"Warning\" | \"Error\" | \"Critical\";\n\nexport interface AzureTraceEvent {\n  readonly timestamp: string;\n  readonly operationId: string;\n  readonly operationParentId?: string;\n  readonly spanId: string;\n  readonly cloudRole: string;\n  readonly message: string;\n  readonly severityLevel: SeverityLevel;\n  readonly customDimensions?: Readonly<Record<string, string>>;\n}\n\nexport interface AzureMetricPoint {\n  readonly timestamp: string;\n  readonly metricName: string;\n  readonly value: number;\n  readonly count: number;\n  readonly min: number;\n  readonly max: number;\n  readonly resourceId: string;\n  readonly dimensions?: Readonly<Record<string, string>>;\n}\n\nexport interface AzureDependencySpan {\n  readonly timestamp: string;\n  readonly operationId: string;\n  readonly spanId: string;\n  readonly target: string;\n  readonly type: \"SQL\" | \"HTTP\" | \"AzureQueue\" | \"CosmosDB\" | \"BlobStorage\";\n  readonly durationMs: number;\n  readonly success: boolean;\n  readonly resultCode: string;\n  readonly commandName?: string;\n}\n\nexport interface TelemetryDataset {\n  readonly traces: readonly AzureTraceEvent[];\n  readonly metrics: readonly AzureMetricPoint[];\n  readonly dependencies: readonly AzureDependencySpan[];\n}\n\nexport interface AnomalyFinding {\n  readonly id: string;\n  readonly resource: string;\n  readonly metricOrEventType: string;\n  readonly observedValue: number | string;\n  readonly expectedThreshold: number | string;\n  readonly severity: SeverityLevel;\n  readonly detectedAt: string;\n  readonly description: string;\n}\n\nexport interface TraceGraphNode {\n  readonly spanId: string;\n  readonly operationId: string;\n  readonly cloudRole: string;\n  readonly durationMs?: number;\n  readonly isError: boolean;\n  readonly errorMessage?: string;\n  readonly children: readonly TraceGraphNode[];\n}\n\nexport interface DiagnosticReport {\n  readonly incidentId: string;\n  readonly incidentSummary: string;\n  readonly generatedAt: string;\n  readonly anomaliesDetected: readonly AnomalyFinding[];\n  readonly rootCauseSpan?: AzureDependencySpan | AzureTraceEvent;\n  readonly impactedEndpoints: readonly string[];\n  readonly remediationRecommendations: readonly string[];\n}\n",
+      "src/diagnostics/kql-parser.ts": "export interface KqlWhereClause {\n  readonly operator: \"where\";\n  readonly field: string;\n  readonly comparator: \"==\" | \"!=\" | \">\" | \"<\" | \">=\" | \"<=\" | \"contains\" | \"has\";\n  readonly value: string | number | boolean;\n}\n\nexport interface KqlSummarizeClause {\n  readonly operator: \"summarize\";\n  readonly aggregation: \"count()\" | \"avg\" | \"sum\" | \"dcount\" | \"percentile\";\n  readonly aggregationField?: string;\n  readonly groupByField?: string;\n}\n\nexport interface KqlProjectClause {\n  readonly operator: \"project\";\n  readonly fields: readonly string[];\n}\n\nexport interface KqlTakeClause {\n  readonly operator: \"take\" | \"limit\";\n  readonly count: number;\n}\n\nexport type KqlPipelineStage =\n  | KqlWhereClause\n  | KqlSummarizeClause\n  | KqlProjectClause\n  | KqlTakeClause;\n\nexport interface KqlQueryAst {\n  readonly sourceTable: string;\n  readonly stages: readonly KqlPipelineStage[];\n}\n\nexport class KqlQueryParser {\n  public parseQuery(kql: string): KqlQueryAst {\n    throw new Error(\"KqlQueryParser.parseQuery not implemented\");\n  }\n}\n",
+      "src/diagnostics/telemetry-analyzer.ts": "import type {\n  TelemetryDataset,\n  DiagnosticReport,\n  AnomalyFinding,\n  TraceGraphNode,\n  AzureDependencySpan,\n} from \"./types.js\";\nimport { KqlQueryParser } from \"./kql-parser.js\";\n\nexport interface AnalyzerOptions {\n  readonly zScoreThreshold?: number;\n  readonly maxLatencyMsThreshold?: number;\n  readonly http5xxErrorRateThreshold?: number;\n}\n\nexport class AzureTelemetryAnalyzer {\n  private readonly kqlParser: KqlQueryParser;\n  private readonly zScoreThreshold: number;\n  private readonly maxLatencyMsThreshold: number;\n  private readonly http5xxErrorRateThreshold: number;\n\n  constructor(options: AnalyzerOptions = {}) {\n    this.kqlParser = new KqlQueryParser();\n    this.zScoreThreshold = options.zScoreThreshold ?? 2.5;\n    this.maxLatencyMsThreshold = options.maxLatencyMsThreshold ?? 2000;\n    this.http5xxErrorRateThreshold = options.http5xxErrorRateThreshold ?? 0.05;\n  }\n\n  public detectMetricAnomalies(dataset: TelemetryDataset): readonly AnomalyFinding[] {\n    throw new Error(\"detectMetricAnomalies not implemented\");\n  }\n\n  public correlateTraces(dataset: TelemetryDataset, rootOperationId: string): TraceGraphNode {\n    throw new Error(\"correlateTraces not implemented\");\n  }\n\n  public identifyRootCauseDependency(dataset: TelemetryDataset): AzureDependencySpan | undefined {\n    throw new Error(\"identifyRootCauseDependency not implemented\");\n  }\n\n  public generateDiagnosticReport(dataset: TelemetryDataset, incidentId: string): DiagnosticReport {\n    throw new Error(\"generateDiagnosticReport not implemented\");\n  }\n}\n",
+      "package.json": "{\n  \"name\": \"azure-diagnostics-fixture\",\n  \"version\": \"1.0.0\",\n  \"type\": \"module\",\n  \"scripts\": {\n    \"build\": \"tsc --noEmit\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^22.13.0\",\n    \"typescript\": \"^5.7.3\"\n  }\n}\n",
+      "tsconfig.json": "{\n  \"compilerOptions\": {\n    \"target\": \"ES2022\",\n    \"module\": \"NodeNext\",\n    \"moduleResolution\": \"NodeNext\",\n    \"strict\": true,\n    \"esModuleInterop\": true,\n    \"skipLibCheck\": true,\n    \"forceConsistentCasingInFileNames\": true,\n    \"declaration\": true\n  },\n  \"include\": [\"src/**/*\"]\n}\n"
+    },
+    "initialGitCommit": "Initial commit for azure diagnostics benchmark fixture"
+  },
+  "limits": {
+    "maxTurns": 15,
+    "maxCostUSD": 1.0,
+    "maxWallClockTimeMs": 300000
+  },
+  "evaluation": {
+    "deterministicChecks": [
+      {
+        "id": "check-azure-analyzer-exists",
+        "name": "Verify AzureTelemetryAnalyzer source exists",
+        "type": "file_exists",
+        "filePath": "src/diagnostics/telemetry-analyzer.ts",
+        "mustExist": true,
+        "weight": 0.2
+      },
+      {
+        "id": "check-kql-parser-exists",
+        "name": "Verify KqlQueryParser source exists",
+        "type": "file_exists",
+        "filePath": "src/diagnostics/kql-parser.ts",
+        "mustExist": true,
+        "weight": 0.2
+      },
+      {
+        "id": "check-anomaly-detection-logic",
+        "name": "Verify metric anomaly detection logic in AzureTelemetryAnalyzer",
+        "type": "file_content",
+        "filePath": "src/diagnostics/telemetry-analyzer.ts",
+        "fileContentPattern": "detectMetricAnomalies|zScore|threshold|latency",
+        "weight": 0.3
+      },
+      {
+        "id": "check-trace-correlation-logic",
+        "name": "Verify trace correlation graph construction",
+        "type": "file_content",
+        "filePath": "src/diagnostics/telemetry-analyzer.ts",
+        "fileContentPattern": "correlateTraces|operationId|operationParentId|spanId",
+        "weight": 0.3
+      }
+    ],
+    "judgeRubrics": [
+      {
+        "name": "Telemetry Diagnosis and Correlation Depth",
+        "category": "debugging",
+        "weight": 0.6,
+        "description": "Evaluates the agent's ability to accurately parse KQL queries, detect metric anomalies with statistical rigor (Z-score and threshold breaches), correlate distributed W3C trace graphs, and isolate the exact root cause dependency span.",
+        "criteria": {
+          "1": "Fails to correlate distributed traces or parse KQL. Produces inaccurate anomaly alerts or misses failing dependencies.",
+          "3": "Implements basic trace tree traversal and threshold checking, but lacks statistical Z-score anomaly calculations or handles KQL multi-stage pipelines incompletely.",
+          "5": "Industrial-grade telemetry triage engine: parses complex KQL query pipelines, builds accurate multi-level trace correlation DAGs, calculates robust anomaly scores, and synthesizes clear, actionable incident diagnostic reports."
+        }
+      },
+      {
+        "name": "TypeScript Architecture and Cleanliness",
+        "category": "general",
+        "weight": 0.4,
+        "description": "Evaluates TypeScript type safety, readonly immutability, modularity, adherence to strict zero-any guidelines, and compilation correctness.",
+        "criteria": {
+          "1": "Broken TypeScript compilation, loose any casts, or unhandled null/undefined exceptions during graph traversal.",
+          "3": "Functional TypeScript code with standard types, but lacks deep immutability or robust error boundary handling for corrupted telemetry payloads.",
+          "5": "Exemplary TypeScript implementation with strict readonly interfaces, defensive parsing, exhaustive pattern matching, zero any types, and clean modular structure."
+        }
+      }
+    ],
+    "passThreshold": 80
+  }
+}

@@ -1,0 +1,86 @@
+{
+  "id": "playwright-cli",
+  "name": "Playwright Headless Browser Automation, Trace Analysis, and Resilient Test Suite",
+  "category": "frontend",
+  "difficulty": "hard",
+  "targetSkill": "playwright-cli",
+  "baselineModel": "claude-3-7-sonnet-20250219",
+  "description": "End-to-end frontend testing benchmark scenario evaluating an agent's ability to construct a resilient Playwright test automation runner, handle dynamic hydration race conditions, analyze trace archives and network waterfall artifacts, configure headless browser contexts, and eliminate flaky test assertions.",
+  "instructions": "You are tasked with implementing the `PlaywrightAutomationRunner` in `src/testing/playwright-runner.ts` and the `PlaywrightTraceAnalyzer` in `src/testing/trace-analyzer.ts` to execute resilient headless browser automation, intercept network traffic, and diagnose flaky test failures through Playwright trace archives.\n\n### Task Objectives:\n1. **Resilient Browser Automation (`PlaywrightAutomationRunner`)**:\n   - Implement structured page interactions (`navigate`, `fill`, `click`, `waitForSelector`, `takeScreenshot`, `interceptRoute`).\n   - Implement auto-waiting locator mechanisms: avoid hardcoded `setTimeout` / `waitForTimeout` calls. Rely on element state assertions (`visible`, `attached`, `stable`).\n   - Support network mocking and route interception with pattern matching (e.g. mocking `/api/checkout` or `/api/auth` endpoints).\n\n2. **Trace Archive and Network Waterfall Analysis (`PlaywrightTraceAnalyzer.analyzeTrace`)**:\n   - Ingest and parse simulated Playwright trace events (actions, console logs, network requests, DOM snapshots).\n   - Detect flaky test root causes such as locator race conditions (click dispatched before hydration completes), unhandled API 500 errors in background requests, and long-running animation frame blocks.\n   - Calculate timing metrics: Time-To-First-Action, network waterfall duration, and DOM mutation latency.\n\n3. **E2E Test Suite Execution (`E2ETestSuite.runSuite`)**:\n   - Implement a test runner that executes test cases with retry policies, screenshot capture on failure, video/trace recording toggles, and structured JUnit/JSON report formatting.\n\n4. **Type Safety and Zero Regressions**:\n   - Adhere strictly to TypeScript type safety with explicit type annotations, immutable `readonly` properties, and zero `any` usage.",
+  "workspace": {
+    "fixtures": {
+      "src/testing/types.ts": "export type BrowserType = \"chromium\" | \"firefox\" | \"webkit\";\n\nexport interface BrowserLaunchOptions {\n  readonly headless?: boolean;\n  readonly slowMo?: number;\n  readonly viewport?: { readonly width: number; readonly height: number };\n  readonly recordTrace?: boolean;\n  readonly traceOutputDir?: string;\n}\n\nexport interface RouteInterceptRule {\n  readonly urlPattern: string | RegExp;\n  readonly status: number;\n  readonly contentType?: string;\n  readonly responseBody: string | Record<string, unknown>;\n  readonly delayMs?: number;\n}\n\nexport interface ElementStateCondition {\n  readonly state: \"attached\" | \"detached\" | \"visible\" | \"hidden\" | \"stable\";\n  readonly timeoutMs?: number;\n}\n\nexport interface TraceActionEvent {\n  readonly actionId: string;\n  readonly type: \"navigate\" | \"click\" | \"fill\" | \"hover\" | \"press\" | \"wait\";\n  readonly selector?: string;\n  readonly startTimeMs: number;\n  readonly durationMs: number;\n  readonly error?: string;\n  readonly domSnapshotBefore?: string;\n  readonly domSnapshotAfter?: string;\n}\n\nexport interface TraceNetworkRequest {\n  readonly requestId: string;\n  readonly url: string;\n  readonly method: \"GET\" | \"POST\" | \"PUT\" | \"DELETE\" | \"PATCH\";\n  readonly status: number;\n  readonly durationMs: number;\n  readonly failureReason?: string;\n}\n\nexport interface PlaywrightTraceArchive {\n  readonly traceId: string;\n  readonly browser: BrowserType;\n  readonly totalDurationMs: number;\n  readonly actions: readonly TraceActionEvent[];\n  readonly networkRequests: readonly TraceNetworkRequest[];\n  readonly consoleMessages: readonly { readonly level: \"info\" | \"warn\" | \"error\"; readonly text: string }[];\n}\n\nexport interface FlakinessDiagnosticReport {\n  readonly traceId: string;\n  readonly passed: boolean;\n  readonly flakinessIdentified: boolean;\n  readonly rootCauseCategory?: \"hydration_race\" | \"network_timeout\" | \"unhandled_exception\" | \"strict_mode_violation\";\n  readonly failingAction?: TraceActionEvent;\n  readonly problematicRequests: readonly TraceNetworkRequest[];\n  readonly recommendations: readonly string[];\n}\n\nexport interface TestResult {\n  readonly testName: string;\n  readonly durationMs: number;\n  readonly status: \"passed\" | \"failed\" | \"skipped\" | \"flaky\";\n  readonly retries: number;\n  readonly errorMessage?: string;\n  readonly screenshotPath?: string;\n  readonly tracePath?: string;\n}\n",
+      "src/testing/trace-analyzer.ts": "import type { PlaywrightTraceArchive, FlakinessDiagnosticReport, TraceActionEvent } from \"./types.js\";\n\nexport class PlaywrightTraceAnalyzer {\n  public analyzeTrace(archive: PlaywrightTraceArchive): FlakinessDiagnosticReport {\n    throw new Error(\"PlaywrightTraceAnalyzer.analyzeTrace not implemented\");\n  }\n\n  public calculateActionDuration(actions: readonly TraceActionEvent[]): number {\n    return actions.reduce((total, action) => total + action.durationMs, 0);\n  }\n}\n",
+      "src/testing/playwright-runner.ts": "import type {\n  BrowserLaunchOptions,\n  RouteInterceptRule,\n  ElementStateCondition,\n  TestResult,\n} from \"./types.js\";\n\nexport class PlaywrightAutomationRunner {\n  private readonly options: BrowserLaunchOptions;\n  private readonly activeRoutes: RouteInterceptRule[] = [];\n\n  constructor(options: BrowserLaunchOptions = {}) {\n    this.options = options;\n  }\n\n  public registerRoute(rule: RouteInterceptRule): void {\n    this.activeRoutes.push(rule);\n  }\n\n  public clearRoutes(): void {\n    this.activeRoutes.length = 0;\n  }\n\n  public async navigate(url: string): Promise<void> {\n    throw new Error(\"navigate not implemented\");\n  }\n\n  public async click(selector: string, condition?: ElementStateCondition): Promise<void> {\n    throw new Error(\"click not implemented\");\n  }\n\n  public async fill(selector: string, value: string): Promise<void> {\n    throw new Error(\"fill not implemented\");\n  }\n\n  public async waitForSelector(selector: string, condition: ElementStateCondition): Promise<boolean> {\n    throw new Error(\"waitForSelector not implemented\");\n  }\n\n  public async runTestWithRetry(\n    testName: string,\n    testFn: () => Promise<void>,\n    maxRetries = 2\n  ): Promise<TestResult> {\n    throw new Error(\"runTestWithRetry not implemented\");\n  }\n}\n",
+      "package.json": "{\n  \"name\": \"playwright-cli-fixture\",\n  \"version\": \"1.0.0\",\n  \"type\": \"module\",\n  \"scripts\": {\n    \"build\": \"tsc --noEmit\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^22.13.0\",\n    \"typescript\": \"^5.7.3\"\n  }\n}\n",
+      "tsconfig.json": "{\n  \"compilerOptions\": {\n    \"target\": \"ES2022\",\n    \"module\": \"NodeNext\",\n    \"moduleResolution\": \"NodeNext\",\n    \"strict\": true,\n    \"esModuleInterop\": true,\n    \"skipLibCheck\": true,\n    \"forceConsistentCasingInFileNames\": true,\n    \"declaration\": true\n  },\n  \"include\": [\"src/**/*\"]\n}\n"
+    },
+    "initialGitCommit": "Initial commit for playwright cli benchmark fixture"
+  },
+  "limits": {
+    "maxTurns": 15,
+    "maxCostUSD": 1.0,
+    "maxWallClockTimeMs": 300000
+  },
+  "evaluation": {
+    "deterministicChecks": [
+      {
+        "id": "check-playwright-runner-exists",
+        "name": "Verify PlaywrightAutomationRunner exists",
+        "type": "file_exists",
+        "filePath": "src/testing/playwright-runner.ts",
+        "mustExist": true,
+        "weight": 0.25
+      },
+      {
+        "id": "check-trace-analyzer-exists",
+        "name": "Verify PlaywrightTraceAnalyzer exists",
+        "type": "file_exists",
+        "filePath": "src/testing/trace-analyzer.ts",
+        "mustExist": true,
+        "weight": 0.25
+      },
+      {
+        "id": "check-route-mocking-support",
+        "name": "Verify route interception and mocking methods",
+        "type": "file_content",
+        "filePath": "src/testing/playwright-runner.ts",
+        "fileContentPattern": "registerRoute|activeRoutes|interceptRoute",
+        "weight": 0.25
+      },
+      {
+        "id": "check-flakiness-diagnosis-logic",
+        "name": "Verify flakiness root cause categorization in trace analyzer",
+        "type": "file_content",
+        "filePath": "src/testing/trace-analyzer.ts",
+        "fileContentPattern": "analyzeTrace|flakinessIdentified|hydration_race|network_timeout",
+        "weight": 0.25
+      }
+    ],
+    "judgeRubrics": [
+      {
+        "name": "E2E Test Architecture and Flakiness Resistance",
+        "category": "frontend",
+        "weight": 0.6,
+        "description": "Evaluates the agent's proficiency in constructing deterministic Playwright browser automation with resilient element state waiting, trace analysis for diagnosing hydration and network race conditions, and clean route interception.",
+        "criteria": {
+          "1": "Relies on brittle fixed timeouts (e.g. sleep/waitForTimeout), fails to parse trace archives, or misses flakiness causes in asynchronous DOM updates.",
+          "3": "Implements basic element state checks and route interception, but lacks deep trace waterfall inspection or fails to distinguish between hydration races and true network errors.",
+          "5": "Exemplary E2E automation architecture: zero arbitrary timeouts, robust auto-waiting state conditions, deep Playwright trace archive triage with categorized flakiness diagnostics, and resilient test retry lifecycles."
+        }
+      },
+      {
+        "name": "TypeScript Design and Type Safety",
+        "category": "general",
+        "weight": 0.4,
+        "description": "Evaluates TypeScript type annotations, interface clarity, async error handling, and strict zero-any hygiene.",
+        "criteria": {
+          "1": "Messy code with broken compilation, unhandled Promise rejections, or excessive any types.",
+          "3": "Functional TypeScript code with standard types and basic error catching, but lacks readonly immutability or exhaustive pattern matching.",
+          "5": "Production-grade TypeScript: strictly typed, readonly interfaces, robust error boundaries, zero any casts, and clean modular organization."
+        }
+      }
+    ],
+    "passThreshold": 80
+  }
+}

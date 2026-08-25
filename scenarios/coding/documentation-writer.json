@@ -1,0 +1,87 @@
+{
+  "id": "documentation-writer",
+  "name": "Comprehensive Technical Architecture and OpenAPI Specification Generator",
+  "category": "coding",
+  "difficulty": "medium",
+  "targetSkill": "documentation-writer",
+  "baselineModel": "claude-3-7-sonnet-20250219",
+  "description": "Technical documentation and architecture specification benchmark scenario evaluating an agent's capability to analyze TypeScript REST endpoints, parse route definitions and type schemas, and synthesize industrial-grade OpenAPI 3.1 specifications, Mermaid architecture diagrams, and Architecture Decision Records (ADRs).",
+  "instructions": "You are tasked with implementing the `DocumentationGenerator` in `src/docs/doc-generator.ts` and `ApiMetadataExtractor` in `src/docs/api-extractor.ts` to automatically extract API contracts, generate OpenAPI 3.1 specifications, synthesize Mermaid sequence and architecture diagrams, and author structured Architecture Decision Records (ADRs).\n\n### Task Objectives:\n1. **API Metadata Extraction (`ApiMetadataExtractor.extractFromRoutes`)**:\n   - Inspect route schemas and endpoint definitions in `src/sample-api/routes.ts`.\n   - Extract HTTP methods (`GET`, `POST`, `PUT`, `DELETE`), paths, path parameters, request bodies, response schemas (status codes 200, 201, 400, 404, 500), and authentication requirements (`bearerAuth`, `apiKey`).\n\n2. **OpenAPI 3.1 Specification Synthesis (`DocumentationGenerator.generateOpenApiSpec`)**:\n   - Generate a valid OpenAPI 3.1.0 JSON specification matching the extracted metadata.\n   - Structure components schemas, paths, securitySchemes, tags, and descriptive summaries.\n\n3. **Mermaid Diagram Generation (`DocumentationGenerator.generateMermaidDiagram`)**:\n   - Generate Mermaid sequence diagrams (`sequenceDiagram`) or architecture flowcharts (`graph TD`) representing the multi-tier request lifecycle (Client -> API Gateway -> Service -> Database).\n\n4. **Architecture Decision Record (ADR) Synthesis (`DocumentationGenerator.generateAdr`)**:\n   - Author structured markdown ADRs containing: `Title`, `Status` (Proposed / Accepted), `Context`, `Decision`, `Consequences` (Positive & Negative), and `Compliance`.\n\n5. **Type Safety and Zero Regressions**:\n   - Adhere strictly to TypeScript type safety with explicit type annotations, immutable `readonly` properties, and zero `any` usage.",
+  "workspace": {
+    "fixtures": {
+      "src/docs/types.ts": "export type HttpMethod = \"GET\" | \"POST\" | \"PUT\" | \"DELETE\" | \"PATCH\";\n\nexport interface ParameterSchema {\n  readonly name: string;\n  readonly in: \"path\" | \"query\" | \"header\";\n  readonly required: boolean;\n  readonly type: \"string\" | \"number\" | \"integer\" | \"boolean\";\n  readonly description?: string;\n}\n\nexport interface ResponseSchemaDefinition {\n  readonly statusCode: number;\n  readonly description: string;\n  readonly schema?: Record<string, unknown>;\n}\n\nexport interface RouteMetadata {\n  readonly path: string;\n  readonly method: HttpMethod;\n  readonly summary: string;\n  readonly description: string;\n  readonly tags: readonly string[];\n  readonly parameters: readonly ParameterSchema[];\n  readonly requestBodySchema?: Record<string, unknown>;\n  readonly responses: readonly ResponseSchemaDefinition[];\n  readonly security: readonly string[];\n}\n\nexport interface OpenApi31Spec {\n  readonly openapi: \"3.1.0\";\n  readonly info: {\n    readonly title: string;\n    readonly version: string;\n    readonly description?: string;\n  };\n  readonly paths: Record<string, Record<string, unknown>>;\n  readonly components?: {\n    readonly schemas?: Record<string, unknown>;\n    readonly securitySchemes?: Record<string, unknown>;\n  };\n}\n\nexport interface AdrDocument {\n  readonly id: string;\n  readonly title: string;\n  readonly status: \"Draft\" | \"Proposed\" | \"Accepted\" | \"Superseded\" | \"Rejected\";\n  readonly context: string;\n  readonly decision: string;\n  readonly consequences: {\n    readonly positive: readonly string[];\n    readonly negative: readonly string[];\n  };\n  readonly author: string;\n  readonly date: string;\n}\n",
+      "src/sample-api/routes.ts": "import type { RouteMetadata } from \"../docs/types.js\";\n\nexport const SAMPLE_API_ROUTES: readonly RouteMetadata[] = [\n  {\n    path: \"/api/v1/users/{userId}\",\n    method: \"GET\",\n    summary: \"Fetch user profile by ID\",\n    description: \"Retrieves detailed user account information, profile settings, and subscription tier.\",\n    tags: [\"Users\"],\n    parameters: [\n      {\n        name: \"userId\",\n        in: \"path\",\n        required: true,\n        type: \"string\",\n        description: \"Unique UUID of the user account\",\n      },\n    ],\n    responses: [\n      {\n        statusCode: 200,\n        description: \"User profile successfully retrieved\",\n        schema: {\n          type: \"object\",\n          properties: {\n            id: { type: \"string\" },\n            email: { type: \"string\" },\n            role: { type: \"string\" },\n          },\n          required: [\"id\", \"email\"],\n        },\n      },\n      {\n        statusCode: 404,\n        description: \"User not found\",\n      },\n    ],\n    security: [\"bearerAuth\"],\n  },\n  {\n    path: \"/api/v1/orders\",\n    method: \"POST\",\n    summary: \"Create a new order\",\n    description: \"Submits a new order transaction for authorization and payment capture.\",\n    tags: [\"Orders\"],\n    parameters: [],\n    requestBodySchema: {\n      type: \"object\",\n      properties: {\n        items: { type: \"array\" },\n        currency: { type: \"string\" },\n        totalAmount: { type: \"number\" },\n      },\n      required: [\"items\", \"totalAmount\"],\n    },\n    responses: [\n      {\n        statusCode: 201,\n        description: \"Order successfully created\",\n      },\n      {\n        statusCode: 400,\n        description: \"Invalid order payload\",\n      },\n    ],\n    security: [\"bearerAuth\"],\n  },\n];\n",
+      "src/docs/api-extractor.ts": "import type { RouteMetadata } from \"./types.js\";\nimport { SAMPLE_API_ROUTES } from \"../sample-api/routes.js\";\n\nexport class ApiMetadataExtractor {\n  public extractRoutes(): readonly RouteMetadata[] {\n    return SAMPLE_API_ROUTES;\n  }\n\n  public filterByTag(tag: string): readonly RouteMetadata[] {\n    return SAMPLE_API_ROUTES.filter((r) => r.tags.includes(tag));\n  }\n}\n",
+      "src/docs/doc-generator.ts": "import type { RouteMetadata, OpenApi31Spec, AdrDocument } from \"./types.js\";\n\nexport class DocumentationGenerator {\n  public generateOpenApiSpec(\n    title: string,\n    version: string,\n    routes: readonly RouteMetadata[]\n  ): OpenApi31Spec {\n    throw new Error(\"generateOpenApiSpec not implemented\");\n  }\n\n  public generateMermaidDiagram(routes: readonly RouteMetadata[]): string {\n    throw new Error(\"generateMermaidDiagram not implemented\");\n  }\n\n  public generateAdr(adr: AdrDocument): string {\n    throw new Error(\"generateAdr not implemented\");\n  }\n}\n",
+      "package.json": "{\n  \"name\": \"documentation-writer-fixture\",\n  \"version\": \"1.0.0\",\n  \"type\": \"module\",\n  \"scripts\": {\n    \"build\": \"tsc --noEmit\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^22.13.0\",\n    \"typescript\": \"^5.7.3\"\n  }\n}\n",
+      "tsconfig.json": "{\n  \"compilerOptions\": {\n    \"target\": \"ES2022\",\n    \"module\": \"NodeNext\",\n    \"moduleResolution\": \"NodeNext\",\n    \"strict\": true,\n    \"esModuleInterop\": true,\n    \"skipLibCheck\": true,\n    \"forceConsistentCasingInFileNames\": true,\n    \"declaration\": true\n  },\n  \"include\": [\"src/**/*\"]\n}\n"
+    },
+    "initialGitCommit": "Initial commit for documentation writer benchmark fixture"
+  },
+  "limits": {
+    "maxTurns": 15,
+    "maxCostUSD": 1.0,
+    "maxWallClockTimeMs": 300000
+  },
+  "evaluation": {
+    "deterministicChecks": [
+      {
+        "id": "check-doc-generator-exists",
+        "name": "Verify DocumentationGenerator source exists",
+        "type": "file_exists",
+        "filePath": "src/docs/doc-generator.ts",
+        "mustExist": true,
+        "weight": 0.2
+      },
+      {
+        "id": "check-api-extractor-exists",
+        "name": "Verify ApiMetadataExtractor source exists",
+        "type": "file_exists",
+        "filePath": "src/docs/api-extractor.ts",
+        "mustExist": true,
+        "weight": 0.2
+      },
+      {
+        "id": "check-openapi-generation",
+        "name": "Verify OpenAPI 3.1 spec generation logic",
+        "type": "file_content",
+        "filePath": "src/docs/doc-generator.ts",
+        "fileContentPattern": "generateOpenApiSpec|openapi.*3\\.1\\.0|paths|responses",
+        "weight": 0.3
+      },
+      {
+        "id": "check-mermaid-and-adr",
+        "name": "Verify Mermaid diagram and ADR formatting logic",
+        "type": "file_content",
+        "filePath": "src/docs/doc-generator.ts",
+        "fileContentPattern": "generateMermaidDiagram|sequenceDiagram|graph|generateAdr",
+        "weight": 0.3
+      }
+    ],
+    "judgeRubrics": [
+      {
+        "name": "Documentation Completeness and Technical Precision",
+        "category": "coding",
+        "weight": 0.6,
+        "description": "Evaluates the agent's ability to author comprehensive, standards-compliant OpenAPI 3.1 contracts (accurate parameter mappings, request/response bodies, security schemes), expressive Mermaid diagrams, and rigorous Architecture Decision Records (ADRs).",
+        "criteria": {
+          "1": "Generates invalid or incomplete OpenAPI specs, malformed Mermaid syntax, or poorly structured ADR markdown.",
+          "3": "Generates valid basic OpenAPI schema and simple Mermaid diagrams, but omits security schemas, status code error responses, or detailed ADR consequence trade-offs.",
+          "5": "Exemplary technical documentation authoring: produces complete OpenAPI 3.1.0 specs with full type definitions and security bindings, clear multi-tier Mermaid sequence flows, and comprehensive, nuanced ADRs."
+        }
+      },
+      {
+        "name": "Generator Code Quality and Type Safety",
+        "category": "general",
+        "weight": 0.4,
+        "description": "Evaluates TypeScript type annotations, interface modularity, readonly immutability, and zero-any compliance in generator logic.",
+        "criteria": {
+          "1": "Compilation errors, loose any types, or fragile string interpolation prone to generating corrupt JSON/markdown.",
+          "3": "Functional TypeScript code with standard types, but lacks deep schema typing or immutable builders.",
+          "5": "Production-grade TypeScript generator: strictly typed OpenAPI AST representations, defensive formatting, modular diagram builders, and zero any types."
+        }
+      }
+    ],
+    "passThreshold": 80
+  }
+}

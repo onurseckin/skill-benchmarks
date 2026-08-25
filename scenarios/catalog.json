@@ -1,7 +1,7 @@
 {
   "version": "1.1.0",
   "generatedAt": "2026-08-25T02:00:37.682Z",
-  "totalScenarios": 8,
+  "totalScenarios": 13,
   "categories": [
     "coding",
     "frontend",
@@ -84,6 +84,51 @@
       "targetSkill": "performance-optimization",
       "path": "scenarios/optimization/zero-alloc-pipeline.json",
       "description": "High-performance optimization benchmark scenario evaluating an agent's capability to refactor a high-throughput Go streaming pipeline into a zero-allocation architecture using sync.Pool, byte slice recycling, custom arena allocators, and pprof heap profile verification."
+    },
+    {
+      "id": "azure-diagnostics",
+      "name": "Azure Cloud Telemetry and Diagnostics Anomaly Triage",
+      "category": "debugging",
+      "difficulty": "hard",
+      "targetSkill": "azure-diagnostics",
+      "path": "scenarios/debugging/azure-diagnostics.json",
+      "description": "Cloud diagnostic benchmark scenario evaluating an agent's capability to ingest, correlate, and triage multi-dimensional Azure Monitor metrics, App Insights telemetry traces, dependency failure cascades, and HTTP 5xx throttling exceptions across distributed Azure microservices."
+    },
+    {
+      "id": "playwright-cli",
+      "name": "Playwright Headless Browser Automation, Trace Analysis, and Resilient Test Suite",
+      "category": "frontend",
+      "difficulty": "hard",
+      "targetSkill": "playwright-cli",
+      "path": "scenarios/frontend/playwright-cli.json",
+      "description": "End-to-end frontend testing benchmark scenario evaluating an agent's ability to construct a resilient Playwright test automation runner, handle dynamic hydration race conditions, analyze trace archives and network waterfall artifacts, configure headless browser contexts, and eliminate flaky test assertions."
+    },
+    {
+      "id": "azure-compliance",
+      "name": "Azure Policy and Cloud Security Compliance Guardrails Engine",
+      "category": "security",
+      "difficulty": "hard",
+      "targetSkill": "azure-compliance",
+      "path": "scenarios/security/azure-compliance.json",
+      "description": "Cloud security and regulatory compliance benchmark scenario evaluating an agent's ability to build an automated Azure Policy compliance engine (validating CIS Microsoft Azure Foundations Benchmark, NIST SP 800-53, and GDPR controls) against ARM/Bicep infrastructure manifests and resource topologies."
+    },
+    {
+      "id": "documentation-writer",
+      "name": "Comprehensive Technical Architecture and OpenAPI Specification Generator",
+      "category": "coding",
+      "difficulty": "medium",
+      "targetSkill": "documentation-writer",
+      "path": "scenarios/coding/documentation-writer.json",
+      "description": "Technical documentation and architecture specification benchmark scenario evaluating an agent's capability to analyze TypeScript REST endpoints, parse route definitions and type schemas, and synthesize industrial-grade OpenAPI 3.1 specifications, Mermaid architecture diagrams, and Architecture Decision Records (ADRs)."
+    },
+    {
+      "id": "systematic-debugging",
+      "name": "Systematic Root Cause Bug Diagnosis and Deterministic Bug Reproduction",
+      "category": "debugging",
+      "difficulty": "hard",
+      "targetSkill": "diagnosing-bugs",
+      "path": "scenarios/debugging/systematic-debugging.json",
+      "description": "Advanced systematic debugging benchmark scenario evaluating an agent's capability to apply the scientific debugging method (Hypothesize -> Isolate -> Reproduce -> Fix -> Verify) across a distributed state machine suffering from concurrency race conditions, unhandled clock drift, and partial write corruption."
     }
   ],
   "canonicalSkills": [
@@ -228,8 +273,8 @@
         "cloud",
         "diagnostics"
       ],
-      "mappedScenarioId": "memory-leak",
-      "mappedScenarioName": "Event Stream Memory Leak Diagnosis and Fix"
+      "mappedScenarioId": "azure-diagnostics",
+      "mappedScenarioName": "Azure Cloud Telemetry and Diagnostics Anomaly Triage"
     },
     {
       "id": "azure-messaging",
@@ -276,8 +321,8 @@
         "troubleshooting",
         "root-cause"
       ],
-      "mappedScenarioId": "memory-leak",
-      "mappedScenarioName": "Event Stream Memory Leak Diagnosis and Fix"
+      "mappedScenarioId": "systematic-debugging",
+      "mappedScenarioName": "Systematic Root Cause Bug Diagnosis and Deterministic Bug Reproduction"
     },
     {
       "id": "safe-debug",
@@ -420,8 +465,8 @@
         "e2e",
         "cli"
       ],
-      "mappedScenarioId": "a11y-audit",
-      "mappedScenarioName": "Comprehensive WCAG 2.1 AA Accessibility Audit & Remediation"
+      "mappedScenarioId": "playwright-cli",
+      "mappedScenarioName": "Playwright Headless Browser Automation, Trace Analysis, and Resilient Test Suite"
     },
     {
       "id": "playwright-best-practices",
@@ -468,8 +513,8 @@
         "compliance",
         "security"
       ],
-      "mappedScenarioId": "polyglot-sanitization",
-      "mappedScenarioName": "Cross-Boundary Polyglot Input Sanitization and Exploit Triage"
+      "mappedScenarioId": "azure-compliance",
+      "mappedScenarioName": "Azure Policy and Cloud Security Compliance Guardrails Engine"
     },
     {
       "id": "firebase-security-rules-auditor",
@@ -612,8 +657,8 @@
         "technical-writing",
         "architecture"
       ],
-      "mappedScenarioId": "fullstack-refactor",
-      "mappedScenarioName": "Full-Stack React Modernization, Go Concurrent Backend, and Docker Isolation"
+      "mappedScenarioId": "documentation-writer",
+      "mappedScenarioName": "Comprehensive Technical Architecture and OpenAPI Specification Generator"
     },
     {
       "id": "create-readme",
@@ -1094,8 +1139,8 @@
       "category": "debugging",
       "installs": 465100,
       "installsDisplay": "465.1K",
-      "scenarioId": "memory-leak",
-      "scenarioName": "Event Stream Memory Leak Diagnosis and Fix"
+      "scenarioId": "azure-diagnostics",
+      "scenarioName": "Azure Cloud Telemetry and Diagnostics Anomaly Triage"
     },
     "azure-messaging": {
       "domain": "debugging",
@@ -1110,8 +1155,8 @@
       "category": "debugging",
       "installs": 450300,
       "installsDisplay": "450.3K",
-      "scenarioId": "memory-leak",
-      "scenarioName": "Event Stream Memory Leak Diagnosis and Fix"
+      "scenarioId": "systematic-debugging",
+      "scenarioName": "Systematic Root Cause Bug Diagnosis and Deterministic Bug Reproduction"
     },
     "safe-debug": {
       "domain": "debugging",
@@ -1158,8 +1203,8 @@
       "category": "testing",
       "installs": 127900,
       "installsDisplay": "127.9K",
-      "scenarioId": "a11y-audit",
-      "scenarioName": "Comprehensive WCAG 2.1 AA Accessibility Audit & Remediation"
+      "scenarioId": "playwright-cli",
+      "scenarioName": "Playwright Headless Browser Automation, Trace Analysis, and Resilient Test Suite"
     },
     "playwright-best-practices": {
       "domain": "testing",
@@ -1174,8 +1219,8 @@
       "category": "security",
       "installs": 464000,
       "installsDisplay": "464K",
-      "scenarioId": "polyglot-sanitization",
-      "scenarioName": "Cross-Boundary Polyglot Input Sanitization and Exploit Triage"
+      "scenarioId": "azure-compliance",
+      "scenarioName": "Azure Policy and Cloud Security Compliance Guardrails Engine"
     },
     "firebase-security-rules-auditor": {
       "domain": "security",
@@ -1222,8 +1267,8 @@
       "category": "documentation",
       "installs": 23400,
       "installsDisplay": "23.4K",
-      "scenarioId": "fullstack-refactor",
-      "scenarioName": "Full-Stack React Modernization, Go Concurrent Backend, and Docker Isolation"
+      "scenarioId": "documentation-writer",
+      "scenarioName": "Comprehensive Technical Architecture and OpenAPI Specification Generator"
     },
     "create-readme": {
       "domain": "documentation",

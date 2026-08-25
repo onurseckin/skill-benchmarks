@@ -10,12 +10,12 @@ function verifyScenarios(): void {
     categories: readonly string[];
   };
 
-  if (parsed.totalScenarios < 8) {
-    process.stderr.write(`Expected at least 8 scenarios, found ${parsed.totalScenarios}\n`);
+  if (parsed.totalScenarios < 13) {
+    process.stderr.write(`Expected at least 13 scenarios, found ${parsed.totalScenarios}\n`);
     process.exit(1);
   }
 
-  const requiredCategories = ["composite", "security", "optimization"];
+  const requiredCategories = ["composite", "security", "optimization", "debugging", "frontend", "coding"];
   for (const cat of requiredCategories) {
     if (!parsed.categories.includes(cat)) {
       process.stderr.write(`Missing required category: ${cat}\n`);
@@ -25,12 +25,12 @@ function verifyScenarios(): void {
 
   const loader = new ScenarioLoader();
   const all = loader.loadAllScenarios();
-  if (all.length < 8) {
-    process.stderr.write(`Loader failed to load 8 scenarios, loaded ${all.length}\n`);
+  if (all.length < 13) {
+    process.stderr.write(`Loader failed to load 13 scenarios, loaded ${all.length}\n`);
     process.exit(1);
   }
 
-  process.stdout.write("All 8 benchmark scenarios verified successfully.\n");
+  process.stdout.write("All 13 benchmark scenarios verified successfully.\n");
   process.exit(0);
 }
 

@@ -1,0 +1,87 @@
+{
+  "id": "systematic-debugging",
+  "name": "Systematic Root Cause Bug Diagnosis and Deterministic Bug Reproduction",
+  "category": "debugging",
+  "difficulty": "hard",
+  "targetSkill": "diagnosing-bugs",
+  "baselineModel": "claude-3-7-sonnet-20250219",
+  "description": "Advanced systematic debugging benchmark scenario evaluating an agent's capability to apply the scientific debugging method (Hypothesize -> Isolate -> Reproduce -> Fix -> Verify) across a distributed state machine suffering from concurrency race conditions, unhandled clock drift, and partial write corruption.",
+  "instructions": "You are tasked with systematically diagnosing, isolating, reproducing, and fixing intermittent data corruption and split-brain race conditions in a distributed state machine.\n\n### Background:\nUnder concurrent read/write loads and simulated network partitions, the consensus state machine in `src/state-machine/distributed-consensus.ts` and `src/state-machine/replicated-log.ts` exhibits non-deterministic failures:\n1. **Unsynchronized Term/Epoch Increments**: Concurrent state transitions overwrite committed log entries during leader elections.\n2. **Partial Write Corruption**: If a batch append fails midway, partial uncommitted entries remain in the log and corrupt subsequent read queries.\n3. **Clock Skew Monotonicity Violation**: Logical timestamps from delayed peer heartbeats regress the state machine term counter.\n\n### Task Objectives:\n1. **Write Minimal Deterministic Reproduction Tests (`src/test/reproduction.test.ts`)**:\n   - Construct an isolated unit test that reliably triggers the race condition and partial log write corruption without relying on flaky non-deterministic timing.\n\n2. **Isolate and Fix Distributed Consensus Logic (`src/state-machine/distributed-consensus.ts`)**:\n   - Implement strict monotonicity guards on term updates and leader heartbeats.\n   - Ensure election transitions lock state updates atomically until a quorum of peer acknowledgments is confirmed.\n\n3. **Implement Atomic Log Rollbacks (`src/state-machine/replicated-log.ts`)**:\n   - Ensure batch appends are atomic: if any log entry in a batch fails validation or write, roll back the log to its exact pre-transaction state.\n\n4. **Type Safety and Zero Regressions**:\n   - Adhere strictly to TypeScript type safety with explicit type annotations, immutable `readonly` properties, and zero `any` usage.",
+  "workspace": {
+    "fixtures": {
+      "src/state-machine/types.ts": "export type NodeRole = \"Leader\" | \"Follower\" | \"Candidate\";\n\nexport interface LogEntry {\n  readonly index: number;\n  readonly term: number;\n  readonly key: string;\n  readonly value: string;\n  readonly timestamp: number;\n}\n\nexport interface ConsensusState {\n  readonly currentTerm: number;\n  readonly votedFor: string | null;\n  readonly role: NodeRole;\n  readonly commitIndex: number;\n  readonly lastApplied: number;\n}\n\nexport interface AppendEntriesRequest {\n  readonly term: number;\n  readonly leaderId: string;\n  readonly prevLogIndex: number;\n  readonly prevLogTerm: number;\n  readonly entries: readonly LogEntry[];\n  readonly leaderCommit: number;\n}\n\nexport interface AppendEntriesResponse {\n  readonly term: number;\n  readonly success: boolean;\n  readonly matchIndex: number;\n  readonly errorMessage?: string;\n}\n\nexport interface StateMachineSnapshot {\n  readonly term: number;\n  readonly lastIndex: number;\n  readonly state: Readonly<Record<string, string>>;\n}\n",
+      "src/state-machine/replicated-log.ts": "import type { LogEntry } from \"./types.js\";\n\nexport class ReplicatedLog {\n  private entries: LogEntry[] = [];\n\n  public appendEntries(newEntries: readonly LogEntry[]): boolean {\n    for (const entry of newEntries) {\n      if (entry.key === \"__POISON__\") {\n        return false;\n      }\n      this.entries.push(entry);\n    }\n    return true;\n  }\n\n  public getEntries(): readonly LogEntry[] {\n    return [...this.entries];\n  }\n\n  public getEntry(index: number): LogEntry | undefined {\n    return this.entries.find((e) => e.index === index);\n  }\n\n  public getLastIndex(): number {\n    return this.entries.length > 0 ? this.entries[this.entries.length - 1].index : 0;\n  }\n\n  public truncateFrom(index: number): void {\n    this.entries = this.entries.filter((e) => e.index < index);\n  }\n\n  public clear(): void {\n    this.entries = [];\n  }\n}\n",
+      "src/state-machine/distributed-consensus.ts": "import type {\n  NodeRole,\n  ConsensusState,\n  AppendEntriesRequest,\n  AppendEntriesResponse,\n  LogEntry,\n} from \"./types.js\";\nimport { ReplicatedLog } from \"./replicated-log.js\";\n\nexport class DistributedConsensusNode {\n  private readonly nodeId: string;\n  private role: NodeRole = \"Follower\";\n  private currentTerm = 0;\n  private votedFor: string | null = null;\n  private commitIndex = 0;\n  private readonly log = new ReplicatedLog();\n\n  constructor(nodeId: string) {\n    this.nodeId = nodeId;\n  }\n\n  public handleAppendEntries(request: AppendEntriesRequest): AppendEntriesResponse {\n    if (request.term < this.currentTerm) {\n      return { term: this.currentTerm, success: false, matchIndex: this.commitIndex };\n    }\n\n    this.currentTerm = request.term;\n    this.role = \"Follower\";\n\n    const appendSuccess = this.log.appendEntries(request.entries);\n    if (!appendSuccess) {\n      return {\n        term: this.currentTerm,\n        success: false,\n        matchIndex: this.commitIndex,\n        errorMessage: \"Batch append failed\",\n      };\n    }\n\n    this.commitIndex = Math.min(request.leaderCommit, this.log.getLastIndex());\n    return {\n      term: this.currentTerm,\n      success: true,\n      matchIndex: this.log.getLastIndex(),\n    };\n  }\n\n  public getState(): ConsensusState {\n    return {\n      currentTerm: this.currentTerm,\n      votedFor: this.votedFor,\n      role: this.role,\n      commitIndex: this.commitIndex,\n      lastApplied: this.commitIndex,\n    };\n  }\n\n  public getLog(): readonly LogEntry[] {\n    return this.log.getEntries();\n  }\n}\n",
+      "src/test/reproduction.test.ts": "export interface TestCaseResult {\n  readonly testName: string;\n  readonly passed: boolean;\n  readonly error?: string;\n}\n\nexport class BugReproductionHarness {\n  public runReproductionTest(): TestCaseResult {\n    return {\n      testName: \"Deterministic Partial Write Log Corruption Reproduction\",\n      passed: false,\n      error: \"Reproduction harness not executed\",\n    };\n  }\n}\n",
+      "package.json": "{\n  \"name\": \"systematic-debugging-fixture\",\n  \"version\": \"1.0.0\",\n  \"type\": \"module\",\n  \"scripts\": {\n    \"build\": \"tsc --noEmit\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^22.13.0\",\n    \"typescript\": \"^5.7.3\"\n  }\n}\n",
+      "tsconfig.json": "{\n  \"compilerOptions\": {\n    \"target\": \"ES2022\",\n    \"module\": \"NodeNext\",\n    \"moduleResolution\": \"NodeNext\",\n    \"strict\": true,\n    \"esModuleInterop\": true,\n    \"skipLibCheck\": true,\n    \"forceConsistentCasingInFileNames\": true,\n    \"declaration\": true\n  },\n  \"include\": [\"src/**/*\"]\n}\n"
+    },
+    "initialGitCommit": "Initial commit for systematic debugging benchmark fixture"
+  },
+  "limits": {
+    "maxTurns": 15,
+    "maxCostUSD": 1.0,
+    "maxWallClockTimeMs": 300000
+  },
+  "evaluation": {
+    "deterministicChecks": [
+      {
+        "id": "check-consensus-node-exists",
+        "name": "Verify DistributedConsensusNode source exists",
+        "type": "file_exists",
+        "filePath": "src/state-machine/distributed-consensus.ts",
+        "mustExist": true,
+        "weight": 0.2
+      },
+      {
+        "id": "check-replicated-log-exists",
+        "name": "Verify ReplicatedLog source exists",
+        "type": "file_exists",
+        "filePath": "src/state-machine/replicated-log.ts",
+        "mustExist": true,
+        "weight": 0.2
+      },
+      {
+        "id": "check-atomic-log-append",
+        "name": "Verify atomic log rollback or snapshot guard on batch failure",
+        "type": "file_content",
+        "filePath": "src/state-machine/replicated-log.ts",
+        "fileContentPattern": "appendEntries|rollback|slice|splice|truncateFrom",
+        "weight": 0.3
+      },
+      {
+        "id": "check-monotonic-term-guard",
+        "name": "Verify monotonic term validation and state transitions",
+        "type": "file_content",
+        "filePath": "src/state-machine/distributed-consensus.ts",
+        "fileContentPattern": "handleAppendEntries|currentTerm|commitIndex|prevLogIndex",
+        "weight": 0.3
+      }
+    ],
+    "judgeRubrics": [
+      {
+        "name": "Systematic Debugging Methodology and Root Cause Resolution",
+        "category": "debugging",
+        "weight": 0.6,
+        "description": "Evaluates the agent's application of the scientific debugging process: isolating root causes (partial log append corruption and unvalidated term updates), creating minimal deterministic reproduction tests, and implementing atomic rollbacks to maintain state machine invariants.",
+        "criteria": {
+          "1": "Fails to diagnose root cause, introduces further race conditions, or fails to fix partial write corruption in the log.",
+          "3": "Identifies the partial write issue but implements an ad-hoc fix without atomic rollback or fails to address clock drift / term regressions in distributed consensus.",
+          "5": "Mastery of systematic debugging: isolates the exact bug mechanism, writes an isolated deterministic test harness, implements atomic transactional log writes with rollback on failure, and strictly enforces distributed state invariants."
+        }
+      },
+      {
+        "name": "Concurrency Safety and State Machine Correctness",
+        "category": "general",
+        "weight": 0.4,
+        "description": "Evaluates thread/async safety, state immutability, TypeScript type safety, and zero-any cleanliness.",
+        "criteria": {
+          "1": "Broken types, mutable state leaks, or unhandled rejection paths.",
+          "3": "Functional TypeScript code with standard types, but lacks deep immutability or edge-case handling for partitioned consensus states.",
+          "5": "Production-grade state machine implementation: strictly typed, readonly interfaces, provably atomic transitions, and complete zero-any compliance."
+        }
+      }
+    ],
+    "passThreshold": 80
+  }
+}
