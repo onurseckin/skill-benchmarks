@@ -64,6 +64,25 @@ export interface WorkspaceArtifactPaths {
   readonly evaluationPath: string;
 }
 
+export interface RunArtifactLayout {
+  readonly outputRoot: string;
+  readonly runDirectory: string;
+  readonly manifestPath: string;
+  readonly eventsPath: string;
+  readonly transcriptPath: string;
+  readonly rawLogPath: string;
+  readonly metricsPath: string;
+  readonly evaluationPath: string;
+  readonly gitDiffPath: string;
+  readonly diffManifestPath: string;
+  readonly resultPath: string;
+}
+
+export interface DisposableWorkspace {
+  readonly rootPath: string;
+  dispose(): Promise<void>;
+}
+
 export interface WorkspaceLayout {
   readonly runId: string;
   readonly scenarioId: string;

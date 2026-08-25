@@ -43,6 +43,47 @@ export function resolveSafePath(rootPath: string, relativePath: string): string 
   return targetPath;
 }
 
+function requireLocalWorkspaceRoot(context: AgentToolContext): string {
+  if (context.workspace === undefined) {
+    throw new Error("Local tool execution requires an explicit workspace");
+  }
+  return context.workspace.rootPath;
+}
+
+function isSensitiveProviderEnvironmentName(name: string): boolean {
+  return /(^|_)(API_?KEY|ACCESS_?TOKEN|AUTH_?TOKEN|SECRET|PASSWORD)(_|$)/i.test(name);
+}
+
+function createToolCommandEnvironment(
+  explicitEnvironment: Record<string, string> | undefined
+): Record<string, string> {
+  const allowedEnvironmentNames = ["PATH", "HOME", "TMPDIR", "LANG", "LC_ALL"];
+  const environment: Record<string, string> = {};
+
+  for (const name of allowedEnvironmentNames) {
+    const value = process.env[name];
+    if (value !== undefined) {
+      environment[name] = value;
+    }
+  }
+
+  if (explicitEnvironment === undefined) {
+    return environment;
+  }
+
+  for (const [name, value] of Object.entries(explicitEnvironment)) {
+    if (isSensitiveProviderEnvironmentName(name)) {
+      throw new Error(`Sensitive environment variable '${name}' is not allowed`);
+    }
+    if (typeof value !== "string") {
+      throw new Error(`Environment variable '${name}' must have a string value`);
+    }
+    environment[name] = value;
+  }
+
+  return environment;
+}
+
 function globToRegex(pattern: string): RegExp {
   const escaped = pattern
     .replace(/[.+^${}()|[\]\\]/g, "\\$&")
@@ -56,7 +97,7 @@ async function readFileContent(context: AgentToolContext, filePath: string): Pro
     const bytes = await context.container.readFile(filePath);
     return Buffer.from(bytes).toString("utf8");
   }
-  const rootPath = context.workspace?.rootPath ?? process.cwd();
+  const rootPath = requireLocalWorkspaceRoot(context);
   const safePath = resolveSafePath(rootPath, filePath);
   if (!existsSync(safePath)) {
     throw new Error(`File not found: ${filePath}`);
@@ -68,7 +109,7 @@ async function writeFileContent(context: AgentToolContext, filePath: string, con
   if (context.container) {
     await context.container.writeFile(filePath, content);
   } else {
-    const rootPath = context.workspace?.rootPath ?? process.cwd();
+    const rootPath = requireLocalWorkspaceRoot(context);
     const safePath = resolveSafePath(rootPath, filePath);
     mkdirSync(dirname(safePath), { recursive: true });
     writeFileSync(safePath, content, "utf8");
@@ -113,9 +154,10 @@ export async function handleRunCommand(
   const timeoutSec = typeof args.timeout_seconds === "number" && args.timeout_seconds > 0 ? args.timeout_seconds : undefined;
   const timeoutMs = timeoutSec ? timeoutSec * 1000 : (limits?.toolTimeoutMs ?? 60000);
   const envMap = args.env && typeof args.env === "object" ? (args.env as Record<string, string>) : undefined;
+  const environment = createToolCommandEnvironment(envMap);
 
   if (context.container) {
-    const res = await context.container.executeCommand(command, { timeoutMs, env: envMap });
+    const res = await context.container.executeCommand(command, { timeoutMs, env: environment });
     const combined = [res.stdout, res.stderr].filter((s) => s.length > 0).join("\n");
     const isError = res.exitCode !== 0 || res.timedOut || res.oomKilled;
     const output = res.timedOut
@@ -132,10 +174,9 @@ export async function handleRunCommand(
     };
   }
 
-  const rootPath = context.workspace?.rootPath ?? process.cwd();
-  const env = envMap ? { ...process.env, ...envMap } : process.env;
+  const rootPath = requireLocalWorkspaceRoot(context);
   const maxBuffer = limits?.maxOutputSizeBytes ?? 5242880;
-  const res = spawnSync(command, { cwd: rootPath, shell: true, timeout: timeoutMs, env, encoding: "utf8", maxBuffer });
+  const res = spawnSync(command, { cwd: rootPath, shell: true, timeout: timeoutMs, env: environment, encoding: "utf8", maxBuffer });
   const stdout = res.stdout ?? "";
   const stderr = res.stderr ?? (res.error ? res.error.message : "");
   const exitCode = res.status ?? (res.error ? 1 : 0);
@@ -235,7 +276,7 @@ export async function handleListDirectory(
     return { output: output || "Directory is empty", isError: res.exitCode !== 0, exitCode: res.exitCode, stdout: res.stdout, stderr: res.stderr };
   }
 
-  const rootPath = context.workspace?.rootPath ?? process.cwd();
+  const rootPath = requireLocalWorkspaceRoot(context);
   const safePath = resolveSafePath(rootPath, dirRel);
   if (!existsSync(safePath)) throw new Error(`Directory not found: ${dirRel}`);
   const patternRegex = pattern ? globToRegex(pattern) : undefined;
@@ -264,7 +305,7 @@ export async function handleGrepSearch(
     return { output: output || (isError ? (res.stderr || "Grep search failed") : "No matches found"), isError, exitCode: res.exitCode, stdout: res.stdout, stderr: res.stderr };
   }
 
-  const rootPath = context.workspace?.rootPath ?? process.cwd();
+  const rootPath = requireLocalWorkspaceRoot(context);
   const targetDir = resolveSafePath(rootPath, searchPath);
   const regex = isRegex
     ? new RegExp(query, caseInsensitive ? "i" : undefined)
@@ -309,7 +350,7 @@ export async function handleFindByName(
     return { output: output || "No files found", isError: res.exitCode !== 0, exitCode: res.exitCode, stdout: res.stdout, stderr: res.stderr };
   }
 
-  const rootPath = context.workspace?.rootPath ?? process.cwd();
+  const rootPath = requireLocalWorkspaceRoot(context);
   const targetDir = resolveSafePath(rootPath, searchPath);
   const regex = globToRegex(pattern);
   const matches = collectLocalPaths(targetDir, rootPath, maxDepth, 1).filter((p) => {

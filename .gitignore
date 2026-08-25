@@ -134,6 +134,7 @@ auth.json
 # JavaScript / TypeScript / Node.js
 # ------------------------------------------------------------------------------
 node_modules/
+.benchmarks/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
