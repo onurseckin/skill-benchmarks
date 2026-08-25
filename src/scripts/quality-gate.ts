@@ -1,6 +1,9 @@
 import { readdirSync, statSync, readFileSync, existsSync } from "node:fs";
 import { join, extname } from "node:path";
 import { execSync } from "node:child_process";
+import { startStreamTunnel } from "../tunnel/index.js";
+
+void startStreamTunnel;
 
 interface Violation {
   readonly file: string;
@@ -128,6 +131,3 @@ function runQualityAudit(): void {
 }
 
 runQualityAudit();
-
-
-
