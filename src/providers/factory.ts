@@ -20,7 +20,7 @@ export function createProviderAdapter(config: ProviderConfig): LLMProviderAdapte
   }
 
   if (providerId === "google") {
-    if (config.apiKey === undefined && process.env.GEMINI_API_KEY === undefined && process.env.SKILL_BENCHMARKS_MOCK !== "false") {
+    if (config.apiKey === undefined && process.env.GEMINI_API_KEY === undefined && process.env.GOOGLE_API_KEY === undefined && process.env.SKILL_BENCHMARKS_MOCK !== "false") {
       return new MockProviderAdapter(config.defaultModel, config);
     }
     return new GeminiProviderAdapter(config.defaultModel, config);

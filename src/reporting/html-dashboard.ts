@@ -43,7 +43,7 @@ function renderLeaderboardRows(entries: readonly LeaderboardEntry[]): string {
           : `<span class="badge badge-dim">OFF</span>`;
       const reasoningTokens = e.reasoningTokens ? e.reasoningTokens.toLocaleString() : "—";
 
-      return `<tr data-category="${escapeHtml(e.category)}" data-skill="${escapeHtml(e.skillId)}" data-model="${modelLabel.toLowerCase()}" data-tier="${escapeHtml(e.modelTier ?? "flagship")}" data-think="${escapeHtml(e.thinkingLevel ?? "none")}"><td>#${e.rank}</td><td><strong>${modelLabel}</strong></td><td>${thinkBadge}</td><td><strong>${escapeHtml(e.skillId)}</strong></td><td><span class="badge badge-cat">${escapeHtml(e.category)}</span></td><td>${e.passRate.toFixed(1)}%${deltaHtml}</td><td>${e.averageScore.toFixed(3)}</td><td>${Math.round(e.eloRating)}</td><td>${e.meanDurationSeconds.toFixed(2)}s</td><td>$${e.averageCostUSD.toFixed(4)}</td><td>${cacheHitPct}%</td><td>${reasoningTokens}</td><td>${e.totalRuns}</td><td>${sigBadge}</td></tr>`;
+      return `<tr data-category="${escapeHtml(e.category)}" data-skill="${escapeHtml(e.skillId)}" data-model="${modelLabel.toLowerCase()}" data-tier="${escapeHtml(e.modelTier ?? "flagship")}" data-think="${escapeHtml(e.thinkingLevel ?? "none")}" data-pass="${e.passRate.toFixed(1)}"><td>#${e.rank}</td><td><strong>${modelLabel}</strong></td><td>${thinkBadge}</td><td><strong>${escapeHtml(e.skillId)}</strong></td><td><span class="badge badge-cat">${escapeHtml(e.category)}</span></td><td>${e.passRate.toFixed(1)}%${deltaHtml}</td><td>${e.averageScore.toFixed(3)}</td><td>${Math.round(e.eloRating)}</td><td>${e.meanDurationSeconds.toFixed(2)}s</td><td>$${e.averageCostUSD.toFixed(4)}</td><td>${cacheHitPct}%</td><td>${reasoningTokens}</td><td>${e.totalRuns}</td><td>${sigBadge}</td></tr>`;
     })
     .join("");
 }
@@ -138,16 +138,24 @@ document.addEventListener("DOMContentLoaded", function () {
 
   function applyFilter() {
     var selectedCat = catFilter ? catFilter.value : "all";
+    var selectedTier = tierFilter ? tierFilter.value : "all";
     var selectedThink = thinkFilter ? thinkFilter.value : "all";
+    var selectedStatus = statusFilter ? statusFilter.value : "all";
     var searchVal = searchInput ? searchInput.value.toLowerCase().trim() : "";
     var rows = tbody.querySelectorAll("tr");
 
     rows.forEach(function (row) {
       var rowCat = row.getAttribute("data-category") || "";
+      var rowTier = row.getAttribute("data-tier") || "flagship";
+      var rowThink = row.getAttribute("data-think") || "none";
+      var rowPass = parseFloat(row.getAttribute("data-pass") || "100");
       var rowText = row.innerText.toLowerCase();
       var matchCat = selectedCat === "all" || rowCat === selectedCat;
+      var matchTier = selectedTier === "all" || rowTier === selectedTier;
+      var matchThink = selectedThink === "all" || (selectedThink === "none" ? rowThink === "none" || rowThink === "off" : rowThink === selectedThink);
+      var matchStatus = selectedStatus === "all" || (selectedStatus === "pass" ? rowPass >= 70 : rowPass < 70);
       var matchSearch = !searchVal || rowText.indexOf(searchVal) !== -1;
-      row.style.display = matchCat && matchSearch ? "" : "none";
+      row.style.display = matchCat && matchTier && matchThink && matchStatus && matchSearch ? "" : "none";
     });
   }
 

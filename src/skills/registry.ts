@@ -92,6 +92,21 @@ export class SkillRegistry {
       this.index(this.domainIndex, skill.domain, skill.id);
       this.index(this.categoryIndex, skill.category, skill.id);
       for (const tag of skill.tags) this.index(this.tagIndex, tag, skill.id);
+      const manifest: SkillManifest = {
+        name: skill.name,
+        version: skill.version !== undefined ? skill.version : "1.0.0",
+        description: skill.description,
+        category: skill.category,
+        tags: skill.tags,
+        author: skill.author.name,
+        repository: skill.source,
+        rules: skill.rules !== undefined ? skill.rules : [],
+        tools: skill.tools !== undefined ? skill.tools : [],
+        scripts: [],
+        guidelines: skill.guidelines !== undefined ? skill.guidelines : [skill.description],
+        dependencies: [],
+      };
+      this.skills.set(skill.id, manifest);
       this.catalog.set(skill.id, {
         id: skill.id,
         name: skill.name,
@@ -104,6 +119,7 @@ export class SkillRegistry {
         installsDisplay: skill.installs.display,
         description: skill.description,
         tags: skill.tags,
+        manifest,
         status: skill.status,
       });
     }

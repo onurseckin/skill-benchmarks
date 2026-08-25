@@ -333,3 +333,5 @@ screenshots/
 visual-report.json
 .skills/
 .benchmarks/
+.locks/
+orchestrator-*/

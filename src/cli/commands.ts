@@ -187,7 +187,7 @@ export async function runReportCommand(args: CliParsedArgs): Promise<CliCommandR
     console.log(`\n  Total Benchmark Runs: ${runs.length}`);
     console.log(`  Evaluated Skills: ${leaderboard.length}\n`);
     for (const entry of leaderboard.slice(0, 10)) {
-      console.log(`  #${entry.rank} ${bold(entry.skillId.padEnd(25))} PassRate: ${(entry.passRate * 100).toFixed(1)}% | Score: ${entry.averageScore.toFixed(1)} | Cost: $${entry.averageCostUSD.toFixed(4)}`);
+      console.log(`  #${entry.rank} ${bold(entry.skillId.padEnd(25))} PassRate: ${entry.passRate.toFixed(1)}% | Score: ${entry.averageScore.toFixed(1)} | Cost: $${entry.averageCostUSD.toFixed(4)}`);
     }
   }
 

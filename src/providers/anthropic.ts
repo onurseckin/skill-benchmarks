@@ -244,7 +244,8 @@ export class AnthropicProviderAdapter implements LLMProviderAdapter {
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split("\n");
-        buffer = lines.pop() !== undefined ? (lines.pop() as string) : "";
+        const lastLine = lines.pop();
+        buffer = lastLine !== undefined ? lastLine : "";
 
         for (const line of lines) {
           const trimmed = line.trim();
