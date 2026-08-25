@@ -1,6 +1,6 @@
 import type { Database } from "bun:sqlite";
 
-export const reportingSchemaVersion = 2;
+export const reportingSchemaVersion = 3;
 
 const legacyRunColumns = new Set([
   "run_id", "sweep_id", "plan_fingerprint", "cell_id", "matrix_occurrence_index",
@@ -31,7 +31,7 @@ const telemetryColumns = new Set([
   "id", "run_id", "scenario_id", "skill_id", "model_id", "timestamp_us",
   "event_type", "sequence_number", "payload_json",
 ]);
-const eloColumns = new Set([
+const retiredEloColumns = new Set([
   "skill_id", "rating", "matches_played", "wins", "losses", "ties", "last_updated",
 ]);
 
@@ -43,6 +43,12 @@ export function initializeReportingSchema(database: Database): void {
     configureDatabase(database);
     return;
   }
+  if (version === 2) {
+    migrateVersionTwoSchema(database);
+    validateReportingSchema(database);
+    configureDatabase(database);
+    return;
+  }
   if (version !== 0) throw new TypeError("Unsupported benchmark database schema version");
   if (runColumns.length > 0) assertExactColumns(runColumns, legacyRunColumns);
   assertExistingSupportingSchema(database);
@@ -50,7 +56,7 @@ export function initializeReportingSchema(database: Database): void {
     if (runColumns.length === 0) createAuthoritySchema(database);
     else migrateLegacyRuns(database);
     createSupportingSchema(database);
-    database.exec("DELETE FROM elo_ratings; DELETE FROM run_claims;");
+    database.exec("DROP INDEX IF EXISTS idx_elo_rating; DROP TABLE IF EXISTS elo_ratings; DELETE FROM run_claims;");
     database.exec(`PRAGMA user_version = ${reportingSchemaVersion};`);
   })();
   validateReportingSchema(database);
@@ -62,7 +68,7 @@ export function validateReportingSchema(database: Database): void {
   assertExactColumns(readColumns(database, "runs"), authorityRunColumns);
   assertExactColumns(readColumns(database, "run_claims"), runClaimColumns);
   assertExactColumns(readColumns(database, "telemetry_events"), telemetryColumns);
-  assertExactColumns(readColumns(database, "elo_ratings"), eloColumns);
+  if (readColumns(database, "elo_ratings").length !== 0) throw new TypeError("Unsupported ranked history table");
 }
 
 function configureDatabase(database: Database): void {
@@ -203,12 +209,18 @@ function createSupportingSchema(database: Database): void {
     CREATE INDEX IF NOT EXISTS idx_telemetry_run_id ON telemetry_events(run_id);
     CREATE INDEX IF NOT EXISTS idx_telemetry_event_type ON telemetry_events(event_type);
     CREATE INDEX IF NOT EXISTS idx_telemetry_timestamp ON telemetry_events(timestamp_us);
-    CREATE TABLE IF NOT EXISTS elo_ratings (
-      skill_id TEXT PRIMARY KEY, rating REAL NOT NULL, matches_played INTEGER NOT NULL,
-      wins INTEGER NOT NULL, losses INTEGER NOT NULL, ties INTEGER NOT NULL, last_updated TEXT NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS idx_elo_rating ON elo_ratings(rating DESC);
   `);
+}
+
+function migrateVersionTwoSchema(database: Database): void {
+  assertExactColumns(readColumns(database, "runs"), authorityRunColumns);
+  assertExactColumns(readColumns(database, "run_claims"), runClaimColumns);
+  assertExactColumns(readColumns(database, "telemetry_events"), telemetryColumns);
+  assertExactColumns(readColumns(database, "elo_ratings"), retiredEloColumns);
+  database.transaction(() => {
+    database.exec("DROP INDEX IF EXISTS idx_elo_rating; DROP TABLE elo_ratings;");
+    database.exec(`PRAGMA user_version = ${reportingSchemaVersion};`);
+  })();
 }
 
 function createRunIndexes(database: Database): void {
@@ -261,7 +273,7 @@ function assertExistingSupportingSchema(database: Database): void {
   const expectedTables: readonly [string, ReadonlySet<string>][] = [
     ["run_claims", runClaimColumns],
     ["telemetry_events", telemetryColumns],
-    ["elo_ratings", eloColumns],
+    ["elo_ratings", retiredEloColumns],
   ];
   for (const [table, expected] of expectedTables) {
     const columns = readColumns(database, table);

@@ -13,7 +13,7 @@ This document outlines the strategic product vision, future capability expansion
 |  Lane 1: Zero-Friction Mock/Live Provider Switch (Instant Offline & Live Frontier Execution)     |
 |  Lane 2: 100% Skill Coverage (All 29 Skills in skill-list.md Implemented as Benchmarks) [100%]  |
 |  Lane 3: High-Density Interactive Terminal TUI & Live ASCII Replay Scrubber [SHIPPED]           |
-|  Lane 4: Side-by-Side Multi-Model Arena Battle Mode with Automated Bradley-Terry Elo Updates [SHIPPED]
+|  Lane 4: Side-by-Side Admitted Pairing Plans and Unranked Candidate Diagnostics [SHIPPED]         |
 |  Lane 5: Standalone Shareable HTML/SVG Neo-Brutalist Report Card & Trajectory Diff Viewer [SHIPPED]
 +==================================================================================================+
 ```
@@ -63,18 +63,19 @@ This document outlines the strategic product vision, future capability expansion
 - ✅ **Terminal TUI Scrubber Upgrades**: Side-by-side terminal column diffs and instantaneous token generation velocity telemetry.
 
 ### 3. Zero-Friction Provider Engine (`src/providers/`)
-- ✅ **Default Offline Mock Mode**: Run complete benchmark suites, matrix sweeps, and tournaments with high-fidelity tool execution and simulated token metrics without requiring API keys.
+- ✅ **Default Offline Mock Mode**: Run validation sweeps and unranked candidate diagnostics without provider requests or benchmark-quality claims.
 - ✅ **Multi-Thinking Matrix Sweeps**: Full support for `--matrix-thinking none,low,medium,high,max`, `--dry-run`, and `--category` filtering.
 - **Live API Transition**: Set `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `GEMINI_API_KEY` (or toggle `--live` / `SKILL_BENCHMARKS_MOCK=false`) to execute live inference against Claude 3.7 Sonnet, OpenAI o3-mini/o1, and Gemini 2.0 Pro.
 
-### 4. Side-by-Side Arena Battle Engine (`src/runner/arena-runner.ts`, `src/arena/`)
-- ✅ **Head-to-Head Model Battles**: Implemented `ArenaRunner` with isolated Docker sandbox execution, blind position-swapped judge evaluations, confidence scoring, and position bias detection.
-- ✅ **Automated Bradley-Terry Elo Updates**: Instant dynamic rating adjustments with K-factor scaling and SQLite database persistence across matches.
-- ✅ **CLI Integration**: Full support for `--arena <modelA>,<modelB>` flag across `bin/skill-benchmarks` and `arena` / `run` commands.
+### 4. Side-by-Side Arena Diagnostics (`src/runner/arena-runner.ts`, `src/arena/`)
+- ✅ **Deterministic Planning**: Dry arena validates explicit selectors and emits a pairing without provider, workspace, database, or judge work.
+- ✅ **Unranked Fake Execution**: Mock arena routes candidates through the common sweep and exposes only simulated operational provenance.
+- ⏳ **Ranked Comparison**: Winner, judge, confidence, and rating behavior remains unavailable until durable comparable evidence exists.
 
-### 5. Multi-Model Tournament Engine (`src/runner/tournament-scheduler.ts`)
-- ✅ **Swiss-System & Round-Robin Schedulers**: Dynamic round pairings, Berger table polygon rotation, bye allocations, and Buchholz / Sonneborn-Berger tiebreaking metrics.
-- ✅ **CLI Tournament Options**: `--tournament-mode <round-robin|swiss>` and `--rounds <N>` flags wired into CLI parser and runner commands with live standings reporting.
+### 5. Multi-Model Tournament Planner (`src/runner/tournament-scheduler.ts`)
+- ✅ **Pairing Plans**: Round-robin schedules and the first Swiss round expose pairings, capacity, and planned byes only.
+- ✅ **Diagnostic Execution**: Fake pairings do not mutate points, match history, tiebreaks, ratings, standings, or ranks.
+- ⏳ **Ranked Tournament**: Result-dependent Swiss rounds and standings remain unavailable until ranked arena evidence exists.
 
 ---
 

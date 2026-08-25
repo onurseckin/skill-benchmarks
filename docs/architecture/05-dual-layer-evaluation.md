@@ -1,152 +1,56 @@
-# Chapter 05: Dual-Layer Evaluation & Scoring Engine
+# Chapter 05: Evidence Eligibility and Evaluation
 
-[← Previous: 04. Runner & Interceptor](04-runner-and-interceptor.md) | [Architecture Index](README.md) | [Next: 06. Telemetry & Reporting →](06-telemetry-and-reporting.md)
+[← Previous: 04. Runner & Tool Interceptor](04-runner-and-interceptor.md) | [Architecture Index](README.md) | [Next: 06. Telemetry & Reporting →](06-telemetry-and-reporting.md)
 
----
+## 1. Benchmark Authority Boundary
 
-## 1. Dual-Layer Evaluation Architecture
+Evaluation claims are optional outputs backed by persisted evidence. A completed command, a successful tool exit, or a provider response does not independently establish a benchmark score or pass result.
 
-Evaluating software engineering agents requires both hard mechanical verification and subtle semantic judgment. **Skill-Benchmarks** implements a **Dual-Layer Evaluation Framework**:
+[`src/shared/benchmark-authority.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/shared/benchmark-authority.ts) is the authority boundary. An eligible record must bind execution provenance, lifecycle completion, artifact integrity, cost verification, evidence identity, evaluation identity, and exact score/pass columns. Invalid or incomplete inputs produce diagnostic ineligibility without score or pass fields.
 
-```
-+-------------------------------------------------------------------------------+
-|                            EVALUATION PIPELINE                                |
-+-------------------------------------------------------------------------------+
-|                                                                               |
-|   AGENT EXECUTION ARTIFACTS (Workspace Diffs, Source Code, Test Logs)         |
-|                                     │                                         |
-|                                     ▼                                         |
-|   ┌───────────────────────────────────────────────────────────────────────┐   |
-|   │ LAYER 1: DETERMINISTIC EVALUATOR (src/eval/deterministic.ts)          │   |
-|   │ • TypeScript Compiler AST Node Validation                             │   |
-|   │ • Invariant Rules (0 Comments, <= 400 Lines, 0 Any Annotations)       │   |
-|   │ • Sandboxed Unit & Integration Test Execution Exit Codes              │   |
-|   └───────────────────────────────────┬───────────────────────────────────┘   |
-|                                       │ Passes Gate / Emits Metric Breakdown  |
-|                                       ▼                                       |
-|   ┌───────────────────────────────────────────────────────────────────────┐   |
-|   │ LAYER 2: MULTI-JUDGE SEMANTIC ARENA (src/eval/llm-judge.ts)           │   |
-|   │ • Blind Pairwise Debates (Model A vs. Model B)                        │   |
-|   │ • 5-Dimensional Qualitative Rubric Scoring                            │   |
-|   │ • Position Bias Inversion & Majority Consensus Filter                 │   |
-|   └───────────────────────────────────┬───────────────────────────────────┘   |
-|                                       │ Win / Loss / Tie Match Matrix         |
-|                                       ▼                                       |
-|   ┌───────────────────────────────────────────────────────────────────────┐   |
-|   │ BRADLEY-TERRY ELO SOLVER (src/eval/pairwise-elo.ts)                   │   |
-|   │ • Iterative Newton-Raphson Maximum Likelihood Estimation (MLE)        │   |
-|   │ • Calibrated Skill Ratings (Elo ± Confidence Intervals)               │   |
-|   └───────────────────────────────────────────────────────────────────────┘   |
-+-------------------------------------------------------------------------------+
+## 2. Evidence Flow
+
+```text
+declared checks
+    |
+    v
+executed deterministic evidence ---- optional judge evidence
+    |                                      |
+    +------------------+-------------------+
+                       v
+              composite evaluation
+                       |
+                       v
+              evidence digest binding
+                       |
+                       v
+             benchmark authority check
+                |               |
+                v               v
+          eligible claims   diagnostic absence
 ```
 
----
+[`src/eval/deterministic.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/eval/deterministic.ts) requires at least one declared and executed deterministic check. [`src/eval/composite-evaluator.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/eval/composite-evaluator.ts) refuses judge-only and malformed summaries. [`src/eval/evidence-adapter.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/eval/evidence-adapter.ts) binds the accepted structures and identities into a digest before persistence.
 
-## 2. Layer 1: Deterministic AST & Invariant Grading
+## 3. Absence Instead of Synthetic Claims
 
-The deterministic grading layer ([`src/eval/deterministic.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/eval/deterministic.ts)) analyzes the agent's code diffs using the TypeScript Compiler AST API:
+Unavailable evaluation is represented by discriminated states such as `not_evaluated` or `invalid`. Those states do not carry numerical score, pass, rank, rating, winner, or confidence properties. This keeps diagnostic runs useful without allowing placeholders to enter reports.
 
-```
-+-------------------------------------------------------------------------------+
-| AST STATIC VERIFICATION CHECKS                                                |
-+-------------------------------------------------------------------------------+
-| CHECK                     | PASS CRITERIA                  | AST MATCHER      |
-+---------------------------+--------------------------------+------------------+
-| No Forbidden Comments     | Zero `//`, `/* */`, JSDoc      | Leading Trivia   |
-| Strict File Length        | Total line count <= 400        | Line Map Count   |
-| Zero `any` Types          | 0 explicit or implicit `any`   | `ts.SyntaxKind.  |
-|                           |                                |  AnyKeyword`     |
-| Zero Lint Suppressions    | 0 `@ts-ignore`, `@ts-expect`   | Comment Directive|
-| Automated Test Suite      | Process exit code === 0        | Test Runner Exec |
-+-------------------------------------------------------------------------------+
-```
+Fake provider runs are always simulated and remain outside eligible benchmark cohorts. They verify orchestration and artifacts, not model quality.
 
----
+## 4. Arena and Tournament Boundary
 
-## 3. Layer 2: LLM-as-a-Judge Semantic Rubric
+[`src/runner/arena-runner.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/runner/arena-runner.ts) and [`src/runner/tournament-planner.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/runner/tournament-planner.ts) expose only plans and candidate diagnostics. They do not infer pairwise outcomes from provider text or update persistent ratings.
 
-When code compiles and tests pass, semantic quality is judged across five normalized dimensions ([`src/eval/scoring.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/eval/scoring.ts)):
-
-$$\text{Score}_{\text{composite}} = 0.35 \cdot S_{\text{correct}} + 0.25 \cdot S_{\text{robust}} + 0.15 \cdot S_{\text{read}} + 0.15 \cdot S_{\text{sec}} + 0.10 \cdot S_{\text{eff}}$$
-
-```
-+-------------------------------------------------------------------------------+
-| QUALITATIVE JUDGING DIMENSIONS                                                |
-+-------------------------------------------------------------------------------+
-| 1. Correctness (35%): Adherence to scenario requirements and edge behaviors.  |
-| 2. Robustness (25%): Error handling, recovery paths, and boundary safety.     |
-| 3. Readability (15%): Idiomatic code style, naming clarity, modularity.       |
-| 4. Security (15%): Absence of injection flaws, memory leaks, unsafe APIs.    |
-| 5. Efficiency (10%): Computational complexity and minimal resource overhead.  |
-+-------------------------------------------------------------------------------+
-```
-
-To eliminate position bias, the judge engine ([`src/judge/judge-engine.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/judge/judge-engine.ts)) executes both forward `(A, B)` and reversed `(B, A)` blind evaluations.
-
----
-
-## 4. Multi-Model Arena Battle Engine & Bradley-Terry Elo Solver
-
-The Arena Battle Runner ([`src/runner/arena-runner.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/runner/arena-runner.ts)) coordinates head-to-head model matches in isolated Docker containers:
-
-```
-+───────────────────────────────────────────────────────────────────────────────+
-|                          HEAD-TO-HEAD ARENA WORKFLOW                          |
-+───────────────────────────────────────────────────────────────────────────────+
-|                                                                               |
-|   ┌───────────────────────────┐           ┌───────────────────────────┐       |
-|   │ Candidate A: Model Trial  │           │ Candidate B: Model Trial  │       |
-|   │ (e.g. Claude 3.7 Sonnet)  │           │ (e.g. OpenAI o3-mini)     │       |
-|   └─────────────┬─────────────┘           └─────────────┬─────────────┘       |
-|                 │ Diff & Final Output                   │ Diff & Output       |
-|                 └───────────────────┬───────────────────┘                     |
-|                                     ▼                                         |
-|                 ┌───────────────────────────────────────┐                     |
-|                 │ BLIND PAIRWISE ELO ENGINE             │                     |
-|                 │ (Permutation 1: A vs B)               │                     |
-|                 │ (Permutation 2: B vs A - Inversion)   │                     |
-|                 └───────────────────┬───────────────────┘                     |
-|                                     ▼                                         |
-|                 ┌───────────────────────────────────────┐                     |
-|                 │ Position Bias Verification & Decision │                     |
-|                 │ Winner: Model A / Model B / Tie       │                     |
-|                 └───────────────────┬───────────────────┘                     |
-|                                     ▼                                         |
-|                 ┌───────────────────────────────────────┐                     |
-|                 │ Bradley-Terry Elo Rating Update       │                     |
-|                 │ Persisted to Telemetry Database       │                     |
-|                 └───────────────────────────────────────┘                     |
-+───────────────────────────────────────────────────────────────────────────────+
-```
-
-### 4.1 Mathematical Formulation
-
-Skill-Benchmarks resolves non-transitive pairwise judge outcomes into calibrated numerical Elo ratings via Maximum Likelihood Estimation (MLE) in [`src/judge/bradley-terry.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/judge/bradley-terry.ts) and [`src/eval/pairwise-elo.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/eval/pairwise-elo.ts):
-
-1. **Pairwise Win Probability**:
-   The probability that model $i$ beats model $j$ given latent skill ratings $R_i, R_j$:
-   $$P(i > j) = \frac{1}{1 + 10^{(R_j - R_i)/400}} = \frac{\pi_i}{\pi_i + \pi_j} \quad \text{where } \pi_k = 10^{R_k / 400}$$
-
-2. **Log-Likelihood Function**:
-   Given empirical match win counts $W_{ij}$ and $W_{ji}$:
-   $$\ln L(\mathbf{R}) = \sum_{i < j} \left[ W_{ij} \ln P(i > j) + W_{ji} \ln P(j > i) \right]$$
-
-3. **Newton-Raphson Iterative Update**:
-   The gradient vector $\nabla \ln L$ and Hessian matrix $\mathbf{H}$ are iteratively computed:
-   $$\mathbf{R}^{(t+1)} = \mathbf{R}^{(t)} - \mathbf{H}^{-1} \nabla \ln L\left(\mathbf{R}^{(t)}\right)$$
-   Iterating converges within 10-15 cycles to the global maximum likelihood rating vector with residual tolerance $\epsilon < 10^{-6}$.
-
----
+A future ranked comparison would require durable candidate evidence plus a persisted match and judge protocol bound to the same identity. Until that complete evidence contract exists, live comparison fails closed and fake comparison remains `SIMULATED / UNRANKED`.
 
 ## 5. Evaluation Module Reference
 
-- [`src/eval/deterministic.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/eval/deterministic.ts): AST parsing, syntax tree inspection, and test execution runner.
-- [`src/eval/llm-judge.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/eval/llm-judge.ts): Blind pairwise judge debate coordinator.
-- [`src/eval/pairwise-elo.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/eval/pairwise-elo.ts): Iterative Bradley-Terry Elo estimation solver.
-- [`src/runner/arena-runner.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/runner/arena-runner.ts): Head-to-head arena battle match runner.
-- [`src/cli/arena-command.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/cli/arena-command.ts): CLI interactive arena controller.
-- [`src/arena/consensus-scorer.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/arena/consensus-scorer.ts): Multi-judge consensus aggregation.
+- [`src/eval/deterministic.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/eval/deterministic.ts): validates nonempty deterministic check evidence.
+- [`src/eval/composite-evaluator.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/eval/composite-evaluator.ts): combines validated evidence without creating fallback claims.
+- [`src/eval/evidence-adapter.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/eval/evidence-adapter.ts): binds accepted evidence to an identity and digest.
+- [`src/shared/benchmark-authority.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/shared/benchmark-authority.ts): classifies eligible and diagnostic records.
+- [`src/runner/arena-runner.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/runner/arena-runner.ts): emits unranked arena plans and diagnostics.
+- [`src/runner/tournament-planner.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/runner/tournament-planner.ts): creates immutable pairing plans without standings.
 
----
-
-[← Previous: 04. Runner & Interceptor](04-runner-and-interceptor.md) | [Architecture Index](README.md) | [Next: 06. Telemetry & Reporting →](06-telemetry-and-reporting.md)
+[← Previous: 04. Runner & Tool Interceptor](04-runner-and-interceptor.md) | [Architecture Index](README.md) | [Next: 06. Telemetry & Reporting →](06-telemetry-and-reporting.md)

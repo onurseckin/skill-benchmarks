@@ -45,7 +45,7 @@ The **Skill-Benchmarks** framework is an enterprise-grade, deterministic benchma
 +---------------------------------------------------------------------------------------------------+
 |                                    DUAL-LAYER EVALUATION                                          |
 |   1. Deterministic Layer: AST Parsing, Structural Invariants, Exit Codes (src/eval/deterministic)  |
-|   2. Semantic Layer: Multi-Judge Consensus Scoring & Elo Solver (src/eval/llm-judge, pairwise-elo)|
+|   2. Evidence Layer: Composite Validation & Benchmark Authority (src/eval, src/shared)             |
 +---------------------------------------------------------------------------------------------------+
                                              │
                                              ▼
@@ -59,7 +59,7 @@ The **Skill-Benchmarks** framework is an enterprise-grade, deterministic benchma
 +---------------------------------------------------------------------------------------------------+
 |                                     REPORTING & VISUALIZATION                                     |
 |   On-Demand Leaderboard Generator              │  On-Demand Interactive Dashboard                 |
-|   Pareto Frontier Engine (Cost vs. Elo vs. Latency)                                               |
+|   Eligible Cohort Reports (Observed Score, Cost, Latency)                                         |
 +---------------------------------------------------------------------------------------------------+
 ```
 
@@ -92,7 +92,7 @@ Skill-Benchmarks models benchmark matrix execution as a Directed Acyclic Graph (
    This guarantees that as $p \to \infty$, $T_p \to S$, ensuring optimal horizontal scaling up to the container host's hardware capacity.
 
 5. **Amdahl's Law Compliance**:
-   Let $\sigma = \frac{S_{\text{overhead}}}{W}$ denote the strictly serial fraction (pool initialization, SQLite schema migration, final Elo matrix compilation). The speedup $S_p$ with $p$ workers is:
+   Let $\sigma = \frac{S_{\text{overhead}}}{W}$ denote the strictly serial fraction such as pool initialization, SQLite schema migration, and terminal evidence publication. The speedup $S_p$ with $p$ workers is:
    $$S_p = \frac{1}{\sigma + \frac{1 - \sigma}{p}}$$
    Skill-Benchmarks minimizes $\sigma < 0.005$ via pre-warmed container pools and concurrent WAL writes.
 
@@ -108,7 +108,7 @@ Skill-Benchmarks models benchmark matrix execution as a Directed Acyclic Graph (
         │        │        │                │
         └────────┼────────┴────────────────┘
                  ▼
-        [Elo Matrix Solver & Report Gen] (Serial Span S_end)
+        [Evidence Validation & Report Gen] (Serial Span S_end)
         
         Total Work W = S_0 + \sum(t_i) + S_end
         Total Span S = S_0 + max(t_i) + S_end
@@ -132,7 +132,7 @@ The execution of a benchmark run progresses through eight discrete phases:
 +---------------+      +---------------+      +---------------+      +---------------+
 | 8. REPORTING  | ◄─── | 7. TELEMETRY  | ◄─── | 6. DUAL-EVAL  | ◄─── | 5. INTERCEPT  |
 | Leaderboard & |      | SQLite WAL &  |      | AST Parser +  |      | Tool Sandbox  |
-| Pareto Front  |      | Binary Stream |      | LLM Judge Elo |      | Exec & PTY    |
+| Cohort Report |      | Binary Stream |      | Evidence Gate |      | Exec & PTY    |
 +---------------+      +---------------+      +---------------+      +---------------+
 ```
 
@@ -141,7 +141,7 @@ The execution of a benchmark run progresses through eight discrete phases:
 3. **Dispatch**: The container pool assigns an idle, pre-warmed Docker container instance to the task via [`src/infrastructure/container/pool.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/infrastructure/container/pool.ts).
 4. **Inference**: The provider adapter translates prompt messages and active skill manifests into provider-specific payloads (Anthropic/Gemini/OpenAI) with streaming enabled via [`src/providers/factory.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/providers/factory.ts).
 5. **Interception**: When the LLM issues tool invocations (e.g., `execute_command`, `read_file`, `write_file`), the runner engine traps the call, validates arguments, executes within the container sandbox, and streams terminal stdout/stderr via [`src/runner/tool-dispatcher.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/runner/tool-dispatcher.ts).
-6. **Dual-Layer Evaluation**: Upon task completion or timeout, Layer 1 executes deterministic AST checks and automated unit test grading ([`src/eval/deterministic.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/eval/deterministic.ts)). Layer 2 invokes multi-judge blind LLM evaluations and solves pairwise Bradley-Terry Elo ratings ([`src/eval/pairwise-elo.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/eval/pairwise-elo.ts)).
+6. **Evidence-Gated Evaluation**: Deterministic checks must execute and validate before a composite evaluation can exist. Optional judge evidence must bind to the same run identity, and the shared benchmark authority rejects incomplete or inconsistent claims.
 7. **Telemetry Persistence**: Step-level durations, token counts, dollar costs, cgroups resource metrics (CPU/RAM/IO), and event transcripts are saved into SQLite ([`src/reporting/db.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/reporting/db.ts)) and broadcasted over WebSockets ([`src/tunnel/stream-tunnel.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/tunnel/stream-tunnel.ts)).
 8. **Reporting & Analysis**: Markdown leaderboards, standalone HTML dashboards, and multi-objective Pareto frontiers (Cost vs. Accuracy vs. Latency) are rendered to disk ([`src/reporting/aggregator.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/reporting/aggregator.ts)).
 
@@ -157,7 +157,7 @@ The execution of a benchmark run progresses through eight discrete phases:
 | **Workspace Hydration** | [`src/infrastructure/workspace/hydration.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/infrastructure/workspace/hydration.ts) | Manages copy-on-write workspace directories and SHA-256 diffing. |
 | **Frontier Provider Adapters** | [`src/providers/factory.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/providers/factory.ts) | Factory layer normalizing Anthropic, Gemini, and OpenAI APIs. |
 | **Deterministic AST Evaluator**| [`src/eval/deterministic.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/eval/deterministic.ts) | Performs static AST inspection and test suite execution. |
-| **Pairwise Elo Solver** | [`src/eval/pairwise-elo.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/eval/pairwise-elo.ts) | Implements iterative Bradley-Terry Maximum Likelihood Estimation. |
+| **Benchmark Authority** | [`src/shared/benchmark-authority.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/shared/benchmark-authority.ts) | Validates evidence, provenance, identity, and persisted claim consistency. |
 | **Telemetry Database Engine** | [`src/reporting/db.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/reporting/db.ts) | SQLite database layer running in Write-Ahead-Logging (WAL) mode. |
 | **Binary Stream Multiplexer** | [`src/tunnel/stream-tunnel.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/tunnel/stream-tunnel.ts) | Multiplexes 16-byte framed binary PTY streams over WebSockets. |
 

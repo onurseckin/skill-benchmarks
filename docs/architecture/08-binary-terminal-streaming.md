@@ -1,6 +1,6 @@
 # Chapter 08: Binary Terminal Streaming Protocol
 
-[← Previous: 07. Scenario Fuzzing & Chaos](07-fuzzing-and-chaos.md) | [Architecture Index](README.md)
+[← Previous: 07. Chaos Fault Injection](07-fuzzing-and-chaos.md) | [Architecture Index](README.md)
 
 ---
 
@@ -118,4 +118,4 @@ The binary protocol ensures zero-overhead multiplexing of PTY terminal sessions 
 
 ---
 
-[← Previous: 07. Scenario Fuzzing & Chaos](07-fuzzing-and-chaos.md) | [Architecture Index](README.md)
+[← Previous: 07. Chaos Fault Injection](07-fuzzing-and-chaos.md) | [Architecture Index](README.md)

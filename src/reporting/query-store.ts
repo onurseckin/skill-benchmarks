@@ -1,7 +1,6 @@
 import type { Database } from "bun:sqlite";
 import { assertBenchmarkAuthority, isEligibleRunRecord } from "../shared/benchmark-authority.js";
 import type {
-  EloRatingRecord,
   EligibleRunRecord,
   RunManifest,
   RunMetricsSummary,
@@ -55,16 +54,6 @@ interface RunRow {
   readonly evaluation_json: string | null;
 }
 
-interface EloRow {
-  readonly skill_id: string;
-  readonly rating: number;
-  readonly matches_played: number;
-  readonly wins: number;
-  readonly losses: number;
-  readonly ties: number;
-  readonly last_updated: string;
-}
-
 export class ReportingQueryStore {
   public constructor(private readonly database: Database) {}
 
@@ -93,59 +82,6 @@ export class ReportingQueryStore {
     const records = this.queryRuns({ ...filter, authority: "eligible" });
     if (!records.every(isEligibleRunRecord)) throw new TypeError("Eligible run query returned contradictory evidence");
     return records;
-  }
-
-  public updateEloScore(
-    candidate: EligibleRunRecord,
-    opponent: EligibleRunRecord,
-    result: 1 | 0.5 | 0,
-    kFactor: number = 32
-  ): void {
-    assertEligibleRatingRecord(candidate);
-    assertEligibleRatingRecord(opponent);
-    const getStatement = this.database.prepare("SELECT * FROM elo_ratings WHERE skill_id = ?");
-    const existingCandidate = getStatement.get(candidate.skillId) as EloRow | null;
-    const existingOpponent = getStatement.get(opponent.skillId) as EloRow | null;
-    const ratingCandidate = existingCandidate?.rating ?? 1500;
-    const ratingOpponent = existingOpponent?.rating ?? 1500;
-    const expectedCandidate = 1 / (1 + Math.pow(10, (ratingOpponent - ratingCandidate) / 400));
-    const expectedOpponent = 1 - expectedCandidate;
-    const updatedCandidate = ratingCandidate + kFactor * (result - expectedCandidate);
-    const updatedOpponent = ratingOpponent + kFactor * (1 - result - expectedOpponent);
-    const now = new Date().toISOString();
-    const upsert = this.database.prepare(`
-      INSERT INTO elo_ratings (skill_id, rating, matches_played, wins, losses, ties, last_updated)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(skill_id) DO UPDATE SET
-        rating = excluded.rating, matches_played = excluded.matches_played,
-        wins = excluded.wins, losses = excluded.losses, ties = excluded.ties,
-        last_updated = excluded.last_updated
-    `);
-    this.database.transaction(() => {
-      upsert.run(candidate.skillId, updatedCandidate, (existingCandidate?.matches_played ?? 0) + 1,
-        (existingCandidate?.wins ?? 0) + (result === 1 ? 1 : 0),
-        (existingCandidate?.losses ?? 0) + (result === 0 ? 1 : 0),
-        (existingCandidate?.ties ?? 0) + (result === 0.5 ? 1 : 0), now);
-      upsert.run(opponent.skillId, updatedOpponent, (existingOpponent?.matches_played ?? 0) + 1,
-        (existingOpponent?.wins ?? 0) + (result === 0 ? 1 : 0),
-        (existingOpponent?.losses ?? 0) + (result === 1 ? 1 : 0),
-        (existingOpponent?.ties ?? 0) + (result === 0.5 ? 1 : 0), now);
-    })();
-  }
-
-  public getEloLeaderboard(): readonly EloRatingRecord[] {
-    const rows = this.database.prepare("SELECT * FROM elo_ratings ORDER BY rating DESC, wins DESC").all() as EloRow[];
-    return rows.map((row) => ({
-      skillId: row.skill_id,
-      rating: row.rating,
-      matchesPlayed: row.matches_played,
-      wins: row.wins,
-      losses: row.losses,
-      ties: row.ties,
-      winRate: row.matches_played > 0 ? (row.wins + 0.5 * row.ties) / row.matches_played : 0,
-      confidenceInterval95: computeConfidenceInterval(row.wins, row.ties, row.matches_played),
-      lastUpdated: row.last_updated,
-    }));
   }
 
 }
@@ -214,24 +150,6 @@ function validateMappedRecord(record: RunRecord): RunRecord {
   return record;
 }
 
-function assertEligibleRatingRecord(record: EligibleRunRecord): void {
-  assertBenchmarkAuthority(record);
-  const identity = record.evidence.identity;
-  if (
-    !isEligibleRunRecord(record)
-    || record.executionMode !== "live"
-    || record.simulated
-    || record.dryRun
-    || record.status !== "completed"
-    || record.terminationReason !== "success"
-    || identity.runId !== record.runId
-    || identity.scenarioId !== record.scenarioId
-    || identity.skillId !== record.skillId
-    || identity.modelId !== record.modelId
-    || identity.providerId !== record.providerId
-  ) throw new TypeError("Elo mutation requires eligible benchmark evidence");
-}
-
 function mapCommonFields(row: RunRow) {
   const manifest = parseJson<RunManifest>(nullableString(row.manifest_json));
   const metrics = parseJson<RunMetricsSummary>(nullableString(row.metrics_json));
@@ -266,16 +184,6 @@ function mapCommonFields(row: RunRow) {
     ...(manifest === undefined ? {} : { manifest }),
     ...(metrics === undefined ? {} : { metrics }),
   };
-}
-
-function computeConfidenceInterval(wins: number, ties: number, matches: number): readonly [number, number] {
-  if (matches <= 0) return [0, 0];
-  const score = (wins + 0.5 * ties) / matches;
-  const z = 1.96;
-  const denominator = 1 + (z * z) / matches;
-  const center = (score + (z * z) / (2 * matches)) / denominator;
-  const margin = (z * Math.sqrt((score * (1 - score) + (z * z) / (4 * matches)) / matches)) / denominator;
-  return [Math.max(0, center - margin), Math.min(1, center + margin)];
 }
 
 function parseJson<T>(raw: string | null): T | undefined {

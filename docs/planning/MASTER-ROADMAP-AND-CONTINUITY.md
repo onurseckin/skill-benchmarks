@@ -8,7 +8,7 @@ The `skill-benchmarks` platform is an industrial-grade, multi-agent benchmarking
 2. **File Size Ceiling**: Strictly `<= 400` lines of code per source file across all subsystems.
 3. **Strict Type Safety**: Complete TypeScript strictness with 0 `any` annotations and 0 compiler suppressions (`@ts-ignore`, `@ts-expect-error`, `eslint-disable`).
 4. **Hermetic Docker Sandbox Isolation**: Container pool lifecycle management with cgroups v2 resource accounting, virtual network namespace control, and ephemeral volume snapshots.
-5. **Dual-Layer Evaluation**: Multi-stage deterministic AST / behavioral grading coupled with calibrated multi-agent LLM peer critique and Bradley-Terry Elo rating tournaments.
+5. **Evidence-Gated Evaluation**: Score and pass claims require validated nonempty evaluation evidence, exact provenance, and shared benchmark authority.
 6. **Neo-Brutalist Visual Telemetry**: High-contrast, dark monochrome (`#000000` / `#FFFFFF`) interactive web dashboard, SVG charts, ANSI TUI players, and binary WebSocket terminal streaming.
 
 ---
@@ -51,17 +51,17 @@ The `skill-benchmarks` platform is an industrial-grade, multi-agent benchmarking
   │   │     (src/infrastructure/container, workspace, telemetry)        │    │
   │   └─────────┬─────────────────────────────────────────────┬─────────┘    │
   │             │                                             │              │
-  │   ┌─────────▼─────────┐                         ┌─────────▼─────────┐    │
-  │   │  Chaos Injection  │                         │ AST Fuzzer Engine │    │
-  │   │   (src/chaos/)    │                         │   (src/fuzzer/)   │    │
-  │   └─────────┬─────────┘                         └─────────┬─────────┘    │
-  └─────────────┼─────────────────────────────────────────────┼──────────────┘
-                │                                             │
-  ┌─────────────▼─────────────────────────────────────────────▼──────────────┐
+  │   ┌─────────▼─────────┐                                                   │
+  │   │  Chaos Injection  │                                                   │
+  │   │   (src/chaos/)    │                                                   │
+  │   └─────────┬─────────┘                                                   │
+  └─────────────┼─────────────────────────────────────────────────────────────┘
+                │
+  ┌─────────────▼────────────────────────────────────────────────────────────┐
   │                           Evaluation & Reporting                         │
   │   ┌───────────────────┐  ┌───────────────────┐  ┌───────────────────┐    │
-  │   │ Deterministic AST │  │ Bradley-Terry Elo │  │ Multi-Agent Arena │    │
-  │   │    (src/eval/)    │  │   (src/judge/)    │  │   (src/arena/)    │    │
+  │   │ Deterministic AST │  │ Benchmark Authority│ │ Unranked Diagnostics│   │
+  │   │    (src/eval/)    │  │   (src/shared/)   │  │   (src/arena/)    │    │
   │   └─────────┬─────────┘  └─────────┬─────────┘  └─────────┬─────────┘    │
   │             │                      │                      │              │
   │   ┌─────────▼──────────────────────▼──────────────────────▼─────────┐    │
@@ -83,21 +83,19 @@ The `skill-benchmarks` platform is an industrial-grade, multi-agent benchmarking
 | **Frontier Providers** | `src/providers` | 7 | 1,662 | Multi-model adapters for Anthropic Claude, Google Gemini, OpenAI GPT, token pricing engine, streaming normalization, and adapter factory. |
 | **Canonical Skills** | `src/skills` | 9 | 2,035 | Master canonical registry of 29 skills.sh skills across 7 domains, catalog parser, downloader, schema validators, and documentation formatter. |
 | **Runner & Sandbox** | `src/runner` | 9 | 1,994 | Scenario execution loop, tool dispatcher, isolated bash/filesystem interceptor handlers, context window token budget manager, and matrix executor. |
-| **Evaluation Engine** | `src/eval` | 6 | 1,374 | Multi-stage deterministic AST grading, semantic LLM-as-a-Judge evaluation, pairwise Elo tournament computations, and multi-dimensional scoring. |
+| **Evaluation Engine** | `src/eval` | 6 | 1,374 | Nonempty deterministic evidence, optional judge evidence, composite validation, and evidence digest binding. |
 | **Reporting & Persistence** | `src/reporting` | 6 | 1,679 | SQLite telemetry database (WAL mode), statistical aggregator, markdown leaderboard generator, and neo-brutalist HTML dashboard compiler. |
 | **Universal CLI** | `src/cli` | 5 | 1,429 | Interactive command-line interface, subcommands router (`run`, `sweep`, `eval`, `replay`, `server`, `skills`), flag parser, and ANSI status formatters. |
 | **Sweep Orchestrator** | `src/sweep` | 5 | 1,267 | High-throughput matrix runner, adaptive token-bucket rate limiter, execution checkpointing, and dynamic concurrency worker pools. |
 | **Replay Visualizer** | `src/replay` | 5 | 1,180 | Step-by-step ANSI TUI trajectory player, standalone SVG/HTML web visual replay player, and trajectory state scrubber. |
 | **CI / CD Bot** | `src/ci` | 4 | 860 | Automated GitHub Actions benchmark workflow contract, statistical regression detection (Welch\'s t-test, Fisher\'s exact test), and PR leaderboard commenter. |
-| **Fuzzer Engine** | `src/fuzzer` | 4 | 884 | AST mutation engine for TypeScript/JavaScript, combinatorial scenario permutation mutator, and adversarial stress tester. |
 | **Server & HTTP API** | `src/server` | 4 | 861 | Lightweight native Bun HTTP and SSE telemetry server, RESTful metrics endpoints, and live agent status streams. |
 | **Scenario Synthesizer** | `src/generator` | 4 | 914 | Autonomous benchmark scenario generator, skill documentation AST analyzer, and self-contained verification gate authoring. |
 | **Dashboard UI** | `src/dashboard-ui` | 5 | 1,092 | Client-side SPA components in monochrome neo-brutalist design, reactive state management, and real-time telemetry stream consumers. |
-| **Arena & Debate** | `src/arena` | 4 | 1,159 | Multi-agent dialectical critique arena, round-robin debate engine, and multi-model consensus scoring. |
+| **Arena Diagnostics** | `src/arena` | 3 | 1,159 | Claim-free debate and jury insufficiency diagnostics without synthetic turns, verdicts, or ratings. |
 | **Semantic Analytics** | `src/analytics` | 4 | 890 | Semantic trajectory analyzer, anomaly detector, multi-label failure mode taxonomy classifier, and error recovery tracker. |
 | **PTY Terminal Tunnel** | `src/tunnel` | 4 | 1,243 | Live terminal streaming multiplexer, PTY manager, bidirectional WebSocket streaming tunnel, and remote session viewer. |
 | **Chaos Engineering** | `src/chaos` | 4 | 812 | Docker fault injector, network latency and packet loss simulation (`tc netem`), process killing, and disk pressure chaos orchestrator. |
-| **LLM Judge & Bradley-Terry** | `src/judge` | 4 | 1,084 | Calibrated multi-turn LLM jury engine, Bradley-Terry maximum likelihood estimation solver, and blind pairwise debate evaluator. |
 | **Adaptive Optimizer** | `src/optimizer` | 4 | 863 | Dynamic adaptive token and latency budget optimizer, PID token velocity controller, and multi-tier model cascade routing. |
 | **Conversational Dialog** | `src/dialog` | 4 | 985 | Multi-turn conversational evaluation pipeline, stakeholder persona simulator, and rubric-based interview evaluator. |
 | **Streaming Canvas** | `src/streaming` | 4 | 984 | Real-time WebSocket/SSE telemetry broadcaster and HTML5 Canvas visual renderer for live agent trajectories. |
@@ -116,14 +114,14 @@ The `skill-benchmarks` platform is an industrial-grade, multi-agent benchmarking
 | `mind-gen-4` | Gen 4 Mind | Reporting & DB | SQLite persistence and markdown leaderboards | Sealed |
 | `mind-gen-5` | Gen 5 Mind | CLI & Sweep | Matrix execution and CLI runner contracts | Sealed |
 | `mind-gen-6` | Gen 6 Mind | Replay & CI | Interactive TUI visualizers and regression bots | Sealed |
-| `mind-gen-7` | Gen 7 Mind | Advanced Features | Fuzzing, AST generation, and server endpoints | Sealed |
-| `mind-gen-8` | Gen 8 Mind | Arena & Analytics | Multi-agent debates, anomaly classification | Sealed |
+| `mind-gen-7` | Gen 7 Mind | Advanced Features | AST generation and server endpoints | Sealed |
+| `mind-gen-8` | Gen 8 Mind | Arena & Analytics | Arena diagnostics, insufficiency arbitration, anomaly classification | Sealed |
 | `mind-gen-9` | Gen 9 Mind | Convergence Fleet | Active wave coordination (cand-17 to cand-24) | Active |
 | `orchestrator-infrastructure` | Gen 2 (cand-infra) | `src/infrastructure/` | Container pool, workspace hydration, telemetry scribe | Sealed |
 | `orchestrator-providers` | Gen 2 (cand-prov) | `src/providers/` | Anthropic, Gemini, OpenAI adapters and pricing | Sealed |
 | `orchestrator-runner` | Gen 3 (cand-run) | `src/runner/` | Execution loop, tool dispatcher, matrix runner | Sealed |
 | `orchestrator-scenarios` | Gen 3 (cand-scen) | `scenarios/` | Phase 1 benchmark scenarios and catalog | Sealed |
-| `orchestrator-eval` | Gen 3 (cand-eval) | `src/eval/` | Multi-stage deterministic checks and Elo solver | Sealed |
+| `orchestrator-eval` | Gen 3 (cand-eval) | `src/eval/` | Multi-stage deterministic evidence and composite validation | Sealed |
 | `orchestrator-reporting` | Gen 4 (cand-rep) | `src/reporting/` | SQLite database, HTML dashboard, leaderboard | Sealed |
 | `orchestrator-cli` | Gen 5 (cand-cli) | `src/cli/`, `bin/` | Universal CLI binary and subcommands | Sealed |
 | `orchestrator-sweep` | Gen 5 (cand-sweep) | `src/sweep/` | Parallel matrix sweep and token-bucket limiter | Sealed |
@@ -132,14 +130,12 @@ The `skill-benchmarks` platform is an industrial-grade, multi-agent benchmarking
 | `orchestrator-scenarios-advanced`| Gen 6 (cand-adv) | `scenarios/` | Composite, security, and optimization scenarios | Sealed |
 | `orchestrator-server` | Gen 7 (cand-srv) | `src/server/` | Native HTTP/SSE server and REST API | Sealed |
 | `orchestrator-trials` | Gen 7 (cand-tri) | `data/` | Benchmark trial execution and golden dataset | Sealed |
-| `orchestrator-fuzzer` | Gen 7 (cand-5) | `src/fuzzer/` | AST mutation and scenario fuzzer engine | Sealed |
 | `orchestrator-generator` | Gen 7 (cand-10) | `src/generator/` | Autonomous scenario synthesizer | Sealed |
 | `orchestrator-dashboard-ui` | Gen 7 (cand-8) | `src/dashboard-ui/` | Client SPA dashboard components | Sealed |
-| `orchestrator-arena` | Gen 8 (cand-9) | `src/arena/` | Multi-agent debate arena and consensus scorer | Sealed |
+| `orchestrator-arena` | Gen 8 (cand-9) | `src/arena/` | Unranked arena diagnostics and jury-insufficiency arbitration | Sealed |
 | `orchestrator-analytics` | Gen 8 (cand-13) | `src/analytics/` | Semantic trajectory analyzer, failure classifier | Sealed |
 | `orchestrator-tunnel` | Gen 8 (cand-tun) | `src/tunnel/` | Live PTY terminal streaming and multiplexer | Sealed |
 | `orchestrator-chaos` | Gen 8 (cand-12) | `src/chaos/` | Docker fault injection and chaos orchestrator | Sealed |
-| `orchestrator-judge` | Gen 8 (cand-jdg) | `src/judge/` | LLM jury engine and Bradley-Terry MLE solver | Sealed |
 | `orchestrator-optimizer` | Gen 8 (cand-15) | `src/optimizer/` | Dynamic token/latency budget controller | Sealed |
 | `orchestrator-streaming` | Gen 8 (cand-16) | `src/streaming/` | HTML5 Canvas visualizer and SSE broadcaster | Sealed |
 | `orchestrator-skills` | Gen 9 (cand-17) | `src/skills/` | Canonical skill registry (29 skills, 7 domains) | Sealed |
@@ -200,14 +196,14 @@ Generation 9 represents the Convergence & Usability Wave of the `skill-benchmark
   - `02-container-sandbox.md`: Docker daemon integration, pool pre-warming, volume mount strategy, and cgroups v2 quotas.
   - `03-provider-adapters.md`: Frontier LLM provider normalization, rate limiting, and pricing engines.
   - `04-runner-and-interceptor.md`: Execution loop, tool virtualization, and sandbox interceptors.
-  - `05-dual-layer-evaluation.md`: AST deterministic checkers, LLM-as-a-Judge rubrics, and Bradley-Terry Elo solving.
-  - `06-telemetry-and-reporting.md`: SQLite event recording, WAL checkpointing, Pareto frontiers, and metric aggregation.
-  - `07-fuzzing-and-chaos.md`: AST mutation strategies, network latency fault injection, and chaos testing.
+  - `05-dual-layer-evaluation.md`: deterministic evidence, composite validation, and benchmark authority.
+  - `06-telemetry-and-reporting.md`: SQLite event recording, authority-validated cohorts, and report publication.
+  - `07-fuzzing-and-chaos.md`: container fault injection and diagnostic observations.
   - `08-binary-terminal-streaming.md`: 16-byte binary framing, WebSocket streaming, and PTY multiplexing.
 
 #### cand-21: Human Operator Usage Guide (`orchestrator-usage-guide`)
 - **Scope**: `docs/usage-guide/` (7 comprehensive guides)
-- **Deliverables**: Complete documentation for operators, developers, and benchmark researchers covering installation, configuration, CLI subcommands, interactive shell mode, single trial execution, matrix sweeps, TUI replay player, web terminal streaming, multi-agent arena debates, and custom scenario authoring.
+- **Deliverables**: Operator documentation covering installation, configuration, CLI subcommands, single and matrix runs, replay, streaming, unranked arena diagnostics, and custom scenario authoring.
 
 #### cand-22: Root Project Documentation (`orchestrator-readme`)
 - **Scope**: `README.md`
@@ -247,7 +243,7 @@ The roadmap to full-scale autonomous live execution proceeds in four determinist
  ┌──────────────────────────────────▼───────────────────────────────────┐
  │ STAGE 3: Canonical Scenario Coverage Expansion (All 29 Skills)       │
  │ • 29 dedicated benchmark scenarios covering all canonical skills.sh  │
- │ • Fuzzing, mutation, and adversarial edge cases generation           │
+ │ • Deterministic admitted scenario coverage and edge cases            │
  └──────────────────────────────────┬───────────────────────────────────┘
                                     │
  ┌──────────────────────────────────▼───────────────────────────────────┐
@@ -260,7 +256,7 @@ The roadmap to full-scale autonomous live execution proceeds in four determinist
 ### Stage 1: Core Subsystem Convergence & Unified Integration Pipeline
 - **Goal**: Seamlessly wire all 22 delivered `src/` subsystems into a single executable orchestration loop.
 - **Key Milestones**:
-  1. *Subsystem Interop Contract*: Ensure `src/runner`, `src/eval`, `src/judge`, `src/chaos`, `src/optimizer`, and `src/tunnel` execute in a coordinated pipeline during single trial and matrix runs.
+  1. *Subsystem Interop Contract*: Ensure `src/runner`, `src/eval`, `src/chaos`, `src/optimizer`, and `src/tunnel` execute in a coordinated pipeline during single trial and matrix runs.
   2. *Live Telemetry Streaming*: Connect `src/streaming/canvas-streamer.ts` and `src/tunnel/stream-tunnel.ts` to `src/server/http-server.ts` for live real-time web visualization during benchmark runs.
   3. *Dynamic Budget Feedback*: Wire `src/optimizer/budget-controller.ts` directly into `src/runner/context-manager.ts` to dynamically throttle context consumption and switch model tiers based on real-time token spend.
 - **Verification Gate**: `bun run src/scripts/quality-gate.ts` + dry-run matrix execution of all 12 existing scenarios.
@@ -284,7 +280,7 @@ The roadmap to full-scale autonomous live execution proceeds in four determinist
      - `security-compliance` (4 skills): `owasp-audit`, `jwt-validation`, `cors-headers`, `secret-scanning`.
      - `data-ml` (4 skills): `pandas-pipeline`, `sklearn-model`, `sql-analytics`, `data-visualization`.
      - `workflow-automation` (4 skills): `cron-scheduling`, `webhook-dispatcher`, `slack-bot`, `email-notifications`.
-  2. *Adversarial & Fuzzed Variations*: Run `src/fuzzer/fuzzer-engine.ts` against all 29 scenarios to generate combinatorial AST mutations and syntax variations.
+  2. *Adversarial Coverage*: Admit explicit scenario fixtures and execute them through the common runner and evaluator authority.
 - **Verification Gate**: `bun run src/scripts/verify-scenarios.ts` verifying scenario structure, step definitions, and verification gates.
 
 ### Stage 4: Production Readiness, Live Frontier Sweeps & Continuous CI
@@ -292,7 +288,7 @@ The roadmap to full-scale autonomous live execution proceeds in four determinist
 - **Key Milestones**:
   1. *Frontier Model Matrix Sweeps*: Execute sweeps across Anthropic Claude (3.5 Sonnet, 3.7 Sonnet), OpenAI (GPT-4o, GPT-4.5), and Google Gemini (1.5 Pro, 2.0 Flash) using `skill-benchmarks sweep --matrix`.
   2. *Continuous Leaderboard Deployment*: Publish operator-requested leaderboard and dashboard exports only from eligible benchmark evidence.
-  3. *GitHub Actions CI Bot*: Deploy `.github/workflows/benchmarks.yml` with `src/ci/pr-commenter.ts` to comment delta-Elo scores on incoming PRs.
+  3. *GitHub Actions Smoke Gate*: Execute a canonical no-key run and retain its diagnostic evidence without publishing regression claims.
 - **Verification Gate**: Production run completion with an output-root SQLite database, eligible evidence-backed leaderboards, and zero regression alerts.
 
 ---
@@ -423,9 +419,9 @@ For detailed technical specifications, refer to the following companion document
 - **Container Sandbox & Isolation**: `docs/architecture/02-container-sandbox.md`
 - **Frontier LLM Providers & Pricing**: `docs/architecture/03-provider-adapters.md`
 - **Execution Loop & Tool Interception**: `docs/architecture/04-runner-and-interceptor.md`
-- **Dual-Layer Evaluation & Bradley-Terry Elo**: `docs/architecture/05-dual-layer-evaluation.md`
+- **Evidence Eligibility & Evaluation**: `docs/architecture/05-dual-layer-evaluation.md`
 - **Telemetry, SQLite Database & Reporting**: `docs/architecture/06-telemetry-and-reporting.md`
-- **AST Fuzzing & Chaos Engineering**: `docs/architecture/07-fuzzing-and-chaos.md`
+- **Chaos Fault Injection**: `docs/architecture/07-fuzzing-and-chaos.md`
 - **PTY Terminal & Binary Streaming Tunnel**: `docs/architecture/08-binary-terminal-streaming.md`
 - **Operator & Human Usage Guide**: `docs/usage-guide/README.md`
 - **Canonical Skill Registry**: `src/skills/registry.ts`

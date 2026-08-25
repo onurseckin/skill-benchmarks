@@ -1,280 +1,236 @@
-import { randomUUID } from "node:crypto";
-import { resolve } from "node:path";
-import { ScenarioRunnerEngine } from "./runner-engine.js";
-import { ScenarioLoader } from "./scenario-loader.js";
-import { createProviderAdapter } from "../providers/factory.js";
-import { BlindPairwiseEloEngine } from "../eval/pairwise-elo.js";
-import { getOrCreateModelDefinition } from "../models/index.js";
-import type { ExecutionLimits, ScenarioResult, ScenarioDefinition } from "./types.js";
-import type { IContainerPoolManager, IContainerInstance } from "../infrastructure/container/types.js";
-import type { PairwiseCandidate } from "../eval/types.js";
-import type { TelemetryDatabase } from "../reporting/db.js";
+import { MatrixSweepEngine } from "../sweep/sweep-engine.js";
+import { validateMatrixSweepConfig } from "../sweep/sweep-config-validation.js";
+import type { MatrixCellResult, MatrixSweepConfig, MatrixSweepSummary } from "../sweep/types.js";
+import type { ExecutionMode } from "../shared/execution-mode.js";
 
-export interface ArenaBattleMatchConfig {
-  readonly matchId?: string;
-  readonly scenarioId: string;
-  readonly skillId?: string;
-  readonly modelA: string;
-  readonly modelB: string;
-  readonly providerA?: string;
-  readonly providerB?: string;
-  readonly judgeModelId?: string;
-  readonly judgeProviderId?: string;
-  readonly juryModelIds?: readonly string[];
-  readonly limits?: Partial<ExecutionLimits>;
-  readonly containerPool?: IContainerPoolManager;
-  readonly dryRun?: boolean;
-  readonly kFactor?: number;
-  readonly initialRatingA?: number;
-  readonly initialRatingB?: number;
-  readonly temperatureA?: number;
-  readonly temperatureB?: number;
-  readonly thinkingA?: "none" | "low" | "medium" | "high" | "max";
-  readonly thinkingB?: "none" | "low" | "medium" | "high" | "max";
-  readonly dbPath?: string;
-  readonly telemetryDb?: TelemetryDatabase;
-}
-
-export interface ArenaBattleResult {
-  readonly matchId: string;
+export interface ArenaPairing {
   readonly scenarioId: string;
   readonly skillId: string;
   readonly modelA: string;
   readonly modelB: string;
-  readonly resultA: ScenarioResult;
-  readonly resultB: ScenarioResult;
-  readonly winner: "model_a" | "model_b" | "tie";
-  readonly scoreA: number;
-  readonly scoreB: number;
-  readonly preRatingA: number;
-  readonly preRatingB: number;
-  readonly postRatingA: number;
-  readonly postRatingB: number;
-  readonly deltaA: number;
-  readonly deltaB: number;
-  readonly rationale: string;
-  readonly confidenceScore: number;
-  readonly positionBiasDetected: boolean;
-  readonly totalDurationMs: number;
-  readonly timestamp: string;
+  readonly providerA: string;
+  readonly providerB: string;
 }
 
-export interface ArenaTournamentConfig {
-  readonly modelIds: readonly string[];
-  readonly scenarioIds: readonly string[];
-  readonly skillId?: string;
-  readonly judgeModelId?: string;
-  readonly judgeProviderId?: string;
-  readonly kFactor?: number;
-  readonly initialRating?: number;
-  readonly dryRun?: boolean;
-  readonly containerPool?: IContainerPoolManager;
+export interface ArenaCandidateDiagnostic {
+  readonly runId: string;
+  readonly modelId: string;
+  readonly providerId: string;
+  readonly executionMode: ExecutionMode;
+  readonly simulated: boolean;
+  readonly lifecycleStatus: string;
+  readonly terminationReason?: string;
+  readonly errorCount: number;
+  readonly benchmarkCohort: "validation" | "operational";
+  readonly eligibilityStatus: "ineligible" | "unknown";
+  readonly evaluationStatus: "not_requested" | "not_evaluated" | "invalid";
+  readonly evidenceStatus: "unavailable" | "collecting" | "complete" | "invalid";
 }
 
-export interface ArenaTournamentResult {
-  readonly matches: readonly ArenaBattleResult[];
-  readonly ratings: Readonly<Record<string, number>>;
-  readonly winStats: Readonly<Record<string, { readonly wins: number; readonly losses: number; readonly draws: number; readonly winRate: number }>>;
-  readonly totalMatches: number;
-  readonly totalDurationMs: number;
+export interface ArenaPlan {
+  readonly status: "planned";
+  readonly displayStatus: "PLANNED / UNRANKED";
+  readonly authority: "diagnostic";
+  readonly rankEligible: false;
+  readonly reason: "dry_plan";
+  readonly pairings: readonly [ArenaPairing];
+}
+
+export interface ArenaDiagnosticResult {
+  readonly status: "simulated" | "not_evaluated" | "failed";
+  readonly displayStatus: "SIMULATED / UNRANKED" | "NOT EVALUATED / UNRANKED" | "FAILED / UNRANKED";
+  readonly authority: "diagnostic";
+  readonly rankEligible: false;
+  readonly simulated: boolean;
+  readonly reason: "simulated_candidates" | "candidate_failed" | "candidate_incomplete" | "candidate_evidence_missing" | "candidate_evidence_invalid" | "candidate_identity_mismatch" | "match_evidence_not_persisted";
+  readonly pairing: ArenaPairing;
+  readonly candidates: readonly ArenaCandidateDiagnostic[];
+}
+
+export type ArenaResult = ArenaPlan | ArenaDiagnosticResult;
+
+export interface ArenaBattleConfig {
+  readonly pairing: ArenaPairing;
+  readonly dryRun: boolean;
+  readonly executionMode: ExecutionMode;
+  readonly sweepConfig?: MatrixSweepConfig;
+}
+
+interface CompetitionSweepExecutor {
+  run(config: MatrixSweepConfig): Promise<MatrixSweepSummary>;
 }
 
 export class ArenaRunner {
-  private readonly scenarioLoader: ScenarioLoader;
-  private readonly runnerEngine: ScenarioRunnerEngine;
+  public constructor(
+    private readonly createSweepExecutor: () => CompetitionSweepExecutor = () => new MatrixSweepEngine()
+  ) {}
 
-  constructor(scenarioLoader?: ScenarioLoader, runnerEngine?: ScenarioRunnerEngine) {
-    this.scenarioLoader = scenarioLoader ?? new ScenarioLoader();
-    this.runnerEngine = runnerEngine ?? new ScenarioRunnerEngine();
-  }
-
-  private buildSyntheticResult(runId: string, scenarioId: string, skillId: string, modelId: string, durationMs: number): ScenarioResult {
-    return {
-      runId, scenarioId, skillIds: [skillId], modelId,
-      executionMode: "fake", simulated: true,
-      terminationReason: "success", completed: true, turns: 3, turnHistory: [], toolHistory: [], messages: [],
-      finalOutput: `Synthetic solution produced by ${modelId} for ${scenarioId}`,
-      totalDurationMs: durationMs,
-      totalTokens: { inputTokens: 1200, outputTokens: 450, cacheCreationInputTokens: 0, cacheReadInputTokens: 0, totalTokens: 1650 },
-      totalCostUSD: 0, consecutiveToolErrors: 0,
-      startedAt: new Date(Date.now() - durationMs).toISOString(), finishedAt: new Date().toISOString(),
-    };
-  }
-
-  private async executeModelTrial(
-    runId: string,
-    scenario: ScenarioDefinition,
-    skillId: string,
-    modelId: string,
-    providerIdOverride: string | undefined,
-    temperature: number | undefined,
-    thinkingLevel: ("none" | "low" | "medium" | "high" | "max") | undefined,
-    limits: ExecutionLimits,
-    containerPool: IContainerPoolManager | undefined,
-    dryRun: boolean | undefined
-  ): Promise<{ result: ScenarioResult; diff: string }> {
-    if (dryRun) {
-      const simDuration = 60 + Math.floor(Math.random() * 80);
-      const res = this.buildSyntheticResult(runId, scenario.id, skillId, modelId, simDuration);
-      const diff = `--- /dev/null\n+++ b/solution.ts\n@@ -0,0 +1,5 @@\n+export const ${modelId.replace(/[^a-zA-Z0-9]/g, "_")} = true;\n`;
-      return { result: res, diff };
-    }
-
-    let container: IContainerInstance | undefined;
-    if (containerPool) {
-      container = await containerPool.acquire({
-        imageTag: "skill-benchmarks-sandbox:latest",
-        runId,
-        scenarioId: scenario.id,
-        resourceLimits: { cpus: 2, memoryMb: 4096, pidsLimit: 512 },
-        networkMode: "sb-bridge-isolated",
-        workspaceVolumeName: `sb-vol-${runId}`,
-        artifactHostPath: resolve(process.cwd(), `.benchmarks/artifacts/${runId}`),
-        timeouts: {
-          commandTimeoutMs: limits.toolTimeoutMs,
-          turnTimeoutMs: 60000,
-          totalScenarioTimeoutMs: limits.maxWallClockTimeMs,
-        },
-        labels: { "io.skill-benchmarks.arena-run": runId },
-      });
-    }
-
-    try {
-      const def = getOrCreateModelDefinition(modelId);
-      const effectiveProvider = providerIdOverride ?? def.provider;
-      const provider = createProviderAdapter({
-        providerId: (effectiveProvider as "anthropic" | "google" | "openai" | "ollama" | "custom") || "anthropic",
-        defaultModel: modelId,
-      });
-
-      const result = await this.runnerEngine.run({
-        runId, scenarioId: scenario.id, skillIds: [skillId], modelId, provider,
-        prompt: scenario.instructions, container, limits, temperature,
-        thinkingLevel: thinkingLevel ?? def.defaultThinkingLevel,
-      });
-
-      let diff = "";
-      for (const t of result.toolHistory) {
-        if (t.output && (t.output.includes("diff --git") || t.output.includes("--- a/"))) {
-          diff += t.output + "\n";
-        }
-      }
-      return { result, diff: diff || result.finalOutput };
-    } finally {
-      if (container && containerPool) await containerPool.release(container);
-    }
-  }
-
-  public async runBattle(config: ArenaBattleMatchConfig): Promise<ArenaBattleResult> {
-    const startTime = performance.now();
-    const matchId = config.matchId ?? randomUUID();
-    const scenario = this.scenarioLoader.loadScenario(config.scenarioId);
-    const skillId = config.skillId ?? scenario.targetSkill ?? "generic-agent";
-
-    const limits: ExecutionLimits = {
-      maxTurns: 10, maxWallClockTimeMs: 120000, maxCostUSD: 1.0,
-      maxConsecutiveToolFailures: 3, toolTimeoutMs: 30000, maxOutputSizeBytes: 1024 * 1024,
-      ...config.limits,
-    };
-
-    const runIdA = `arena-${matchId}-A-${config.modelA}`;
-    const runIdB = `arena-${matchId}-B-${config.modelB}`;
-
-    const [trialA, trialB] = await Promise.all([
-      this.executeModelTrial(runIdA, scenario, skillId, config.modelA, config.providerA, config.temperatureA, config.thinkingA, limits, config.containerPool, config.dryRun),
-      this.executeModelTrial(runIdB, scenario, skillId, config.modelB, config.providerB, config.temperatureB, config.thinkingB, limits, config.containerPool, config.dryRun),
-    ]);
-
-    const candidateA: PairwiseCandidate = {
-      candidateId: config.modelA, modelId: config.modelA, runId: runIdA, skillId,
-      gitDiff: trialA.diff, finalMessage: trialA.result.finalOutput, executionOutput: trialA.result.finalOutput,
-    };
-    const candidateB: PairwiseCandidate = {
-      candidateId: config.modelB, modelId: config.modelB, runId: runIdB, skillId,
-      gitDiff: trialB.diff, finalMessage: trialB.result.finalOutput, executionOutput: trialB.result.finalOutput,
-    };
-
-    const judgeModel = config.judgeModelId ?? "claude-3-7-sonnet";
-    const judgeDef = getOrCreateModelDefinition(judgeModel);
-    const judgeProviderId = config.judgeProviderId ?? judgeDef.provider;
-    const judgeProvider = createProviderAdapter({
-      providerId: (judgeProviderId as "anthropic" | "google" | "openai" | "ollama" | "custom") || "anthropic",
-      defaultModel: judgeModel,
+  public planBattle(pairing: ArenaPairing): ArenaPlan {
+    validatePairing(pairing);
+    return Object.freeze({
+      status: "planned",
+      displayStatus: "PLANNED / UNRANKED",
+      authority: "diagnostic",
+      rankEligible: false,
+      reason: "dry_plan",
+      pairings: Object.freeze([Object.freeze({ ...pairing })]) as readonly [ArenaPairing],
     });
-
-    const kFactor = config.kFactor ?? 32;
-    const eloEngine = new BlindPairwiseEloEngine(kFactor, 1500);
-    const match = await eloEngine.compareBlind(candidateA, candidateB, scenario.instructions, judgeProvider, { temperature: 0.0 }, config.scenarioId);
-
-    const winner: "model_a" | "model_b" | "tie" = match.finalWinner === "candidate_a" ? "model_a" : match.finalWinner === "candidate_b" ? "model_b" : "tie";
-    const scoreA = winner === "model_a" ? 1.0 : winner === "model_b" ? 0.0 : 0.5;
-    const scoreB = 1.0 - scoreA;
-
-    const preRatingA = config.initialRatingA ?? 1500;
-    const preRatingB = config.initialRatingB ?? 1500;
-    const confidence = match.confidenceScore ?? 1.0;
-    const expectedA = eloEngine.calculateExpectedScore(preRatingA, preRatingB);
-    const expectedB = 1 - expectedA;
-    const postRatingA = Math.round(preRatingA + kFactor * (scoreA - expectedA) * confidence);
-    const postRatingB = Math.round(preRatingB + kFactor * (scoreB - expectedB) * confidence);
-
-    return {
-      matchId, scenarioId: config.scenarioId, skillId, modelA: config.modelA, modelB: config.modelB,
-      resultA: trialA.result, resultB: trialB.result, winner, scoreA, scoreB,
-      preRatingA, preRatingB, postRatingA, postRatingB,
-      deltaA: postRatingA - preRatingA, deltaB: postRatingB - preRatingB,
-      rationale: match.rationale, confidenceScore: confidence,
-      positionBiasDetected: match.positionBiasDetected,
-      totalDurationMs: Math.round(performance.now() - startTime),
-      timestamp: new Date().toISOString(),
-    };
   }
 
-  public async runTournament(config: ArenaTournamentConfig): Promise<ArenaTournamentResult> {
-    const startTime = performance.now();
-    const ratings: Record<string, number> = {};
-    const winStats: Record<string, { wins: number; losses: number; draws: number; winRate: number }> = {};
-    const initRating = config.initialRating ?? 1500;
-
-    for (const m of config.modelIds) {
-      ratings[m] = initRating;
-      winStats[m] = { wins: 0, losses: 0, draws: 0, winRate: 0 };
+  public async runBattle(config: ArenaBattleConfig): Promise<ArenaResult> {
+    if (config === null || typeof config !== "object" || typeof config.dryRun !== "boolean"
+      || (config.executionMode !== "fake" && config.executionMode !== "live")) {
+      throw new TypeError("Arena execution configuration is invalid");
     }
-
-    const matches: ArenaBattleResult[] = [];
-    for (const scenarioId of config.scenarioIds) {
-      for (let i = 0; i < config.modelIds.length; i++) {
-        for (let j = i + 1; j < config.modelIds.length; j++) {
-          const modelA = config.modelIds[i]!;
-          const modelB = config.modelIds[j]!;
-          const result = await this.runBattle({
-            scenarioId, skillId: config.skillId, modelA, modelB,
-            judgeModelId: config.judgeModelId, judgeProviderId: config.judgeProviderId,
-            kFactor: config.kFactor, initialRatingA: ratings[modelA], initialRatingB: ratings[modelB],
-            dryRun: config.dryRun, containerPool: config.containerPool,
-          });
-          matches.push(result);
-          ratings[modelA] = result.postRatingA;
-          ratings[modelB] = result.postRatingB;
-
-          const statA = winStats[modelA]!;
-          const statB = winStats[modelB]!;
-          if (result.winner === "model_a") { statA.wins += 1; statB.losses += 1; }
-          else if (result.winner === "model_b") { statB.wins += 1; statA.losses += 1; }
-          else { statA.draws += 1; statB.draws += 1; }
-        }
-      }
+    validatePairing(config.pairing);
+    if (config.dryRun) return this.planBattle(config.pairing);
+    if (config.executionMode === "live") {
+      return createDiagnostic(config.pairing, "not_evaluated", "match_evidence_not_persisted", [], false);
     }
-
-    for (const m of config.modelIds) {
-      const s = winStats[m]!;
-      const total = s.wins + s.losses + s.draws;
-      s.winRate = total > 0 ? Number(((s.wins + 0.5 * s.draws) / total).toFixed(4)) : 0;
+    if (config.sweepConfig === undefined) {
+      return createDiagnostic(config.pairing, "failed", "candidate_evidence_missing", [], true);
     }
-
-    return {
-      matches, ratings, winStats, totalMatches: matches.length,
-      totalDurationMs: Math.round(performance.now() - startTime),
-    };
+    validateMatrixSweepConfig(config.sweepConfig);
+    validateSweepBinding(config.pairing, config.sweepConfig);
+    const summary = await this.createSweepExecutor().run(config.sweepConfig);
+    if (summary.results.some((result) => !resultMatchesPairing(result, config.pairing))) {
+      return createDiagnostic(config.pairing, "failed", "candidate_identity_mismatch", [], true);
+    }
+    const candidates = summary.results.map(toCandidateDiagnostic);
+    if (!candidatesMatchPairing(candidates, config.pairing)) {
+      return createDiagnostic(config.pairing, "failed", "candidate_identity_mismatch", candidates, true);
+    }
+    if (!summarySupportsSimulation(summary)) {
+      return createDiagnostic(config.pairing, "failed", "candidate_failed", candidates, true);
+    }
+    if (summary.results.some((result) => !result.executionCompleted || result.runRecord === undefined)) {
+      return createDiagnostic(config.pairing, "failed", "candidate_incomplete", candidates, true);
+    }
+    if (summary.results.some((result) => result.runRecord?.evidence.status === "invalid")) {
+      return createDiagnostic(config.pairing, "failed", "candidate_evidence_invalid", candidates, true);
+    }
+    if (summary.results.some((result) => result.runRecord?.status !== "completed"
+      || result.runRecord.terminationReason !== "success" || result.runRecord.errorCount > 0)) {
+      return createDiagnostic(config.pairing, "failed", "candidate_failed", candidates, true);
+    }
+    if (candidates.length !== 2) {
+      return createDiagnostic(config.pairing, "failed", "candidate_evidence_missing", candidates, true);
+    }
+    return createDiagnostic(config.pairing, "simulated", "simulated_candidates", candidates, true);
   }
+}
+
+function resultMatchesPairing(result: MatrixCellResult, pairing: ArenaPairing): boolean {
+  const cell = result.cell;
+  const expectedModels = new Set([`${pairing.providerA}/${pairing.modelA}`, `${pairing.providerB}/${pairing.modelB}`]);
+  if (typeof cell.runId !== "string" || cell.runId.trim().length === 0
+    || cell.scenarioId !== pairing.scenarioId || cell.skillId !== pairing.skillId
+    || cell.executionMode !== "fake" || !expectedModels.has(`${cell.providerId}/${cell.modelId}`)
+    || cell.modelEntry?.modelId !== cell.modelId || cell.modelEntry.providerId !== cell.providerId) return false;
+  const scenarioResult = result.scenarioResult;
+  if (scenarioResult !== undefined && (scenarioResult.runId !== cell.runId
+    || scenarioResult.scenarioId !== cell.scenarioId
+    || scenarioResult.skillIds.length !== 1 || scenarioResult.skillIds[0] !== cell.skillId
+    || scenarioResult.modelId !== cell.modelId || scenarioResult.executionMode !== "fake"
+    || !scenarioResult.simulated)) return false;
+  const record = result.runRecord;
+  return record === undefined || (record.runId === cell.runId
+    && record.scenarioId === cell.scenarioId && record.skillId === cell.skillId
+    && record.modelId === cell.modelId && record.providerId === cell.providerId
+    && record.executionMode === "fake" && record.simulated && !record.dryRun);
+}
+
+function summarySupportsSimulation(summary: MatrixSweepSummary): boolean {
+  if (summary.status !== "completed" || summary.totalCells !== 2
+    || summary.completedCount !== 2 || summary.failedCount !== 0 || summary.skippedCount !== 0
+    || summary.results.length !== 2) return false;
+  return summary.results.every((result) => {
+    const scenarioResult = result.scenarioResult;
+    return result.status === "completed" && result.executionCompleted
+      && result.error === undefined && result.terminalIdentityConflict !== true
+      && !Reflect.has(result, "failure") && result.benchmarkCohort === "validation"
+      && result.eligibilityStatus === "ineligible" && result.evaluationStatus === "not_evaluated"
+      && result.passedBenchmark === undefined
+      && (scenarioResult === undefined || (scenarioResult.completed
+        && scenarioResult.terminationReason === "success" && scenarioResult.errorMessage === undefined
+        && scenarioResult.consecutiveToolErrors === 0
+        && scenarioResult.toolHistory.every((tool) => !tool.isError)));
+  });
+}
+
+function validateSweepBinding(pairing: ArenaPairing, sweepConfig: MatrixSweepConfig): void {
+  const models = sweepConfig.models.map((model) => `${model.providerId}/${model.modelId}`);
+  const pairingModels = [`${pairing.providerA}/${pairing.modelA}`, `${pairing.providerB}/${pairing.modelB}`];
+  if (sweepConfig.runtimeConfig.executionMode !== "fake"
+    || sweepConfig.scenarioIds.length !== 1 || sweepConfig.scenarioIds[0] !== pairing.scenarioId
+    || sweepConfig.skillIds.length !== 1 || sweepConfig.skillIds[0] !== pairing.skillId
+    || models.length !== 2 || pairingModels.some((model) => !models.includes(model))) {
+    throw new TypeError("Arena candidate sweep does not match the admitted pairing");
+  }
+}
+
+function candidatesMatchPairing(candidates: readonly ArenaCandidateDiagnostic[], pairing: ArenaPairing): boolean {
+  if (candidates.length !== 2 || new Set(candidates.map((candidate) => candidate.runId)).size !== 2) return false;
+  const expected = new Set([`${pairing.providerA}/${pairing.modelA}`, `${pairing.providerB}/${pairing.modelB}`]);
+  return candidates.every((candidate) => candidate.runId.trim().length > 0
+    && candidate.executionMode === "fake"
+    && candidate.simulated
+    && expected.delete(`${candidate.providerId}/${candidate.modelId}`))
+    && expected.size === 0;
+}
+
+function validatePairing(pairing: ArenaPairing): void {
+  for (const value of [pairing.scenarioId, pairing.skillId, pairing.modelA, pairing.modelB, pairing.providerA, pairing.providerB]) {
+    if (typeof value !== "string" || value.trim().length === 0) throw new TypeError("Arena pairing is invalid");
+  }
+  if (pairing.modelA === pairing.modelB) throw new TypeError("Arena candidates must be distinct");
+}
+
+function toCandidateDiagnostic(result: MatrixCellResult): ArenaCandidateDiagnostic {
+  const record = result.runRecord;
+  if (record !== undefined && record.eligibility.status === "eligible") {
+    throw new TypeError("Arena ranking requires durable match and judge evidence");
+  }
+  return Object.freeze({
+    runId: result.cell.runId,
+    modelId: result.cell.modelId,
+    providerId: result.cell.providerId,
+    executionMode: result.cell.executionMode,
+    simulated: result.cell.executionMode === "fake",
+    lifecycleStatus: record?.status ?? result.status,
+    ...(record?.terminationReason === undefined ? {} : { terminationReason: record.terminationReason }),
+    errorCount: record?.errorCount ?? 0,
+    benchmarkCohort: record?.benchmarkCohort === "validation" ? "validation" : "operational",
+    eligibilityStatus: record?.eligibility.status === "unknown" ? "unknown" : "ineligible",
+    evaluationStatus: record?.evaluation.status === "invalid"
+      ? "invalid"
+      : record?.evaluation.status === "not_evaluated"
+        ? "not_evaluated"
+        : "not_requested",
+    evidenceStatus: record?.evidence.status ?? "unavailable",
+  });
+}
+
+function createDiagnostic(
+  pairing: ArenaPairing,
+  status: ArenaDiagnosticResult["status"],
+  reason: ArenaDiagnosticResult["reason"],
+  candidates: readonly ArenaCandidateDiagnostic[],
+  simulated: boolean
+): ArenaDiagnosticResult {
+  const displayStatus = status === "simulated"
+    ? "SIMULATED / UNRANKED"
+    : status === "failed"
+      ? "FAILED / UNRANKED"
+      : "NOT EVALUATED / UNRANKED";
+  return Object.freeze({
+    status,
+    displayStatus,
+    authority: "diagnostic",
+    rankEligible: false,
+    simulated,
+    reason,
+    pairing: Object.freeze({ ...pairing }),
+    candidates: Object.freeze([...candidates]),
+  });
 }

@@ -154,18 +154,6 @@ export interface ChaosPerturbationMatrix {
   readonly seed?: number;
 }
 
-export interface ResilienceMetrics {
-  readonly timeToRecoveryMs: number;
-  readonly errorAmplificationRate: number;
-  readonly steadyStateDeviation: number;
-  readonly degradedThroughputScore: number;
-  readonly recoveryStabilityScore: number;
-  readonly blastRadiusContainmentScore: number;
-  readonly overallResilienceScore: number;
-  readonly recoveredCleanly: boolean;
-  readonly unhandledExceptionCount: number;
-}
-
 export interface ChaosExperimentTimelineEvent {
   readonly timestamp: string;
   readonly elapsedMs: number;
@@ -202,9 +190,7 @@ export interface ChaosExperimentReport {
   readonly durationMs: number;
   readonly faultResults: readonly ChaosFaultExecutionResult[];
   readonly timeline: readonly ChaosExperimentTimelineEvent[];
-  readonly resilienceMetrics: ResilienceMetrics;
   readonly violations: readonly string[];
-  readonly success: boolean;
 }
 
 export interface ChaosExecutionContext {

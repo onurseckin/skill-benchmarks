@@ -8,7 +8,6 @@ import {
   validateMatrixSweepConfig,
 } from "../../sweep/sweep-config-validation.js";
 import type { MatrixSweepConfig } from "../../sweep/types.js";
-import { runArenaCommand } from "../arena-command.js";
 import { cyan, formatBadge, formatSectionHeader } from "../formatter.js";
 import type { BenchmarkRunOptions, CliCommandResult, CliParsedArgs } from "../types.js";
 
@@ -21,7 +20,6 @@ export async function runBenchmarkCommand(args: CliParsedArgs): Promise<CliComma
     outputDir: options.outputDir,
     providerId: options.providerId,
   });
-  if (options.arena && options.arena.length >= 2) return runArenaCommand(args);
   const scenarioIds = resolveScenarioIds(options);
   if (options.skillIds.length === 0) throw new BenchmarkAdmissionError("skill_unresolved");
   const skillIds = [...options.skillIds];

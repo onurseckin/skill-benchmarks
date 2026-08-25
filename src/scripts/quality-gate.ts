@@ -2,7 +2,6 @@ import { readdirSync, statSync, readFileSync, existsSync, utimesSync } from "nod
 import { join, extname } from "node:path";
 import { execSync } from "node:child_process";
 import { startStreamTunnel } from "../tunnel/index.js";
-import { createJudgeArena } from "../judge/index.js";
 import { BudgetController, OptimizerEngine } from "../optimizer/index.js";
 import type { NeoBrutalistDashboardConfig } from "../reporting/index.js";
 import type { NeoBrutalistComponentTokens } from "../dashboard-ui/types.js";
@@ -11,7 +10,6 @@ import { lookupCanonicalSkill } from "../skills/index.js";
 import { runCli, VISUAL_THEME_SPEC } from "../index.js";
 
 void startStreamTunnel;
-void createJudgeArena;
 void BudgetController;
 void OptimizerEngine;
 void runInteractiveDialogTest;

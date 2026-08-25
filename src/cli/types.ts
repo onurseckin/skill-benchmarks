@@ -9,7 +9,6 @@ export type CliCommandName =
   | "sync"
   | "list"
   | "replay"
-  | "fuzz"
   | "help"
   | "version";
 
@@ -31,7 +30,6 @@ export interface BenchmarkRunOptions {
   readonly reasoning?: "low" | "medium" | "high";
   readonly thinkingBudget?: number;
   readonly matrixThinking?: readonly ("none" | "low" | "medium" | "high" | "max")[];
-  readonly arena?: readonly string[];
   readonly dryRun?: boolean;
   readonly live?: boolean;
   readonly mock?: boolean;
@@ -56,16 +54,12 @@ export interface TournamentOptions {
   readonly modelIds?: readonly string[];
   readonly tournamentMode?: "round-robin" | "swiss";
   readonly rounds?: number;
-  readonly judgeModelId?: string;
-  readonly judgeProviderId?: string;
-  readonly kFactor?: number;
-  readonly initialRating?: number;
   readonly dryRun?: boolean;
   readonly live?: boolean;
+  readonly mock?: boolean;
+  readonly outputDir?: string;
   readonly dbPath?: string;
-  readonly outputFormat?: CliOutputFormat;
   readonly outputPath?: string;
-  readonly verbose?: boolean;
   readonly maxMatches?: number;
 }
 
@@ -108,33 +102,14 @@ export interface ReplayCliOptions {
   readonly verbose?: boolean;
 }
 
-export interface FuzzCliOptions {
-  readonly scenarioIds?: readonly string[];
-  readonly skillIds?: readonly string[];
-  readonly modelIds?: readonly string[];
-  readonly strategies?: readonly string[];
-  readonly severities?: readonly string[];
-  readonly mutationsPerScenario?: number;
-  readonly concurrency?: number;
-  readonly seed?: number;
-  readonly outputFormat?: CliOutputFormat;
-  readonly outputPath?: string;
-  readonly verbose?: boolean;
-}
-
 export interface ArenaCliOptions {
   readonly scenarioIds?: readonly string[];
   readonly skillId?: string;
-  readonly modelA?: string;
-  readonly modelB?: string;
   readonly arenaModels?: readonly string[];
-  readonly judgeModelId?: string;
-  readonly judgeProviderId?: string;
-  readonly kFactor?: number;
   readonly dryRun?: boolean;
   readonly live?: boolean;
-  readonly verbose?: boolean;
-  readonly outputFormat?: CliOutputFormat;
+  readonly mock?: boolean;
+  readonly outputDir?: string;
   readonly outputPath?: string;
   readonly dbPath?: string;
 }
@@ -151,7 +126,6 @@ export interface CliParsedArgs {
   readonly syncOptions?: SyncOptions;
   readonly listOptions?: ListOptions;
   readonly replayOptions?: ReplayCliOptions;
-  readonly fuzzOptions?: FuzzCliOptions;
 }
 
 export interface CliCommandResult {

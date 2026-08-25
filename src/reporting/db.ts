@@ -74,19 +74,6 @@ export class TelemetryDatabase {
     return this.queryStore.countRuns(filter);
   }
 
-  public updateEloScore(
-    candidate: EligibleRunRecord,
-    opponent: EligibleRunRecord,
-    result: 1 | 0.5 | 0,
-    kFactor: number = 32
-  ): void {
-    this.queryStore.updateEloScore(candidate, opponent, result, kFactor);
-  }
-
-  public getEloLeaderboard() {
-    return this.queryStore.getEloLeaderboard();
-  }
-
   public close(): void {
     this.database.close();
   }

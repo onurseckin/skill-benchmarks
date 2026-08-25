@@ -73,20 +73,26 @@ export {
 
 export {
   ArenaRunner,
-  type ArenaBattleMatchConfig,
-  type ArenaBattleResult,
-  type ArenaTournamentConfig,
-  type ArenaTournamentResult,
+  type ArenaPairing,
+  type ArenaCandidateDiagnostic,
+  type ArenaPlan,
+  type ArenaDiagnosticResult,
+  type ArenaResult,
+  type ArenaBattleConfig,
 } from "./arena-runner.js";
 
 export {
   TournamentScheduler,
-  type TournamentMode,
-  type TournamentPairing,
-  type TournamentRoundSchedule,
-  type TournamentParticipantState,
   type TournamentSchedulerConfig,
-  type TournamentRoundResult,
-  type TournamentExecutionResult,
+  type TournamentDiagnosticResult,
+  type TournamentResult,
 } from "./tournament-scheduler.js";
 
+export {
+  createTournamentPlan,
+  type TournamentMode,
+  type TournamentPairing,
+  type TournamentPlannedBye,
+  type TournamentPlan,
+  type TournamentPlanInput,
+} from "./tournament-planner.js";

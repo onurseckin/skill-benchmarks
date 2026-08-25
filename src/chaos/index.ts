@@ -18,7 +18,6 @@ export type {
   ChaosScheduleItem,
   ChaosSchedule,
   ChaosPerturbationMatrix,
-  ResilienceMetrics as ChaosResilienceMetrics,
   ChaosExperimentTimelineEvent,
   ChaosFaultExecutionResult,
   ChaosExperimentReport,

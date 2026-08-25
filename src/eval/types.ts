@@ -120,64 +120,6 @@ export interface JudgeEvaluationResult {
   readonly rawJudgeResponse?: string;
 }
 
-export interface PairwiseCandidate {
-  readonly candidateId: string;
-  readonly skillId: string;
-  readonly modelId: string;
-  readonly runId: string;
-  readonly gitDiff?: string;
-  readonly finalMessage?: string;
-  readonly executionOutput?: string;
-}
-
-export interface PairwiseEloMatch {
-  readonly matchId: string;
-  readonly scenarioId: string;
-  readonly candidateA: PairwiseCandidate;
-  readonly candidateB: PairwiseCandidate;
-  readonly permutation1Winner: "candidate_a" | "candidate_b" | "tie";
-  readonly permutation2Winner: "candidate_a" | "candidate_b" | "tie";
-  readonly finalWinner: "candidate_a" | "candidate_b" | "tie";
-  readonly positionBiasDetected: boolean;
-  readonly judgeModelId: string;
-  readonly confidenceScore?: number;
-  readonly rationale: string;
-  readonly timestamp: string;
-}
-
-export interface PairwiseWinRateStats {
-  readonly wins: number;
-  readonly losses: number;
-  readonly ties: number;
-  readonly totalMatches: number;
-  readonly winRate: number;
-  readonly wilsonConfidenceInterval: readonly [number, number];
-}
-
-export interface PairwiseTournamentResult {
-  readonly totalMatches: number;
-  readonly matches: readonly PairwiseEloMatch[];
-  readonly ratings: Readonly<Record<string, number>>;
-  readonly winRates: Readonly<Record<string, PairwiseWinRateStats>>;
-  readonly winMatrix: Readonly<
-    Record<
-      string,
-      Readonly<
-        Record<
-          string,
-          {
-            readonly wins: number;
-            readonly losses: number;
-            readonly ties: number;
-          }
-        >
-      >
-    >
-  >;
-  readonly kFactor: number;
-  readonly initialRating: number;
-}
-
 export interface EvaluationConfig {
   readonly scenarioId: string;
   readonly deterministicChecks?: readonly DeterministicCheck[];

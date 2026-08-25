@@ -10,7 +10,6 @@ import type {
   ChaosScheduleItem,
   IChaosEngine,
   IFaultInjector,
-  ResilienceMetrics,
 } from "./types.js";
 import { ContainerFaultInjector } from "./fault-injector.js";
 
@@ -156,13 +155,10 @@ export class ChaosEngine implements IChaosEngine {
     };
 
     let runnerResult: T;
-    let executionSuccess = true;
-
     try {
       runnerResult = await scenarioRunner(context);
       recordEvent("recovery", "SCENARIO_RUNNER_COMPLETED", {});
     } catch (err) {
-      executionSuccess = false;
       violations.push(`Scenario runner exception: ${String(err)}`);
       recordEvent("recovery", "SCENARIO_RUNNER_FAILED", {
         error: String(err),
@@ -183,12 +179,6 @@ export class ChaosEngine implements IChaosEngine {
 
     const completedAt = new Date().toISOString();
     const durationMs = Date.now() - startTimeMs;
-    const resilienceMetrics = this.calculateResilienceMetrics(
-      faultResults,
-      timeline,
-      violations,
-      durationMs
-    );
 
     const report: ChaosExperimentReport = {
       experimentId,
@@ -200,9 +190,7 @@ export class ChaosEngine implements IChaosEngine {
       durationMs,
       faultResults,
       timeline,
-      resilienceMetrics,
       violations,
-      success: executionSuccess && violations.length === 0,
     };
 
     return { result: runnerResult, report };
@@ -232,61 +220,6 @@ export class ChaosEngine implements IChaosEngine {
     }
 
     return reports;
-  }
-
-  private calculateResilienceMetrics(
-    faultResults: readonly ChaosFaultExecutionResult[],
-    timeline: readonly ChaosExperimentTimelineEvent[],
-    violations: readonly string[],
-    durationMs: number
-  ): ResilienceMetrics {
-    const failedFaults = faultResults.filter((f) => f.status === "failed").length;
-    const unhandledExceptionCount = violations.length;
-
-    let totalRecoveryTime = 0;
-    let recoveredCount = 0;
-
-    for (const f of faultResults) {
-      if (f.status === "restored" && f.restoredAt) {
-        const tDiff = new Date(f.restoredAt).getTime() - new Date(f.injectedAt).getTime();
-        totalRecoveryTime += Math.max(0, tDiff);
-        recoveredCount++;
-      }
-    }
-
-    const timeToRecoveryMs = recoveredCount > 0 ? Math.round(totalRecoveryTime / recoveredCount) : 0;
-    const errorAmplificationRate = faultResults.length > 0
-      ? Number((unhandledExceptionCount / faultResults.length).toFixed(2))
-      : 0;
-    const steadyStateDeviation = Number(Math.min(100, (failedFaults * 25) + (unhandledExceptionCount * 15)).toFixed(2));
-    const blastRadiusContainmentScore = Number(Math.max(0, 100 - (failedFaults * 20) - (violations.length * 10)).toFixed(2));
-    const recoveryStabilityScore = Number(Math.max(0, 100 - (timeToRecoveryMs > 5000 ? 30 : 0) - (failedFaults * 15)).toFixed(2));
-    const degradedThroughputScore = Number(Math.max(10, 100 - (durationMs > 60000 ? 40 : 10)).toFixed(2));
-
-    const overallScore = Math.max(
-      0,
-      Math.min(
-        100,
-        Math.round(
-          (blastRadiusContainmentScore * 0.35) +
-          (recoveryStabilityScore * 0.35) +
-          (degradedThroughputScore * 0.20) -
-          (steadyStateDeviation * 0.10)
-        )
-      )
-    );
-
-    return {
-      timeToRecoveryMs,
-      errorAmplificationRate,
-      steadyStateDeviation,
-      degradedThroughputScore,
-      recoveryStabilityScore,
-      blastRadiusContainmentScore,
-      overallResilienceScore: overallScore,
-      recoveredCleanly: failedFaults === 0 && unhandledExceptionCount === 0,
-      unhandledExceptionCount,
-    };
   }
 }
 

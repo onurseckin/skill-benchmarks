@@ -1,4 +1,4 @@
-import type { CliCommandName, CliOutputFormat, BenchmarkRunOptions, TournamentOptions, SyncOptions, ListOptions, ReplayCliOptions, FuzzCliOptions, ArenaCliOptions, CliParsedArgs } from "./types.js";
+import type { CliCommandName, CliOutputFormat, BenchmarkRunOptions, TournamentOptions, SyncOptions, ListOptions, ReplayCliOptions, ArenaCliOptions, CliParsedArgs } from "./types.js";
 import { getReplayHelpText } from "./replay-help.js";
 import { parseReportOptions } from "./report-options.js";
 type FlagValueKind = "string" | "boolean" | "number" | "array";
@@ -14,9 +14,7 @@ const SPECS: readonly (readonly [string, FlagValueKind, readonly string[]])[] = 
   ["outputPath", "string", ["o", "output", "out", "output-path", "outputPath"]], ["verbose", "boolean", ["v", "verbose"]],
   ["outputDir", "string", ["output-dir", "outputDir"]],
   ["judgeModelId", "string", ["judge-model", "judgeModel", "judge-model-id", "judgeModelId"]],
-  ["judgeProviderId", "string", ["judge-provider", "judgeProvider", "judge-provider-id", "judgeProviderId"]],
   ["skipJudge", "boolean", ["skip-judge", "skipJudge"]], ["cleanSandbox", "boolean", ["clean-sandbox", "cleanSandbox"]],
-  ["kFactor", "number", ["k-factor", "kFactor"]], ["initialRating", "number", ["initial-rating", "initialRating"]],
   ["maxMatches", "number", ["max-matches", "maxMatches"]], ["controlSkillId", "string", ["control-skill", "controlSkill", "control-skill-id", "controlSkillId"]],
   ["title", "string", ["title"]], ["includeTrends", "boolean", ["include-trends", "includeTrends"]],
   ["includeCostEfficiency", "boolean", ["include-cost", "includeCost", "include-cost-efficiency", "includeCostEfficiency"]],
@@ -25,9 +23,6 @@ const SPECS: readonly (readonly [string, FlagValueKind, readonly string[]])[] = 
   ["help", "boolean", ["h", "help"]], ["version", "boolean", ["version"]],
   ["runId", "string", ["run-id", "runId"]], ["speed", "number", ["speed"]],
   ["live", "boolean", ["live"]],
-  ["strategies", "array", ["strategies", "strategy"]], ["severities", "array", ["severities", "severity"]],
-  ["mutationsPerScenario", "number", ["mutations-per-scenario", "mutationsPerScenario", "mutations"]],
-  ["seed", "number", ["seed"]],
   ["thinking", "string", ["thinking", "think", "thinking-level", "thinkingLevel"]],
   ["reasoning", "string", ["reasoning", "reasoning-effort", "reasoningEffort"]],
   ["thinkingBudget", "number", ["thinking-budget", "thinkingBudget", "budget-tokens", "budgetTokens"]],
@@ -51,7 +46,7 @@ for (const [canonical, kind, aliases] of SPECS) {
   for (const alias of aliases) { FLAG_MAP.set(alias, spec); FLAG_MAP.set(alias.toLowerCase(), spec); }
 }
 const KNOWN_COMMANDS = new Set<CliCommandName>([
-  "run", "bench", "arena", "tournament", "report", "sync", "list", "replay", "fuzz", "help", "version",
+  "run", "bench", "arena", "tournament", "report", "sync", "list", "replay", "help", "version",
 ]);
 function toBool(v: unknown): boolean {
   if (typeof v === "boolean") return v;
@@ -129,21 +124,31 @@ export function parseCliArgs(argv: readonly string[]): CliParsedArgs {
     } else if (!foundCommand) {
       const candidate = token.toLowerCase() as CliCommandName;
       if (KNOWN_COMMANDS.has(candidate)) { command = candidate; foundCommand = true; }
-      else positionals.push(token);
+      else throw new TypeError("Argument error: unknown command");
     } else {
       positionals.push(token);
     }
     i++;
   }
 
-  if (!foundCommand && toArr(flags["arena"]).length >= 2 && !Boolean(flags["help"]) && !Boolean(flags["version"])) {
-    command = "arena";
+  if (!foundCommand && toArr(flags["arena"]).length > 0) {
+    throw new TypeError("Argument error: arena requires the arena command");
   }
   if (Boolean(flags["help"]) && command !== "version") {
     if (foundCommand && command !== "help") positionals.unshift(command);
     command = "help";
   }
   if (Boolean(flags["version"])) command = "version";
+  if (command === "help" && positionals[0] !== undefined
+    && !KNOWN_COMMANDS.has(positionals[0].toLowerCase() as CliCommandName)) {
+    throw new TypeError("Argument error: unknown command");
+  }
+  if ((command === "run" || command === "bench") && toArr(flags["arena"]).length > 0) {
+    throw new TypeError("Argument error: arena requires the arena command");
+  }
+  if ((command === "arena" || command === "tournament") && hasRemovedCompetitionFlag(argv)) {
+    throw new TypeError("Argument error: ranked competition options are unavailable");
+  }
 
   const benchmarkOptions: BenchmarkRunOptions = {
     scenarioIds: toArr(flags["scenario"]).concat(positionals), skillIds: toArr(flags["skill"]),
@@ -155,7 +160,6 @@ export function parseCliArgs(argv: readonly string[]): CliParsedArgs {
     reasoning: toStr(flags["reasoning"]) as BenchmarkRunOptions["reasoning"],
     thinkingBudget: toNum(flags["thinkingBudget"]),
     matrixThinking: toArr(flags["matrixThinking"]) as BenchmarkRunOptions["matrixThinking"],
-    arena: toArr(flags["arena"]).length > 0 ? toArr(flags["arena"]) : undefined,
     dryRun: toBool(flags["dryRun"]),
     live: toOptionalBool(flags["live"]),
     mock: toOptionalBool(flags["mock"]),
@@ -173,17 +177,12 @@ export function parseCliArgs(argv: readonly string[]): CliParsedArgs {
   const arenaModels = arenaArr.length > 0 ? arenaArr : toArr(flags["model"]);
   const arenaOptions: ArenaCliOptions = {
     scenarioIds: toArr(flags["scenario"]).concat(positionals),
-    skillId: toStr(flags["skill"]),
-    modelA: arenaModels[0],
-    modelB: arenaModels[1],
+    skillId: toArr(flags["skill"])[0],
     arenaModels,
-    judgeModelId: toStr(flags["judgeModelId"]),
-    judgeProviderId: toStr(flags["judgeProviderId"]),
-    kFactor: toNum(flags["kFactor"]),
     dryRun: toBool(flags["dryRun"]),
-    live: toBool(flags["live"]),
-    verbose: toBool(flags["verbose"]),
-    outputFormat: toStr(flags["format"]) as CliOutputFormat | undefined,
+    live: toOptionalBool(flags["live"]),
+    mock: toOptionalBool(flags["mock"]),
+    outputDir: toStr(flags["outputDir"]),
     outputPath: toStr(flags["outputPath"]),
     dbPath: toStr(flags["dbPath"]),
   };
@@ -191,12 +190,10 @@ export function parseCliArgs(argv: readonly string[]): CliParsedArgs {
   const tournamentOptions: TournamentOptions = {
     scenarioIds: toArr(flags["scenario"]).concat(positionals), skillIds: toArr(flags["skill"]),
     modelIds: toArr(flags["model"]), tournamentMode: toStr(flags["tournamentMode"]) as TournamentOptions["tournamentMode"],
-    rounds: toNum(flags["rounds"]), judgeModelId: toStr(flags["judgeModelId"]),
-    judgeProviderId: toStr(flags["judgeProviderId"]), kFactor: toNum(flags["kFactor"]),
-    initialRating: toNum(flags["initialRating"]), dbPath: toStr(flags["dbPath"]),
-    dryRun: toBool(flags["dryRun"]), live: toBool(flags["live"]),
-    outputFormat: toStr(flags["format"]) as CliOutputFormat | undefined,
-    outputPath: toStr(flags["outputPath"]), verbose: toBool(flags["verbose"]), maxMatches: toNum(flags["maxMatches"]),
+    rounds: toNum(flags["rounds"]), dbPath: toStr(flags["dbPath"]),
+    dryRun: toBool(flags["dryRun"]), live: toOptionalBool(flags["live"]), mock: toOptionalBool(flags["mock"]),
+    outputDir: toStr(flags["outputDir"]),
+    outputPath: toStr(flags["outputPath"]), maxMatches: toNum(flags["maxMatches"]),
   };
 
   const reportOptions = command === "report" ? parseReportOptions(flags, positionals, argv) : undefined;
@@ -219,25 +216,30 @@ export function parseCliArgs(argv: readonly string[]): CliParsedArgs {
     dbPath: toStr(flags["dbPath"]), outputDir: toStr(flags["outputDir"]), verbose: toBool(flags["verbose"]),
   };
 
-  const fuzzOptions: FuzzCliOptions = {
-    scenarioIds: toArr(flags["scenario"]).concat(positionals), skillIds: toArr(flags["skill"]),
-    modelIds: toArr(flags["model"]), strategies: toArr(flags["strategies"]), severities: toArr(flags["severities"]),
-    mutationsPerScenario: toNum(flags["mutationsPerScenario"]), concurrency: toNum(flags["concurrency"]),
-    seed: toNum(flags["seed"]), outputFormat: toStr(flags["format"]) as CliOutputFormat | undefined,
-    outputPath: toStr(flags["outputPath"]), verbose: toBool(flags["verbose"]),
-  };
-
   return {
     command, rawArgs: argv, flags: flags as Readonly<Record<string, string | boolean | number | readonly string[]>>, positionals,
     benchmarkOptions: command === "run" || command === "bench" ? benchmarkOptions : undefined,
-    arenaOptions: command === "arena" || arenaArr.length >= 2 ? arenaOptions : undefined,
+    arenaOptions: command === "arena" ? arenaOptions : undefined,
     tournamentOptions: command === "tournament" ? tournamentOptions : undefined,
     reportOptions,
     syncOptions: command === "sync" ? syncOptions : undefined,
     listOptions: command === "list" ? listOptions : undefined,
     replayOptions: command === "replay" ? replayOptions : undefined,
-    fuzzOptions: command === "fuzz" ? fuzzOptions : undefined,
   };
+}
+
+function hasRemovedCompetitionFlag(argv: readonly string[]): boolean {
+  const removed = new Set([
+    "judge-model", "judgemodel", "judge-model-id", "judgemodelid", "judge-provider", "judgeprovider",
+    "judge-provider-id", "judgeproviderid", "k-factor", "kfactor", "initial-rating", "initialrating",
+    "skip-judge", "skipjudge",
+  ]);
+  return argv.some((argument) => {
+    if (!argument.startsWith("-")) return false;
+    const rawKey = (argument.replace(/^-+/, "").split("=", 1)[0] ?? "").toLowerCase();
+    const key = rawKey.startsWith("no-") ? rawKey.slice(3) : rawKey;
+    return removed.has(key);
+  });
 }
 export function getVersionText(): string { return "skill-benchmarks v0.1.0"; }
 
@@ -249,7 +251,6 @@ function formatCmd(usage: string, desc: string, opts: readonly (readonly [string
 const RUN_OPTS: readonly (readonly [string, string])[] = [
   ["-s, --scenario <ids>", "Scenario IDs"], ["-k, --skill <ids>", "Skill IDs to evaluate"],
   ["-m, --model <ids>", "Model IDs to benchmark"], ["-p, --provider <id>", "Model provider ID"],
-  ["--arena <m1,m2>", "Run head-to-head battle between two models"],
   ["-c, --category <name>", "Scenario category filter"], ["-t, --tag <tags>", "Scenario tags filter"],
   ["-j, --concurrency <n>", "Parallel concurrency (default: 4)"], ["-r, --repeats <n>", "Repetitions (default: 1)"],
   ["--temperature <n>", "LLM temperature"], ["--timeout <sec>", "Scenario timeout in seconds"],
@@ -263,24 +264,24 @@ const RUN_OPTS: readonly (readonly [string, string])[] = [
 ];
 const ARENA_OPTS: readonly (readonly [string, string])[] = [
   ["-s, --scenario <ids>", "Scenario IDs for head-to-head match"],
-  ["--arena <m1,m2>", "Two competing model IDs (e.g. claude-3-7-sonnet,o3-mini)"],
+  ["--arena <m1,m2>", "Two distinct admitted model IDs"],
   ["-k, --skill <id>", "Target skill ID to evaluate"],
-  ["--judge-model <id>", "Judge model ID (default: claude-3-7-sonnet)"],
-  ["--k-factor <n>", "Bradley-Terry Elo K-factor (default: 32)"],
-  ["--dry-run", "Simulate arena battle without token consumption"],
-  ["--db <path>", "SQLite database path for Elo leaderboard persistence"],
-  ["-v, --verbose", "Enable verbose telemetry"],
+  ["--dry-run", "Plan the admitted pairing without benchmark execution"],
+  ["--mock", "Execute deterministic simulated candidate diagnostics"],
+  ["--live", "Report comparison evidence unavailable without provider work"],
+  ["--output-dir <path>", "Benchmark runtime output root"],
+  ["--db <path>", "SQLite path for candidate execution evidence"],
+  ["-o, --output <path>", "Output file path"],
   ["-h, --help", "Show help for arena command"],
 ];
 const TOURNAMENT_OPTS: readonly (readonly [string, string])[] = [
   ["-s, --scenario <ids>", "Scenario IDs"], ["-k, --skill <ids>", "Skill IDs to compete"],
   ["-m, --model <ids>", "Model IDs for participants"], ["--tournament-mode <mode>", "Tournament mode: round-robin, swiss"],
-  ["--rounds <n>", "Number of tournament rounds"], ["--judge-model <id>", "Judge model ID"],
-  ["--judge-provider <id>", "Judge provider ID"], ["--k-factor <n>", "Elo K-factor (default: 32)"],
-  ["--initial-rating <n>", "Initial rating (default: 1500)"], ["--max-matches <n>", "Max tournament matches"],
-  ["--dry-run", "Simulate tournament matches"], ["--db <path>", "SQLite database path"],
-  ["-f, --format <format>", "Output format: console, json, markdown, html"],
-  ["-o, --output <path>", "Output file path"], ["-v, --verbose", "Enable verbose logs"], ["-h, --help", "Show help for tournament command"],
+  ["--rounds <n>", "Number of planned rounds"], ["--max-matches <n>", "Maximum planned pairings"],
+  ["--dry-run", "Plan deterministic pairings without benchmark execution"], ["--mock", "Execute simulated candidate diagnostics"],
+  ["--live", "Report comparison evidence unavailable without provider work"], ["--output-dir <path>", "Benchmark runtime output root"],
+  ["--db <path>", "SQLite path for candidate execution evidence"],
+  ["-o, --output <path>", "Output file path"], ["-h, --help", "Show help for tournament command"],
 ];
 const REPORT_OPTS: readonly (readonly [string, string])[] = [
   ["-f, --format <format>", "Report format: console, json, markdown, html"], ["-o, --output <path>", "Destination report file path"],
@@ -308,34 +309,23 @@ const LIST_OPTS: readonly (readonly [string, string])[] = [
   ["-f, --format <format>", "Output format: console, json, markdown, html"], ["--catalog <path>", "Custom catalog path"],
   ["-h, --help", "Show help for list command"],
 ];
-const FUZZ_OPTS: readonly (readonly [string, string])[] = [
-  ["-s, --scenario <ids>", "Scenario IDs to fuzz"], ["-k, --skill <ids>", "Skill IDs under evaluation"],
-  ["-m, --model <ids>", "Model IDs to test"], ["--strategies <strats>", "Mutation strategies (comma-separated)"],
-  ["--severities <sevs>", "Mutation severities (low, medium, high, critical)"],
-  ["--mutations <n>", "Mutated variants generated per scenario (default: 4)"],
-  ["-j, --concurrency <n>", "Parallel execution concurrency (default: 4)"],
-  ["--seed <n>", "PRNG seed for deterministic mutation (default: 42)"],
-  ["-o, --output <path>", "Export path for markdown resilience report"],
-  ["-v, --verbose", "Enable verbose fuzz event logging"], ["-h, --help", "Show help for fuzz command"],
-];
-
 export function getHelpText(command?: CliCommandName): string {
   if (command === "run" || command === "bench") {
     return formatCmd(
       "skill-bench run [options] [scenario-ids...]", "Execute benchmark evaluation runs across scenarios, skills, and models.",
-      RUN_OPTS, ["skill-bench run -s git-workflow -k git-master -m gpt-4o", "skill-bench run --arena claude-3-7-sonnet,o3-mini -s git-worktrees"]
+      RUN_OPTS, ["skill-bench run -s git-worktrees -k tdd -m gpt-4o"]
     );
   }
   if (command === "arena") {
     return formatCmd(
-      "skill-bench arena [options] [scenario-ids...]", "Run parallel head-to-head model arena battle match with Bradley-Terry Elo updates.",
-      ARENA_OPTS, ["skill-bench arena -s git-worktrees --arena claude-3-7-sonnet,o3-mini", "skill-bench arena -s fullstack-refactor --dry-run"]
+      "skill-bench arena [options]", "Plan pairings or execute simulated unranked candidate diagnostics.",
+      ARENA_OPTS, ["skill-bench arena --dry-run -s fullstack-refactor -k tdd --arena gpt-4o,claude-3-7-sonnet-20250219"]
     );
   }
   if (command === "tournament") {
     return formatCmd(
-      "skill-bench tournament [options] [scenario-ids...]", "Run pairwise Elo rating tournament matches between skills.",
-      TOURNAMENT_OPTS, ["skill-bench tournament -s coding-refactor -k skill-v1,skill-v2"]
+      "skill-bench tournament [options]", "Plan pairings or execute simulated unranked candidate diagnostics.",
+      TOURNAMENT_OPTS, ["skill-bench tournament --dry-run -s fullstack-refactor -k tdd -m gpt-4o,claude-3-7-sonnet-20250219"]
     );
   }
   if (command === "report") {
@@ -359,16 +349,6 @@ export function getHelpText(command?: CliCommandName): string {
   if (command === "replay") {
     return getReplayHelpText();
   }
-  if (command === "fuzz") {
-    return formatCmd(
-      "skill-bench fuzz [options] [scenario-ids...]", "Run adversarial mutation fuzzing across benchmark scenarios.",
-      FUZZ_OPTS, [
-        "skill-bench fuzz -s git-worktrees --strategies prompt_injection,syntax_corruption",
-        "skill-bench fuzz -s git-worktrees --severities low,medium,high,critical -o fuzz-report.md",
-        "skill-bench fuzz -s git-worktrees --mutations 8 -j 4 --seed 1337",
-      ]
-    );
-  }
   if (command === "version") {
     return "Usage:\n  skill-bench version\n\nDescription:\n  Display skill-benchmarks version information.";
   }
@@ -378,13 +358,12 @@ export function getHelpText(command?: CliCommandName): string {
     "Commands:",
     "  run          Execute benchmark scenarios against skills and models",
     "  bench        Alias for run",
-    "  arena        Run head-to-head model arena battle match",
-    "  tournament   Run pairwise Elo tournament between skills",
+    "  arena        Plan or execute unranked candidate comparisons",
+    "  tournament   Plan or execute unranked comparison schedules",
     "  report       Generate benchmark reports (console, json, markdown, html)",
     "  sync         Sync skills and scenarios from catalog repositories",
     "  list         List available scenarios, skills, and models",
     "  replay       Interactive TUI or web execution replay player",
-    "  fuzz         Adversarial scenario mutation and fuzzing engine",
     "  help         Display help for a command",
     "  version      Display version information", "",
     "Global Options:",

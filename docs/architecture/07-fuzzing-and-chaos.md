@@ -1,99 +1,46 @@
-# Chapter 07: Scenario Fuzzing & Chaos Engineering
+# Chapter 07: Chaos Fault Injection
 
 [← Previous: 06. Telemetry & Reporting](06-telemetry-and-reporting.md) | [Architecture Index](README.md) | [Next: 08. Binary Terminal Streaming →](08-binary-terminal-streaming.md)
 
----
+## 1. Boundary
 
-## 1. Scenario Fuzzing & AST Mutation
+The maintained chaos subsystem schedules explicit faults against a running container and records operational observations. It does not mutate scenario source, fabricate agent executions, or assign empirical model-quality scores.
 
-To evaluate how robust agents are against unpredictable, malformed, or hostile inputs, the **Fuzzer Engine** ([`src/fuzzer/fuzzer-engine.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/fuzzer/fuzzer-engine.ts)) programmatically mutates scenario codebases and specifications via AST transforms in [`src/fuzzer/mutator.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/fuzzer/mutator.ts).
+## 2. Fault Scheduling
 
-```
-                      ┌────────────────────────────┐
-                      │    CANONICAL SCENARIO      │
-                      │  (Spec, Test Files, Code)  │
-                      └─────────────┬──────────────┘
-                                    │
-                                    ▼
-                      ┌────────────────────────────┐
-                      │    AST MUTATION ENGINE     │
-                      │   (src/fuzzer/mutator.ts)  │
-                      └─────────────┬──────────────┘
-                                    │
-         ┌──────────────────────────┼──────────────────────────┐
-         ▼                          ▼                          ▼
-┌──────────────────┐       ┌──────────────────┐       ┌──────────────────┐
-│ IDENTIFIER FUZZ  │       │ BOUNDARY FUZZ    │       │ SYNTAX FAULT     │
-│ • Typo injection │       │ • Off-by-one ints│       │ • Missing braces │
-│ • Case mangling  │       │ • Max safe integer│      │ • Invalid imports│
-│ • Unicode homoglyphs     │ • Null/undefined │       │ • Malformed JSON │
-└──────────────────┘       └──────────────────┘       └──────────────────┘
+[`src/chaos/chaos-engine.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/chaos/chaos-engine.ts) validates a chaos plan and coordinates [`src/chaos/fault-injector.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/chaos/fault-injector.ts). Supported injections include network delay or loss, process pause, resource pressure, and signals.
+
+```text
+validated fault plan
+        |
+        v
+scheduled injection
+        |
+        v
+container observation
+        |
+        v
+diagnostic event record
 ```
 
----
+Fault observations are operational diagnostics. They cannot be converted into benchmark pass, rank, winner, rating, regression, or resilience claims without the same persisted evidence and authority checks used by ordinary runs.
 
-## 2. Chaos Fault Injection Engine
+## 3. Safety Rules
 
-The **Chaos Engine** ([`src/chaos/chaos-engine.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/chaos/chaos-engine.ts)) simulates real-world infrastructure failures and hostile environments during agent execution via [`src/chaos/fault-injector.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/chaos/fault-injector.ts):
+- A plan must target an explicit managed container.
+- Fault timing and duration must be finite and validated.
+- Cleanup restores injected state even after an interrupted schedule.
+- Diagnostic output preserves the configured fault and observed lifecycle facts.
+- An empty or simulated observation does not imply successful recovery.
 
-```
-+-------------------------------------------------------------------------------+
-|                       CHAOS FAULT INJECTION TAXONOMY                          |
-+-------------------------------------------------------------------------------+
-| FAULT TYPE           | INJECTION MECHANISM         | TARGET IMPACT            |
-+----------------------+-----------------------------+--------------------------+
-| `NETWORK_LATENCY`    | `tc qdisc add netem delay`  | Injects 50-500ms jitter  |
-|                      |                             | on host-container bridge |
-+----------------------+-----------------------------+--------------------------+
-| `PACKET_LOSS`        | `tc qdisc add netem loss`   | Drops 10-30% of packets  |
-|                      |                             | to test retry resilience |
-+----------------------+-----------------------------+--------------------------+
-| `PROCESS_FREEZE`     | `kill -SIGSTOP <pid>`       | Suspends process to test |
-|                      |                             | agent timeout handling   |
-+----------------------+-----------------------------+--------------------------+
-| `PROCESS_KILL`       | `kill -SIGKILL <pid>`       | Abrupt process death to  |
-|                      |                             | test state recovery      |
-+----------------------+-----------------------------+--------------------------+
-| `RESOURCE_OOM`       | Dynamic `memory.max` write  | Starves container RAM,   |
-|                      | to cgroups v2 controller    | triggering kernel OOM    |
-+----------------------+-----------------------------+--------------------------+
-| `DISK_PRESSURE`      | Fills ephemeral workspace   | Triggers ENOSPC on write |
-|                      | with dummy zero-byte files  | operations               |
-+----------------------+-----------------------------+--------------------------+
-```
+## 4. Module Reference
 
----
-
-## 3. Resilience Metrics & Degradation Scoring
-
-Agent resilience under chaos is quantified through three standardized indices ([`src/chaos/types.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/chaos/types.ts)):
-
-1. **Recovery Rate ($R_{\text{rec}}$)**:
-   The proportion of injected faults where the agent successfully detected the failure, initiated a remediation action, and completed the task:
-   $$R_{\text{rec}} = \frac{N_{\text{recovered}}}{N_{\text{injected}}}$$
-
-2. **Degradation Slope ($\Delta S$)**:
-   The percentage drop in benchmark pass rate under chaos relative to the pristine baseline:
-   $$\Delta S = \frac{\text{Pass}_{\text{baseline}} - \text{Pass}_{\text{chaos}}}{\text{Pass}_{\text{baseline}}}$$
-
-3. **Recovery Time Objective (RTO)**:
-   The median wall-clock time in milliseconds between fault injection and the agent's first corrective tool execution.
-
----
-
-## 4. Chaos & Fuzzing Module Reference
-
-- [`src/chaos/chaos-engine.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/chaos/chaos-engine.ts): Chaos experiment orchestrator and scheduler.
-- [`src/chaos/fault-injector.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/chaos/fault-injector.ts): Kernel fault injection primitives (`tc netem`, signals, cgroups OOM).
-- [`src/fuzzer/fuzzer-engine.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/fuzzer/fuzzer-engine.ts): AST mutator runner.
-- [`src/fuzzer/mutator.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/fuzzer/mutator.ts): TypeScript AST mutation transformers.
-
----
+- [`src/chaos/chaos-engine.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/chaos/chaos-engine.ts): validates plans and coordinates fault schedules.
+- [`src/chaos/fault-injector.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/chaos/fault-injector.ts): applies and removes container faults.
+- [`src/chaos/types.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/chaos/types.ts): fault plan and diagnostic observation contracts.
 
 ## 5. Automated Fault Scenarios Summary
 
-The benchmark harness includes pre-configured chaos injection scenarios covering network partitions, sudden SIGKILL interrupts during file writes, and hard cgroup memory constraints to guarantee rigorous agent evaluation.
-
----
+Automated fault schedules remain diagnostic until their container target, timing, cleanup, and observed lifecycle are verified. The schedule itself does not establish recovery quality or benchmark eligibility.
 
 [← Previous: 06. Telemetry & Reporting](06-telemetry-and-reporting.md) | [Architecture Index](README.md) | [Next: 08. Binary Terminal Streaming →](08-binary-terminal-streaming.md)
