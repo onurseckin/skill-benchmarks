@@ -145,7 +145,7 @@ export class ScenarioSynthesizer {
 
     const fixtures: Record<string, string> = {
       [sourcePath]: this.generateStubCode(features, sourceCode, config.templateId),
-      "package.json": JSON.stringify({ name: "synthetic-benchmark-fixture", version: "1.0.0", type: "module", scripts: { test: "bun test", typecheck: "tsc --noEmit" }, devDependencies: { "@types/node": "^22.13.0", typescript: "^5.7.3" } }, null, 2),
+      "package.json": JSON.stringify({ name: "synthetic-benchmark-fixture", version: "1.0.0", type: "module", scripts: { test: "bun test", typecheck: "tsc --noEmit" }, devDependencies: { "@types/node": "^26.3.0", typescript: "^7.0.2" } }, null, 2),
       "tsconfig.json": JSON.stringify({ compilerOptions: { target: "ES2022", module: "NodeNext", moduleResolution: "NodeNext", strict: true, skipLibCheck: true }, include: ["src/**/*"] }, null, 2),
     };
 
