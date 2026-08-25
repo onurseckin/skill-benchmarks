@@ -4,6 +4,7 @@ import type { RunArtifactLayout } from "../infrastructure/workspace/types.js";
 import type { RunRecord, RunStatus } from "../reporting/types.js";
 import type { ScenarioResult, RunTerminationReason } from "../runner/types.js";
 import type { ExecutionMode } from "../shared/execution-mode.js";
+import { sanitizeBenchmarkArtifactValue } from "../shared/artifact-sanitization.js";
 
 export interface RunEvidenceContext {
   readonly runId: string;
@@ -112,6 +113,6 @@ async function writeAtomicJson(path: string, value: unknown): Promise<void> {
     dirname(path),
     `.${basename(path)}.${Date.now()}.${Math.random().toString(36).slice(2, 8)}.tmp`
   );
-  await writeFile(temporaryPath, JSON.stringify(value, null, 2), "utf8");
+  await writeFile(temporaryPath, JSON.stringify(sanitizeBenchmarkArtifactValue(value), null, 2), "utf8");
   await rename(temporaryPath, path);
 }

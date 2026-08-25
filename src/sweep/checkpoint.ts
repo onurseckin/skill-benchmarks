@@ -10,6 +10,7 @@ import type {
   SweepExecutionStatus,
 } from "./types.js";
 import type { TokenUsage } from "../runner/types.js";
+import { sanitizeBenchmarkArtifactValue } from "../shared/artifact-sanitization.js";
 
 const DEFAULT_METADATA_VERSION = "1.0.0";
 
@@ -166,7 +167,7 @@ export class CheckpointLedger implements ICheckpointLedger {
       this.rotateBackups();
 
       const tmpPath = `${this.filePath}.tmp.${Date.now()}.${Math.random().toString(36).slice(2, 8)}`;
-      const serialized = JSON.stringify(updatedState, null, 2);
+      const serialized = JSON.stringify(sanitizeBenchmarkArtifactValue(updatedState), null, 2);
 
       writeFileSync(tmpPath, serialized, "utf8");
       renameSync(tmpPath, this.filePath);

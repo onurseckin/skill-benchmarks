@@ -6,6 +6,7 @@ import { TelemetryDatabase } from "../reporting/db.js";
 import type { ScenarioResult } from "../runner/types.js";
 import { ScenarioRunnerEngine } from "../runner/runner-engine.js";
 import { ScenarioLoader } from "../runner/scenario-loader.js";
+import { createSafeArtifactPathSegment } from "../shared/artifact-sanitization.js";
 import type { ITokenBucketRateLimiter, MatrixCellDescriptor, MatrixCellResult, MatrixSweepConfig } from "./types.js";
 import { createTerminalRunRecord, mapTerminalStatus, summarizeTerminalFailure, writeRunManifest, writeRunResult } from "./run-evidence.js";
 
@@ -35,7 +36,7 @@ export async function executeSweepCell(input: CellExecutionInput): Promise<Matri
     simulated: executionMode === "fake",
     startedAt,
   } as const;
-  const artifactLayout = createRunArtifactLayout(cell.outputRoot, cell.runId);
+  const artifactLayout = createCellArtifactLayout(cell);
   let scenarioResult: ScenarioResult | undefined;
   let container: IContainerInstance | undefined;
   let attemptCount = 0;
@@ -208,4 +209,13 @@ function createDryRunResult(cell: MatrixCellDescriptor, startedAt: string): Scen
     startedAt,
     finishedAt,
   };
+}
+
+function createCellArtifactLayout(cell: MatrixCellDescriptor) {
+  try {
+    return createRunArtifactLayout(cell.outputRoot, cell.runId);
+  } catch {
+    const fallbackRunId = createSafeArtifactPathSegment(`${cell.cellId}-${cell.runId}`, "failed-run");
+    return createRunArtifactLayout(cell.outputRoot, fallbackRunId);
+  }
 }

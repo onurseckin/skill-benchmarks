@@ -17,6 +17,7 @@ import { ScenarioRunnerEngine } from "../runner/runner-engine.js";
 import { ScenarioLoader } from "../runner/scenario-loader.js";
 import { TelemetryDatabase } from "../reporting/db.js";
 import type { ExecutionLimits } from "../runner/types.js";
+import { createSafeArtifactPathSegment } from "../shared/artifact-sanitization.js";
 import { executeSweepCell } from "./cell-execution.js";
 export class MatrixSweepEngine implements IMatrixSweepEngine {
   public readonly sweepId: string;
@@ -36,7 +37,7 @@ export class MatrixSweepEngine implements IMatrixSweepEngine {
   private totalCellDurationMs = 0;
   private startTimeMs = 0;
   constructor(sweepId?: string) {
-    this.sweepId = sweepId ?? `sweep-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    this.sweepId = createSafeArtifactPathSegment(sweepId ?? `sweep-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, "sweep");
   }
   on(listener: SweepEventListener): () => void {
     this.listeners.add(listener);
@@ -113,7 +114,8 @@ export class MatrixSweepEngine implements IMatrixSweepEngine {
             for (let rep = 0; rep < reps; rep++) {
               const effectiveThinking = thinkingLevel !== undefined ? thinkingLevel : modelEntry.thinkingLevel;
               const thinkSuffix = effectiveThinking !== undefined ? `_th_${effectiveThinking}` : "";
-              const cellId = `${scenarioId}_${skillId}_${modelEntry.modelId}${thinkSuffix}_rep${rep}`;
+              const artifactModelId = createSafeArtifactPathSegment(modelEntry.modelId, "model");
+              const cellId = `${scenarioId}_${skillId}_${artifactModelId}${thinkSuffix}_rep${rep}`;
               cells.push({
                 cellId, scenarioId, skillId,
                 modelId: modelEntry.modelId, providerId: config.runtimeConfig.requestedProviderId ?? modelEntry.providerId,
@@ -121,7 +123,7 @@ export class MatrixSweepEngine implements IMatrixSweepEngine {
                 outputRoot: config.runtimeConfig.outputRoot,
                 thinkingLevel: effectiveThinking,
                 thinkingBudget: modelEntry.thinkingBudget,
-                repetitionIndex: rep, runId: `run-${this.sweepId}-${cellId}`,
+                repetitionIndex: rep, runId: createSafeArtifactPathSegment(`run-${this.sweepId}-${cellId}`, "run"),
                 modelEntry, limits, temperature: modelEntry.temperature,
                 tags: modelEntry.tags, metadata: modelEntry.metadata,
               });
