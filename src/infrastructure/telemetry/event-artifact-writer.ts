@@ -138,7 +138,16 @@ function requireArtifactFile(directoryDescriptor: number, expected: OpenArtifact
 
 function inspectArtifactFile(descriptor: number): ArtifactFileIdentity {
   const stats = fstatSync(descriptor);
-  if (!stats.isFile() || stats.nlink !== 1) throw new TypeError("Benchmark event artifact is unsafe");
+  const processUserId = process.getuid?.();
+  if (
+    !stats.isFile()
+    || stats.nlink !== 1
+    || processUserId === undefined
+    || stats.uid !== processUserId
+    || (stats.mode & 0o7777) !== 0o600
+  ) {
+    throw new TypeError("Benchmark event artifact is unsafe");
+  }
   return { device: stats.dev, inode: stats.ino };
 }
 
