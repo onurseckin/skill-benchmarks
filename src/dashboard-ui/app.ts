@@ -12,8 +12,8 @@ import {
 export function generateDashboardCss(): string {
   return `
 html, body, div, span, p, h1, h2, h3, h4, table, tr, th, td, button, input, select, main, header, section, nav { box-sizing: border-box; margin: 0; padding: 0; }
-body { background: var(--bg); color: var(--text); font-family: var(--font-sans); min-height: 100vh; display: flex; flex-direction: column; overflow-x: hidden; }
-.main-content { flex: 1; padding: 24px; max-width: 1440px; width: 100%; margin: 0 auto; display: flex; flex-direction: column; gap: 24px; }
+body { background: var(--bg); color: var(--text); font-family: var(--font-sans); width: 100vw; min-height: 100vh; display: flex; flex-direction: column; overflow-x: hidden; }
+.main-content { flex: 1; padding: 20px; width: 100%; max-width: 100%; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
 .kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
 .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 20px; }
 .panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; font-weight: 700; font-size: 15px; color: var(--primary); }

@@ -42,6 +42,7 @@ import type { FuzzingStrategy, MutationSeverity } from "../fuzzer/types.js";
 import { ScenarioSynthesizer } from "../generator/index.js";
 import type { ScenarioDefinition } from "../runner/types.js";
 import type { ChaosPerturbationMatrix } from "../chaos/index.js";
+import { getOrCreateModelDefinition } from "../models/index.js";
 
 export async function runBenchmarkCommand(args: CliParsedArgs): Promise<CliCommandResult> {
   const startTime = Date.now();
@@ -62,15 +63,22 @@ export async function runBenchmarkCommand(args: CliParsedArgs): Promise<CliComma
     }
   });
 
-  const models = modelIds.map((m) => ({
-    modelId: m,
-    providerId: m.includes("gpt") ? "openai" : "anthropic",
-  }));
+  const models = modelIds.map((m) => {
+    const def = getOrCreateModelDefinition(m);
+    return {
+      modelId: m,
+      providerId: def.provider,
+      thinkingLevel: options.thinking ?? def.defaultThinkingLevel,
+      thinkingBudget: options.thinkingBudget,
+      reasoningEffort: options.reasoning,
+    };
+  });
 
   const summary = await engine.run({
     scenarioIds,
     skillIds,
     models,
+    thinkingLevels: options.matrixThinking,
     concurrency: { maxGlobalConcurrency: options.concurrency ?? 2 },
     telemetryDbPath: dbPath,
   });

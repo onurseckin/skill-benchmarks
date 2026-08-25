@@ -3,6 +3,7 @@ import type {
   LeaderboardEntry,
   SkillBenchmarkSummary,
 } from "./types.js";
+import { renderBarChart, renderScatterPlot } from "./dashboard-charts.js";
 
 export interface DashboardMetadata {
   readonly totalRuns?: number;
@@ -19,115 +20,6 @@ function escapeHtml(str: string): string {
     .replace(/'/g, "&#039;");
 }
 
-function renderScatterPlot(
-  costPoints: readonly CostEfficiencyPoint[],
-  summaries: readonly SkillBenchmarkSummary[]
-): string {
-  const points: readonly CostEfficiencyPoint[] =
-    costPoints.length > 0
-      ? costPoints
-      : summaries.map((s) => ({
-          skillId: s.skillId,
-          modelId: "all",
-          averageCostUSD: s.averageCostUSD,
-          compositeScore: s.averageScore,
-          passRate: s.passRate,
-          tokensPerTask: 0,
-          durationMs: s.meanDurationMs,
-        }));
-
-  const maxCost = Math.max(0.001, ...points.map((p) => p.averageCostUSD)) * 1.15;
-  const scaleX = (cost: number): number => 60 + (Math.max(0, cost) / maxCost) * 560;
-  const scaleY = (pass: number): number => 270 - (Math.max(0, Math.min(100, pass)) / 100) * 240;
-
-  const sortedForFrontier = [...points].sort((a, b) =>
-    a.averageCostUSD !== b.averageCostUSD
-      ? a.averageCostUSD - b.averageCostUSD
-      : b.passRate - a.passRate
-  );
-  let maxPass = -1;
-  const frontierPoints: CostEfficiencyPoint[] = [];
-  for (const pt of sortedForFrontier) {
-    if (pt.passRate > maxPass) {
-      frontierPoints.push(pt);
-      maxPass = pt.passRate;
-    }
-  }
-
-  const frontierPolyline = frontierPoints
-    .map((pt) => `${scaleX(pt.averageCostUSD).toFixed(1)},${scaleY(pt.passRate).toFixed(1)}`)
-    .join(" ");
-
-  const gridY = [0, 25, 50, 75, 100]
-    .map((pct) => {
-      const y = scaleY(pct);
-      return `<line x1="60" y1="${y}" x2="620" y2="${y}" stroke="#1e293b" stroke-dasharray="2,2"/><text x="52" y="${y + 4}" text-anchor="end" font-size="10" fill="#64748b">${pct}%</text>`;
-    })
-    .join("");
-
-  const gridX = [0, 0.25, 0.5, 0.75, 1.0]
-    .map((ratio) => {
-      const cost = maxCost * ratio;
-      const x = scaleX(cost);
-      return `<line x1="${x}" y1="30" x2="${x}" y2="270" stroke="#1e293b" stroke-dasharray="2,2"/><text x="${x}" y="285" text-anchor="middle" font-size="10" fill="#64748b">$${cost.toFixed(3)}</text>`;
-    })
-    .join("");
-
-  const dots = points
-    .map((pt) => {
-      const cx = scaleX(pt.averageCostUSD).toFixed(1);
-      const cy = scaleY(pt.passRate).toFixed(1);
-      return `<circle cx="${cx}" cy="${cy}" r="5" fill="#38bdf8" stroke="#0f172a" stroke-width="1.5" class="scatter-point" data-skill="${escapeHtml(pt.skillId)}" data-cost="${pt.averageCostUSD.toFixed(4)}" data-pass="${pt.passRate.toFixed(1)}"/>`;
-    })
-    .join("");
-
-  const frontierSvg =
-    frontierPoints.length > 1
-      ? `<polyline points="${frontierPolyline}" fill="none" stroke="#34d399" stroke-width="2" stroke-dasharray="4,4"/>`
-      : "";
-
-  return `<svg viewBox="0 0 650 320" width="100%" height="280" class="chart-svg"><g>${gridY}${gridX}</g>${frontierSvg}<g>${dots}</g><line x1="60" y1="270" x2="620" y2="270" stroke="#475569"/><line x1="60" y1="30" x2="60" y2="270" stroke="#475569"/><text x="340" y="308" text-anchor="middle" font-size="11" fill="#94a3b8">Average Cost (USD)</text><text x="18" y="150" text-anchor="middle" transform="rotate(-90, 18, 150)" font-size="11" fill="#94a3b8">Pass Rate (%)</text><g transform="translate(480, 20)"><line x1="0" y1="5" x2="16" y2="5" stroke="#34d399" stroke-width="2" stroke-dasharray="4,4"/><text x="22" y="8" font-size="10" fill="#94a3b8">Pareto Frontier</text></g></svg>`;
-}
-
-function renderBarChart(summaries: readonly SkillBenchmarkSummary[]): string {
-  const topSummaries = summaries.slice(0, 10);
-  const count = Math.max(1, topSummaries.length);
-  const step = 560 / count;
-  const barWidth = Math.min(36, step * 0.6);
-
-  const gridY = [0, 25, 50, 75, 100]
-    .map((pct) => {
-      const y = 260 - (pct / 100) * 230;
-      return `<line x1="60" y1="${y}" x2="620" y2="${y}" stroke="#1e293b" stroke-dasharray="2,2"/><text x="52" y="${y + 4}" text-anchor="end" font-size="10" fill="#64748b">${pct}%</text>`;
-    })
-    .join("");
-
-  const bars = topSummaries
-    .map((s, idx) => {
-      const xc = 60 + step * idx + step / 2;
-      const xb = xc - barWidth / 2;
-      const p = Math.max(0, Math.min(100, s.passRate));
-      const h = (p / 100) * 230;
-      const yb = 260 - h;
-
-      const n = Math.max(1, s.totalRuns);
-      const pDec = p / 100;
-      const margin = 1.96 * Math.sqrt(Math.max(0, (pDec * (1 - pDec)) / n)) * 100;
-      const ci = s.scoreStats?.confidenceInterval95;
-      const ciLow = ci ? Math.max(0, ci[0] * (ci[1] <= 1 ? 100 : 1)) : Math.max(0, p - margin);
-      const ciHigh = ci ? Math.min(100, ci[1] * (ci[1] <= 1 ? 100 : 1)) : Math.min(100, p + margin);
-
-      const yHigh = 260 - (ciHigh / 100) * 230;
-      const yLow = 260 - (ciLow / 100) * 230;
-      const displayLabel = s.skillId.length > 12 ? `${s.skillId.slice(0, 10)}..` : s.skillId;
-
-      return `<g><rect x="${xb.toFixed(1)}" y="${yb.toFixed(1)}" width="${barWidth.toFixed(1)}" height="${h.toFixed(1)}" rx="3" fill="#818cf8" class="chart-bar" data-skill="${escapeHtml(s.skillId)}" data-pass="${p.toFixed(1)}" data-ci="[${ciLow.toFixed(1)}%, ${ciHigh.toFixed(1)}%]"/><line x1="${xc.toFixed(1)}" y1="${yHigh.toFixed(1)}" x2="${xc.toFixed(1)}" y2="${yLow.toFixed(1)}" stroke="#f43f5e" stroke-width="2"/><line x1="${(xc - 4).toFixed(1)}" y1="${yHigh.toFixed(1)}" x2="${(xc + 4).toFixed(1)}" y2="${yHigh.toFixed(1)}" stroke="#f43f5e" stroke-width="2"/><line x1="${(xc - 4).toFixed(1)}" y1="${yLow.toFixed(1)}" x2="${(xc + 4).toFixed(1)}" y2="${yLow.toFixed(1)}" stroke="#f43f5e" stroke-width="2"/><text x="${xc.toFixed(1)}" y="${Math.max(18, yHigh - 5).toFixed(1)}" text-anchor="middle" font-size="10" fill="#e2e8f0">${p.toFixed(0)}%</text><text x="${xc.toFixed(1)}" y="276" text-anchor="end" transform="rotate(-35, ${xc.toFixed(1)}, 276)" font-size="10" fill="#94a3b8">${escapeHtml(displayLabel)}</text></g>`;
-    })
-    .join("");
-
-  return `<svg viewBox="0 0 650 320" width="100%" height="280" class="chart-svg"><g>${gridY}</g><g>${bars}</g><line x1="60" y1="260" x2="620" y2="260" stroke="#475569"/><line x1="60" y1="30" x2="60" y2="260" stroke="#475569"/><text x="18" y="145" text-anchor="middle" transform="rotate(-90, 18, 145)" font-size="11" fill="#94a3b8">Pass Rate (%)</text><g transform="translate(480, 15)"><line x1="0" y1="5" x2="12" y2="5" stroke="#f43f5e" stroke-width="2"/><text x="18" y="8" font-size="10" fill="#94a3b8">95% Error Bar</text></g></svg>`;
-}
-
 function renderLeaderboardRows(entries: readonly LeaderboardEntry[]): string {
   return entries
     .map((e) => {
@@ -140,7 +32,7 @@ function renderLeaderboardRows(entries: readonly LeaderboardEntry[]): string {
         : `<span class="badge badge-dim">—</span>`;
       const cacheHitPct = (e.cacheHitRatio * (e.cacheHitRatio <= 1 ? 100 : 1)).toFixed(1);
 
-      return `<tr data-category="${escapeHtml(e.category)}"><td>#${e.rank}</td><td><strong>${escapeHtml(e.skillId)}</strong></td><td><span class="badge badge-cat">${escapeHtml(e.category)}</span></td><td>${e.passRate.toFixed(1)}%${deltaHtml}</td><td>${e.averageScore.toFixed(3)}</td><td>${Math.round(e.eloRating)}</td><td>${e.meanDurationSeconds.toFixed(2)}s</td><td>$${e.averageCostUSD.toFixed(4)}</td><td>${cacheHitPct}%</td><td>${e.totalRuns}</td><td>${sigBadge}</td></tr>`;
+      return `<tr data-category="${escapeHtml(e.category)}" data-skill="${escapeHtml(e.skillId)}"><td>#${e.rank}</td><td><strong>${escapeHtml(e.skillId)}</strong></td><td><span class="badge badge-cat">${escapeHtml(e.category)}</span></td><td>${e.passRate.toFixed(1)}%${deltaHtml}</td><td>${e.averageScore.toFixed(3)}</td><td>${Math.round(e.eloRating)}</td><td>${e.meanDurationSeconds.toFixed(2)}s</td><td>$${e.averageCostUSD.toFixed(4)}</td><td>${cacheHitPct}%</td><td>${e.totalRuns}</td><td>${sigBadge}</td></tr>`;
     })
     .join("");
 }
@@ -148,46 +40,48 @@ function renderLeaderboardRows(entries: readonly LeaderboardEntry[]): string {
 function renderCategoryOptions(entries: readonly LeaderboardEntry[]): string {
   const categories = Array.from(new Set(entries.map((e) => e.category))).sort();
   const options = categories
-    .map((cat) => `<option value="${escapeHtml(cat)}">${escapeHtml(cat)}</option>`)
+    .map((cat) => `<option value="${escapeHtml(cat)}">${escapeHtml(cat.toUpperCase())}</option>`)
     .join("");
-  return `<option value="all">All Categories (${entries.length})</option>${options}`;
+  return `<option value="all">ALL CATEGORIES (${entries.length})</option>${options}`;
 }
 
 function generateCss(): string {
   return `
-html, body, div, span, h1, h2, table, th, td, select, input, header, section, g, text { box-sizing: border-box; margin: 0; padding: 0; font-family: "JetBrains Mono", "Fira Code", "Courier New", monospace; }
-body { background: #000000; color: #ffffff; padding: 24px; }
-.container { max-width: 1400px; margin: 0 auto; }
-.header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; padding: 16px; border: 2px solid #ffffff; box-shadow: 4px 4px 0px #ffffff; background: #000000; }
-.header h1 { font-size: 22px; font-weight: 900; color: #ffffff; text-transform: uppercase; letter-spacing: 1px; }
+html, body, div, span, h1, h2, table, th, td, select, input, header, section, g, text { box-sizing: border-box; margin: 0; padding: 0; font-family: "JetBrains Mono", "Fira Code", monospace; }
+body { background: #000000; color: #ffffff; padding: 16px; width: 100vw; min-height: 100vh; }
+.full-viewport-container { width: 100%; max-width: 100%; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+.header { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border: 2px solid #ffffff; box-shadow: 4px 4px 0px #ffffff; background: #000000; flex-wrap: wrap; gap: 12px; }
+.header h1 { font-size: 20px; font-weight: 900; color: #ffffff; text-transform: uppercase; letter-spacing: 1px; }
 .header .badge-time { background: #000000; color: #ffffff; padding: 4px 10px; border: 1px solid #ffffff; font-size: 11px; font-weight: 700; }
-.kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 24px; }
-.kpi-card { background: #000000; border: 2px solid #ffffff; box-shadow: 4px 4px 0px #ffffff; padding: 18px 20px; }
-.kpi-title { font-size: 11px; font-weight: 700; text-transform: uppercase; color: #888888; letter-spacing: 1px; margin-bottom: 6px; }
-.kpi-val { font-size: 28px; font-weight: 900; color: #ffffff; letter-spacing: -0.5px; }
-.kpi-accent { color: #ffffff; }
-.charts-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(480px, 1fr)); gap: 20px; margin-bottom: 24px; }
-.card { background: #000000; border: 2px solid #ffffff; box-shadow: 4px 4px 0px #ffffff; padding: 20px; }
-.card-title { font-size: 14px; font-weight: 900; color: #ffffff; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 14px; }
-.controls { display: flex; gap: 16px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
-.select-input, .text-input { background: #000000; border: 2px solid #ffffff; color: #ffffff; padding: 8px 12px; font-size: 12px; font-weight: 700; outline: none; box-shadow: 2px 2px 0px #ffffff; }
+.filter-toolbar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; padding: 16px; border: 2px solid #ffffff; box-shadow: 4px 4px 0px #ffffff; background: #000000; }
+.filter-label { font-size: 11px; font-weight: 900; text-transform: uppercase; color: #888888; letter-spacing: 0.5px; }
+.select-input, .text-input { background: #000000; border: 2px solid #ffffff; color: #ffffff; padding: 8px 12px; font-size: 11px; font-weight: 700; outline: none; box-shadow: 2px 2px 0px #ffffff; }
 .select-input:focus, .text-input:focus { background: #111111; }
-.table-wrap { overflow-x: auto; border: 2px solid #ffffff; box-shadow: 4px 4px 0px #ffffff; }
+.kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
+.kpi-card { background: #000000; border: 2px solid #ffffff; box-shadow: 4px 4px 0px #ffffff; padding: 16px 18px; }
+.kpi-title { font-size: 10px; font-weight: 700; text-transform: uppercase; color: #888888; letter-spacing: 1px; margin-bottom: 6px; }
+.kpi-val { font-size: 24px; font-weight: 900; color: #ffffff; letter-spacing: -0.5px; }
+.kpi-accent { color: #ffffff; }
+.charts-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(460px, 1fr)); gap: 16px; }
+.card { background: #000000; border: 2px solid #ffffff; box-shadow: 4px 4px 0px #ffffff; padding: 16px; }
+.card-title { font-size: 13px; font-weight: 900; color: #ffffff; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; }
+.table-wrap { overflow-x: auto; border: 2px solid #ffffff; box-shadow: 4px 4px 0px #ffffff; width: 100%; }
 table { width: 100%; border-collapse: collapse; font-size: 12px; background: #000000; }
-th { background: #ffffff; color: #000000; font-weight: 900; padding: 12px 14px; text-align: left; cursor: pointer; user-select: none; border-bottom: 2px solid #ffffff; border-right: 1px solid #000000; white-space: nowrap; letter-spacing: 0.5px; }
+th { background: #ffffff; color: #000000; font-weight: 900; padding: 10px 12px; text-align: left; cursor: pointer; user-select: none; border-bottom: 2px solid #ffffff; border-right: 1px solid #000000; white-space: nowrap; letter-spacing: 0.5px; }
 th.asc::after { content: " ▲"; color: #000000; }
 th.desc::after { content: " ▼"; color: #000000; }
-td { padding: 10px 14px; border-bottom: 1px solid #333333; color: #ffffff; white-space: nowrap; font-weight: 600; }
+td { padding: 9px 12px; border-bottom: 1px solid #333333; color: #ffffff; white-space: nowrap; font-weight: 600; }
 tr:hover td { background: #222222; }
 .badge { display: inline-block; padding: 2px 8px; font-size: 10px; font-weight: 700; text-transform: uppercase; }
 .badge-cat { background: #000000; color: #ffffff; border: 1px solid #ffffff; }
 .badge-sig { background: #ffffff; color: #000000; font-weight: 900; }
 .badge-dim { color: #888888; border: 1px solid #555555; }
+.badge-think { background: #ffffff; color: #000000; font-weight: 900; border: 1px solid #ffffff; }
 .text-green { color: #ffffff; font-size: 11px; font-weight: 700; }
 .text-red { color: #888888; font-size: 11px; font-weight: 700; }
 .scatter-point, .chart-bar { cursor: pointer; }
 .scatter-point:hover, .chart-bar:hover { opacity: 0.7; }
-.chart-tooltip { position: fixed; display: none; background: #000000; border: 2px solid #ffffff; padding: 8px 12px; font-size: 12px; color: #ffffff; pointer-events: none; z-index: 1000; box-shadow: 4px 4px 0px #ffffff; line-height: 1.4; font-weight: 700; }
+.chart-tooltip { position: fixed; display: none; background: #000000; border: 2px solid #ffffff; padding: 8px 12px; font-size: 11px; color: #ffffff; pointer-events: none; z-index: 1000; box-shadow: 4px 4px 0px #ffffff; line-height: 1.4; font-weight: 700; }
 `.trim();
 }
 
@@ -226,11 +120,17 @@ document.addEventListener("DOMContentLoaded", function () {
   });
 
   var catFilter = document.getElementById("categoryFilter");
+  var tierFilter = document.getElementById("tierFilter");
+  var thinkFilter = document.getElementById("thinkFilter");
+  var statusFilter = document.getElementById("statusFilter");
   var searchInput = document.getElementById("skillSearch");
+
   function applyFilter() {
     var selectedCat = catFilter ? catFilter.value : "all";
+    var selectedThink = thinkFilter ? thinkFilter.value : "all";
     var searchVal = searchInput ? searchInput.value.toLowerCase().trim() : "";
     var rows = tbody.querySelectorAll("tr");
+
     rows.forEach(function (row) {
       var rowCat = row.getAttribute("data-category") || "";
       var rowText = row.innerText.toLowerCase();
@@ -239,7 +139,11 @@ document.addEventListener("DOMContentLoaded", function () {
       row.style.display = matchCat && matchSearch ? "" : "none";
     });
   }
+
   if (catFilter) catFilter.addEventListener("change", applyFilter);
+  if (tierFilter) tierFilter.addEventListener("change", applyFilter);
+  if (thinkFilter) thinkFilter.addEventListener("change", applyFilter);
+  if (statusFilter) statusFilter.addEventListener("change", applyFilter);
   if (searchInput) searchInput.addEventListener("input", applyFilter);
 
   var tooltip = document.getElementById("chartTooltip");
@@ -306,60 +210,80 @@ export function generateHtmlDashboard(
 <style>${css}</style>
 </head>
 <body>
-<div class="container">
+<div class="full-viewport-container">
   <header class="header">
-    <h1>${title}</h1>
-    <span class="badge-time">Last Updated: ${lastUpdated}</span>
+    <h1>⚡ ${title}</h1>
+    <span class="badge-time">LAST UPDATED: ${lastUpdated}</span>
   </header>
+  <section class="filter-toolbar">
+    <span class="filter-label">FILTERS:</span>
+    <select id="categoryFilter" class="select-input">${catOptions}</select>
+    <select id="tierFilter" class="select-input">
+      <option value="all">ALL TIERS</option>
+      <option value="flagship">FLAGSHIP</option>
+      <option value="mid">MID-SIZE</option>
+      <option value="small">SMALL/FAST</option>
+    </select>
+    <select id="thinkFilter" class="select-input">
+      <option value="all">ALL THINKING LEVELS</option>
+      <option value="none">NONE (NON-THINKING)</option>
+      <option value="low">LOW THINKING</option>
+      <option value="medium">MEDIUM THINKING</option>
+      <option value="high">HIGH THINKING</option>
+      <option value="max">MAX THINKING</option>
+    </select>
+    <select id="statusFilter" class="select-input">
+      <option value="all">ALL STATUSES</option>
+      <option value="pass">PASSED ONLY</option>
+      <option value="fail">FAILED ONLY</option>
+    </select>
+    <input type="text" id="skillSearch" class="text-input" placeholder="SEARCH SKILLS, MODELS, TAGS..." style="flex:1;min-width:200px"/>
+  </section>
   <section class="kpi-grid">
     <div class="kpi-card">
-      <div class="kpi-title">Total Benchmark Runs</div>
+      <div class="kpi-title">TOTAL BENCHMARK RUNS</div>
       <div class="kpi-val kpi-accent">${totalRuns.toLocaleString()}</div>
     </div>
     <div class="kpi-card">
-      <div class="kpi-title">Top Ranked Skill</div>
+      <div class="kpi-title">TOP RANKED SKILL</div>
       <div class="kpi-val">${escapeHtml(topSkill)}</div>
     </div>
     <div class="kpi-card">
-      <div class="kpi-title">Average Pass Rate</div>
+      <div class="kpi-title">AVERAGE PASS RATE</div>
       <div class="kpi-val kpi-accent">${avgPassRate}</div>
     </div>
     <div class="kpi-card">
-      <div class="kpi-title">Avg Cache Hit Ratio</div>
+      <div class="kpi-title">AVG CACHE HIT RATIO</div>
       <div class="kpi-val">${avgCacheHit}</div>
     </div>
   </section>
   <section class="charts-grid">
     <div class="card">
-      <h2 class="card-title">Cost ($) vs Pass Rate (%) Efficiency Frontier</h2>
+      <h2 class="card-title">COST ($) VS PASS RATE (%) EFFICIENCY FRONTIER</h2>
       ${scatterSvg}
     </div>
     <div class="card">
-      <h2 class="card-title">Top Skills Pass Rate with 95% Confidence Interval</h2>
+      <h2 class="card-title">TOP SKILLS PASS RATE WITH 95% CONFIDENCE INTERVAL</h2>
       ${barSvg}
     </div>
   </section>
   <section class="card">
-    <h2 class="card-title">Leaderboard &amp; Performance Metrics</h2>
-    <div class="controls">
-      <select id="categoryFilter" class="select-input">${catOptions}</select>
-      <input type="text" id="skillSearch" class="text-input" placeholder="Filter skills..."/>
-    </div>
+    <h2 class="card-title">LEADERBOARD &amp; PERFORMANCE METRICS</h2>
     <div class="table-wrap">
       <table id="leaderboardTable">
         <thead>
           <tr>
-            <th data-col="0" class="sortable">Rank</th>
-            <th data-col="1" class="sortable">Skill ID</th>
-            <th data-col="2" class="sortable">Category</th>
-            <th data-col="3" class="sortable">Pass Rate</th>
-            <th data-col="4" class="sortable">Score</th>
-            <th data-col="5" class="sortable">Elo</th>
-            <th data-col="6" class="sortable">Duration</th>
-            <th data-col="7" class="sortable">Cost</th>
-            <th data-col="8" class="sortable">Cache Hit</th>
-            <th data-col="9" class="sortable">Runs</th>
-            <th data-col="10" class="sortable">Stat Sig</th>
+            <th data-col="0" class="sortable">RANK</th>
+            <th data-col="1" class="sortable">SKILL ID</th>
+            <th data-col="2" class="sortable">CATEGORY</th>
+            <th data-col="3" class="sortable">PASS RATE</th>
+            <th data-col="4" class="sortable">SCORE</th>
+            <th data-col="5" class="sortable">ELO</th>
+            <th data-col="6" class="sortable">DURATION</th>
+            <th data-col="7" class="sortable">COST</th>
+            <th data-col="8" class="sortable">CACHE HIT</th>
+            <th data-col="9" class="sortable">RUNS</th>
+            <th data-col="10" class="sortable">STAT SIG</th>
           </tr>
         </thead>
         <tbody>
