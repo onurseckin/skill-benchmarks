@@ -41,6 +41,7 @@ import { FuzzerEngine } from "../fuzzer/fuzzer-engine.js";
 import type { FuzzingStrategy, MutationSeverity } from "../fuzzer/types.js";
 import { ScenarioSynthesizer } from "../generator/index.js";
 import type { ScenarioDefinition } from "../runner/types.js";
+import type { ChaosPerturbationMatrix } from "../chaos/index.js";
 
 export async function runBenchmarkCommand(args: CliParsedArgs): Promise<CliCommandResult> {
   const startTime = Date.now();
