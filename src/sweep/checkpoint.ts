@@ -13,7 +13,7 @@ import type { TokenUsage } from "../runner/types.js";
 import { sanitizeBenchmarkArtifactValue } from "../shared/artifact-sanitization.js";
 import { incompatibleSweepPlanMessage } from "./sweep-plan.js";
 
-const DEFAULT_METADATA_VERSION = "1.0.0";
+const DEFAULT_METADATA_VERSION = "2.0.0";
 
 export class CheckpointLedger implements ICheckpointLedger {
   public readonly filePath: string;
