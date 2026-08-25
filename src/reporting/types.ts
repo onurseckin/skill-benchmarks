@@ -6,6 +6,9 @@ export interface ModelParameters {
   readonly temperature: number;
   readonly maxTokens?: number;
   readonly topP?: number;
+  readonly thinkingLevel?: "none" | "low" | "medium" | "high" | "max";
+  readonly thinkingBudgetTokens?: number;
+  readonly reasoningEffort?: "low" | "medium" | "high";
 }
 
 export interface HostEnvironment {
@@ -147,6 +150,9 @@ export interface RunRecord {
   readonly skillVersion?: string;
   readonly modelId: string;
   readonly providerId: string;
+  readonly thinkingLevel?: "none" | "low" | "medium" | "high" | "max";
+  readonly thinkingBudgetTokens?: number;
+  readonly reasoningTokens?: number;
   readonly status: RunStatus;
   readonly compositeScore: number;
   readonly passedBenchmark: boolean;

@@ -99,6 +99,9 @@ export interface GenerateOptions {
   readonly stopSequences?: ReadonlyArray<string>;
   readonly signal?: AbortSignal;
   readonly customHeaders?: Record<string, string>;
+  readonly thinkingBudgetTokens?: number;
+  readonly thinkingEffortLevel?: "none" | "low" | "medium" | "high" | "max";
+  readonly reasoningEffort?: "low" | "medium" | "high";
 }
 
 export interface LLMProviderAdapter {
@@ -231,6 +234,9 @@ export interface ScenarioRunConfig {
   readonly container?: IContainerInstance;
   readonly limits: ExecutionLimits;
   readonly temperature?: number;
+  readonly thinkingLevel?: "none" | "low" | "medium" | "high" | "max";
+  readonly thinkingBudget?: number;
+  readonly reasoningEffort?: "low" | "medium" | "high";
   readonly tags?: ReadonlyArray<string>;
   readonly metadata?: Record<string, unknown>;
 }
@@ -240,6 +246,8 @@ export interface ScenarioResult {
   readonly scenarioId: string;
   readonly skillIds: ReadonlyArray<string>;
   readonly modelId: string;
+  readonly thinkingLevel?: "none" | "low" | "medium" | "high" | "max";
+  readonly thinkingBudget?: number;
   readonly terminationReason: RunTerminationReason;
   readonly completed: boolean;
   readonly turns: number;
@@ -263,6 +271,7 @@ export interface MatrixExecutionConfig {
     readonly modelId: string;
     readonly provider: LLMProviderAdapter;
   }>;
+  readonly thinkingLevels?: ReadonlyArray<"none" | "low" | "medium" | "high" | "max">;
   readonly repetitions: number;
   readonly concurrency: number;
   readonly limits: ExecutionLimits;

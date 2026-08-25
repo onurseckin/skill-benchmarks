@@ -176,6 +176,9 @@ export class GeminiProviderAdapter implements LLMProviderAdapter {
     if (options.stopSequences !== undefined && options.stopSequences.length > 0) {
       generationConfig.stopSequences = options.stopSequences;
     }
+    if (options.thinkingBudgetTokens !== undefined) {
+      generationConfig.thinkingConfig = { thinkingBudget: options.thinkingBudgetTokens };
+    }
 
     const bodyObj: Record<string, unknown> = { contents, generationConfig };
     if (systemInstruction !== undefined) bodyObj.systemInstruction = systemInstruction;

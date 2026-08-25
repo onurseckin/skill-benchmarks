@@ -94,7 +94,12 @@ export class ScenarioRunnerEngine {
 
       const messages = contextManager.getMessages();
       const tools = this.defaultToolDispatcher.getToolDefinitions();
-      const options: GenerateOptions = { temperature: config.temperature ?? 0.0 };
+      const options: GenerateOptions = {
+        temperature: config.temperature ?? 0.0,
+        thinkingEffortLevel: config.thinkingLevel,
+        thinkingBudgetTokens: config.thinkingBudget,
+        reasoningEffort: config.reasoningEffort,
+      };
 
       let turnResponse: ModelTurnResponse;
       const turnStartTimeMs = performance.now();
@@ -292,6 +297,8 @@ export class ScenarioRunnerEngine {
       scenarioId: config.scenarioId,
       skillIds: config.skillIds,
       modelId: config.modelId,
+      thinkingLevel: config.thinkingLevel,
+      thinkingBudget: config.thinkingBudget,
       terminationReason,
       completed,
       turns: turnIndex,

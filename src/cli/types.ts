@@ -24,6 +24,10 @@ export interface BenchmarkRunOptions {
   readonly concurrency?: number;
   readonly repetitions?: number;
   readonly temperature?: number;
+  readonly thinking?: "none" | "low" | "medium" | "high" | "max";
+  readonly reasoning?: "low" | "medium" | "high";
+  readonly thinkingBudget?: number;
+  readonly matrixThinking?: readonly ("none" | "low" | "medium" | "high" | "max")[];
   readonly timeoutSeconds?: number;
   readonly maxTurns?: number;
   readonly maxCostUSD?: number;

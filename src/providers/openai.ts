@@ -185,15 +185,29 @@ export class OpenAIProviderAdapter implements LLMProviderAdapter {
       function: { name: t.name, description: t.description, parameters: t.parameters },
     }));
 
+    const isReasoningModel = this.modelId.startsWith("o1") || this.modelId.startsWith("o3");
     const bodyObj: Record<string, unknown> = {
       model: this.modelId,
       messages: openAIMessages,
-      temperature: options.temperature,
       stream,
     };
+    if (!isReasoningModel) {
+      bodyObj.temperature = options.temperature;
+    }
     if (stream) bodyObj.stream_options = { include_usage: true };
-    if (options.maxTokens !== undefined) bodyObj.max_tokens = options.maxTokens;
-    if (options.topP !== undefined) bodyObj.top_p = options.topP;
+    if (options.maxTokens !== undefined) {
+      if (isReasoningModel) {
+        bodyObj.max_completion_tokens = options.maxTokens;
+      } else {
+        bodyObj.max_tokens = options.maxTokens;
+      }
+    }
+    if (options.reasoningEffort !== undefined) {
+      bodyObj.reasoning_effort = options.reasoningEffort;
+    } else if (options.thinkingEffortLevel !== undefined && options.thinkingEffortLevel !== "none") {
+      bodyObj.reasoning_effort = options.thinkingEffortLevel === "high" || options.thinkingEffortLevel === "max" ? "high" : options.thinkingEffortLevel === "low" ? "low" : "medium";
+    }
+    if (options.topP !== undefined && !isReasoningModel) bodyObj.top_p = options.topP;
     if (options.stopSequences !== undefined && options.stopSequences.length > 0) bodyObj.stop = options.stopSequences;
     if (openAITools.length > 0) bodyObj.tools = openAITools;
     if (options.responseFormat !== undefined) bodyObj.response_format = options.responseFormat;

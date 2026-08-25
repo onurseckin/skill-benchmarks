@@ -116,18 +116,28 @@ export class MatrixSweepEngine implements IMatrixSweepEngine {
       ...config.defaultExecutionLimits,
     };
     const cells: MatrixCellDescriptor[] = [];
+    const thinkingLevels = config.thinkingLevels !== undefined && config.thinkingLevels.length > 0
+      ? config.thinkingLevels
+      : [undefined];
+
     for (const scenarioId of config.scenarioIds) {
       for (const skillId of config.skillIds) {
         for (const modelEntry of config.models) {
-          for (let rep = 0; rep < reps; rep++) {
-            const cellId = `${scenarioId}_${skillId}_${modelEntry.modelId}_rep${rep}`;
-            cells.push({
-              cellId, scenarioId, skillId,
-              modelId: modelEntry.modelId, providerId: modelEntry.providerId,
-              repetitionIndex: rep, runId: `run-${this.sweepId}-${cellId}`,
-              modelEntry, limits, temperature: modelEntry.temperature,
-              tags: modelEntry.tags, metadata: modelEntry.metadata,
-            });
+          for (const thinkingLevel of thinkingLevels) {
+            for (let rep = 0; rep < reps; rep++) {
+              const effectiveThinking = thinkingLevel !== undefined ? thinkingLevel : modelEntry.thinkingLevel;
+              const thinkSuffix = effectiveThinking !== undefined ? `_th_${effectiveThinking}` : "";
+              const cellId = `${scenarioId}_${skillId}_${modelEntry.modelId}${thinkSuffix}_rep${rep}`;
+              cells.push({
+                cellId, scenarioId, skillId,
+                modelId: modelEntry.modelId, providerId: modelEntry.providerId,
+                thinkingLevel: effectiveThinking,
+                thinkingBudget: modelEntry.thinkingBudget,
+                repetitionIndex: rep, runId: `run-${this.sweepId}-${cellId}`,
+                modelEntry, limits, temperature: modelEntry.temperature,
+                tags: modelEntry.tags, metadata: modelEntry.metadata,
+              });
+            }
           }
         }
       }
@@ -237,6 +247,9 @@ export class MatrixSweepEngine implements IMatrixSweepEngine {
               runId: cell.runId, scenarioId: cell.scenarioId, skillIds: [cell.skillId], modelId: cell.modelId,
               provider, prompt: scenarioDef.instructions,
               container, limits: cell.limits, temperature: cell.temperature,
+              thinkingLevel: cell.thinkingLevel,
+              thinkingBudget: cell.thinkingBudget,
+              reasoningEffort: cell.modelEntry.reasoningEffort,
             });
             durationMs = scenarioResult.totalDurationMs;
           }

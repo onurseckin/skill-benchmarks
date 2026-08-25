@@ -44,6 +44,7 @@ export interface MatrixCellDescriptor {
   readonly skillIds: ReadonlyArray<string>;
   readonly modelId: string;
   readonly provider: LLMProviderAdapter;
+  readonly thinkingLevel?: "none" | "low" | "medium" | "high" | "max";
   readonly repetitionIndex: number;
 }
 
@@ -52,18 +53,25 @@ export function generateMatrixPermutations(
 ): ReadonlyArray<MatrixCellDescriptor> {
   const cells: MatrixCellDescriptor[] = [];
   const repetitions = Math.max(1, config.repetitions);
+  const thinkingLevels = config.thinkingLevels !== undefined && config.thinkingLevels.length > 0
+    ? config.thinkingLevels
+    : [undefined];
 
   for (const scenarioId of config.scenarioIds) {
     for (const model of config.models) {
-      for (let rep = 0; rep < repetitions; rep++) {
-        cells.push({
-          cellId: `${scenarioId}-${model.modelId}-r${rep}`,
-          scenarioId,
-          skillIds: config.skillIds,
-          modelId: model.modelId,
-          provider: model.provider,
-          repetitionIndex: rep,
-        });
+      for (const thinkingLevel of thinkingLevels) {
+        for (let rep = 0; rep < repetitions; rep++) {
+          const thinkSuffix = thinkingLevel !== undefined ? `-th_${thinkingLevel}` : "";
+          cells.push({
+            cellId: `${scenarioId}-${model.modelId}${thinkSuffix}-r${rep}`,
+            scenarioId,
+            skillIds: config.skillIds,
+            modelId: model.modelId,
+            provider: model.provider,
+            thinkingLevel,
+            repetitionIndex: rep,
+          });
+        }
       }
     }
   }
@@ -202,6 +210,7 @@ export class MatrixRunner {
         container,
         limits: config.limits,
         temperature: config.temperature,
+        thinkingLevel: cell.thinkingLevel,
       };
 
       const collector = collectorFactory ? collectorFactory(cell) : undefined;

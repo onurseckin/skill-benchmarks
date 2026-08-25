@@ -38,6 +38,10 @@ const SPECS: readonly (readonly [string, FlagValueKind, readonly string[]])[] = 
   ["strategies", "array", ["strategies", "strategy"]], ["severities", "array", ["severities", "severity"]],
   ["mutationsPerScenario", "number", ["mutations-per-scenario", "mutationsPerScenario", "mutations"]],
   ["seed", "number", ["seed"]],
+  ["thinking", "string", ["thinking", "think", "thinking-level", "thinkingLevel"]],
+  ["reasoning", "string", ["reasoning", "reasoning-effort", "reasoningEffort"]],
+  ["thinkingBudget", "number", ["thinking-budget", "thinkingBudget", "budget-tokens", "budgetTokens"]],
+  ["matrixThinking", "array", ["matrix-thinking", "matrixThinking", "thinking-matrix", "thinkingMatrix"]],
 ];
 
 const FLAG_MAP = new Map<string, FlagSpec>();
@@ -140,7 +144,12 @@ export function parseCliArgs(argv: readonly string[]): CliParsedArgs {
     modelIds: toArr(flags["model"]), providerId: toStr(flags["provider"]),
     category: toStr(flags["category"]), tags: toArr(flags["tag"]),
     concurrency: toNum(flags["concurrency"]), repetitions: toNum(flags["repetitions"]),
-    temperature: toNum(flags["temperature"]), timeoutSeconds: toNum(flags["timeoutSeconds"]),
+    temperature: toNum(flags["temperature"]),
+    thinking: toStr(flags["thinking"]) as BenchmarkRunOptions["thinking"],
+    reasoning: toStr(flags["reasoning"]) as BenchmarkRunOptions["reasoning"],
+    thinkingBudget: toNum(flags["thinkingBudget"]),
+    matrixThinking: toArr(flags["matrixThinking"]) as BenchmarkRunOptions["matrixThinking"],
+    timeoutSeconds: toNum(flags["timeoutSeconds"]),
     maxTurns: toNum(flags["maxTurns"]), maxCostUSD: toNum(flags["maxCostUSD"]),
     dbPath: toStr(flags["dbPath"]), outputFormat: toStr(flags["format"]) as CliOutputFormat | undefined,
     outputPath: toStr(flags["outputPath"]), verbose: toBool(flags["verbose"]),

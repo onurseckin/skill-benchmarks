@@ -117,6 +117,8 @@ export interface GenerateOptions {
   readonly signal?: AbortSignal;
   readonly customHeaders?: Readonly<Record<string, string>>;
   readonly thinkingBudgetTokens?: number;
+  readonly thinkingEffortLevel?: "none" | "low" | "medium" | "high" | "max";
+  readonly reasoningEffort?: "low" | "medium" | "high";
   readonly responseFormat?: { readonly type: "text" | "json_object" };
 }
 

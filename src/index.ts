@@ -14,6 +14,7 @@ export * from "./tunnel/index.js";
 export * from "./chaos/index.js";
 export * from "./judge/index.js";
 export * from "./skills/index.js";
+export * from "./models/index.js";
 export * from "./dialog/index.js";
 export * from "./reporting/index.js";
 export { computeWelchTTest } from "./ci/index.js";

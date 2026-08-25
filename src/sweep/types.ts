@@ -66,6 +66,9 @@ export interface ModelMatrixEntry {
   readonly temperature?: number;
   readonly topP?: number;
   readonly maxTokens?: number;
+  readonly thinkingLevel?: "none" | "low" | "medium" | "high" | "max";
+  readonly thinkingBudget?: number;
+  readonly reasoningEffort?: "low" | "medium" | "high";
   readonly concurrencyLimit?: number;
   readonly rateLimit?: RateLimitConfig;
   readonly tags?: readonly string[];
@@ -78,6 +81,8 @@ export interface MatrixCellIdentifier {
   readonly skillId: string;
   readonly modelId: string;
   readonly providerId: string;
+  readonly thinkingLevel?: "none" | "low" | "medium" | "high" | "max";
+  readonly thinkingBudget?: number;
   readonly repetitionIndex: number;
 }
 
@@ -192,6 +197,7 @@ export interface MatrixSweepConfig {
   readonly scenarioIds: readonly string[];
   readonly skillIds: readonly string[];
   readonly models: readonly ModelMatrixEntry[];
+  readonly thinkingLevels?: readonly ("none" | "low" | "medium" | "high" | "max")[];
   readonly repetitions?: number;
   readonly concurrency?: Partial<ConcurrencyControls>;
   readonly rateLimits?: readonly ProviderRateLimitPolicy[];
