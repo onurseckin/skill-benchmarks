@@ -20,6 +20,8 @@ import { TelemetryDatabase } from "../reporting/db.js";
 import type { ExecutionLimits } from "../runner/types.js";
 import { createSafeArtifactPathSegment } from "../shared/artifact-sanitization.js";
 import { executeSweepCell } from "./cell-execution.js";
+import { acquireSweepLease, sweepLeaseFileName } from "./sweep-lease.js";
+import { bindSweepPlan, createSweepPlanFingerprint } from "./sweep-plan.js";
 export class MatrixSweepEngine implements IMatrixSweepEngine {
   public sweepId: string;
   private readonly constructorSweepId?: string;
@@ -167,6 +169,24 @@ export class MatrixSweepEngine implements IMatrixSweepEngine {
       ?? join(config.runtimeConfig.outputRoot, "sweeps", this.sweepId, "checkpoint.json");
     const allPlannedCells = this.generateCells(config);
     this.totalCells = allPlannedCells.length;
+    const telemetryDbPath = config.telemetryDbPath
+      ?? join(config.runtimeConfig.outputRoot, "db", "benchmarks.sqlite");
+    const planFingerprint = createSweepPlanFingerprint({
+      sweepId: this.sweepId,
+      checkpointPath,
+      telemetryDbPath,
+      config,
+      cells: allPlannedCells,
+    });
+    const sweepLease = await acquireSweepLease(config.runtimeConfig.outputRoot, this.sweepId);
+    try {
+    await bindSweepPlan(
+      sweepLease.planPath,
+      sweepLeaseFileName,
+      this.sweepId,
+      planFingerprint,
+      config.checkpoint?.autoResume === true
+    );
     const checkpointLedger = new CheckpointLedger(checkpointPath, {
       sweepId: this.sweepId,
       scenarioIds: config.scenarioIds,
@@ -174,10 +194,9 @@ export class MatrixSweepEngine implements IMatrixSweepEngine {
       modelIds: config.models.map((m) => m.modelId),
       repetitions: config.repetitions ?? 1,
       totalPlannedCells: this.totalCells,
+      planFingerprint,
     }, config.checkpoint);
     if (config.checkpoint?.autoResume) await checkpointLedger.load();
-    const telemetryDbPath = config.telemetryDbPath
-      ?? join(config.runtimeConfig.outputRoot, "db", "benchmarks.sqlite");
     await mkdir(join(config.runtimeConfig.outputRoot, "db"), { recursive: true });
     const telemetryDb = new TelemetryDatabase(telemetryDbPath);
     try {
@@ -299,6 +318,9 @@ export class MatrixSweepEngine implements IMatrixSweepEngine {
       return summary;
     } finally {
       telemetryDb.close();
+    }
+    } finally {
+      await sweepLease.release();
     }
   }
 

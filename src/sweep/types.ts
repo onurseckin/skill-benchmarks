@@ -178,6 +178,7 @@ export interface CheckpointConfig {
 export interface CheckpointMetadata {
   readonly version: string;
   readonly sweepId: string;
+  readonly planFingerprint: string;
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly hostArch: string;

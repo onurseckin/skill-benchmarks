@@ -11,12 +11,14 @@ import type {
 } from "./types.js";
 import type { TokenUsage } from "../runner/types.js";
 import { sanitizeBenchmarkArtifactValue } from "../shared/artifact-sanitization.js";
+import { incompatibleSweepPlanMessage } from "./sweep-plan.js";
 
 const DEFAULT_METADATA_VERSION = "1.0.0";
 
 export class CheckpointLedger implements ICheckpointLedger {
   public readonly filePath: string;
   private readonly maxBackups: number;
+  private readonly planFingerprint: string;
   private state: CheckpointState;
   private writeLock: Promise<void> = Promise.resolve();
 
@@ -29,15 +31,18 @@ export class CheckpointLedger implements ICheckpointLedger {
       readonly modelIds: readonly string[];
       readonly repetitions: number;
       readonly totalPlannedCells: number;
+      readonly planFingerprint: string;
     },
     config?: Partial<CheckpointConfig>
   ) {
     this.filePath = resolve(filePath);
     this.maxBackups = config?.maxBackups ?? 3;
+    this.planFingerprint = initialSummary.planFingerprint;
 
     const metadata: CheckpointMetadata = {
       version: DEFAULT_METADATA_VERSION,
       sweepId: initialSummary.sweepId,
+      planFingerprint: initialSummary.planFingerprint,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       hostArch: os.arch(),
@@ -106,42 +111,20 @@ export class CheckpointLedger implements ICheckpointLedger {
   }
 
   async load(): Promise<CheckpointState | null> {
-    if (!existsSync(this.filePath)) {
-      for (let i = 1; i <= this.maxBackups; i++) {
-        const backupFile = `${this.filePath}.bak.${i}`;
-        if (existsSync(backupFile)) {
-          try {
-            const raw = readFileSync(backupFile, "utf8");
-            const parsed = JSON.parse(raw) as CheckpointState;
-            this.state = parsed;
-            return parsed;
-          } catch {
-          }
-        }
+    const candidates = [this.filePath];
+    for (let i = 1; i <= this.maxBackups; i++) candidates.push(`${this.filePath}.bak.${i}`);
+    for (const candidate of candidates) {
+      if (!existsSync(candidate)) continue;
+      try {
+        const parsed = JSON.parse(readFileSync(candidate, "utf8")) as CheckpointState;
+        this.assertCompatibleCheckpoint(parsed);
+        this.state = parsed;
+        return parsed;
+      } catch (error) {
+        if (error instanceof TypeError && error.message === incompatibleSweepPlanMessage) throw error;
       }
-      return null;
     }
-
-    try {
-      const raw = readFileSync(this.filePath, "utf8");
-      const parsed = JSON.parse(raw) as CheckpointState;
-      this.state = parsed;
-      return parsed;
-    } catch {
-      for (let i = 1; i <= this.maxBackups; i++) {
-        const backupFile = `${this.filePath}.bak.${i}`;
-        if (existsSync(backupFile)) {
-          try {
-            const raw = readFileSync(backupFile, "utf8");
-            const parsed = JSON.parse(raw) as CheckpointState;
-            this.state = parsed;
-            return parsed;
-          } catch {
-          }
-        }
-      }
-      return null;
-    }
+    return null;
   }
 
   async save(state: CheckpointState): Promise<void> {
@@ -267,5 +250,11 @@ export class CheckpointLedger implements ICheckpointLedger {
 
   getState(): CheckpointState {
     return this.state;
+  }
+
+  private assertCompatibleCheckpoint(state: CheckpointState): void {
+    if (state.metadata.planFingerprint !== this.planFingerprint) {
+      throw new TypeError(incompatibleSweepPlanMessage);
+    }
   }
 }
