@@ -98,11 +98,16 @@ export async function bindSweepPlan(
     return;
   }
   const namespaceEntries = await readdir(dirname(planPath));
-  if (namespaceEntries.some((entry) => entry !== lockFileName)) {
+  if (namespaceEntries.some((entry) => !isLeaseNamespaceEntry(entry, lockFileName))) {
     throw new TypeError(occupiedSweepNamespaceMessage);
   }
   const binding: SweepPlanBinding = { version: "2", sweepId, fingerprint };
   await writeFile(planPath, JSON.stringify(binding, null, 2), { encoding: "utf8", flag: "wx" });
+}
+
+function isLeaseNamespaceEntry(entry: string, lockFileName: string): boolean {
+  return entry === lockFileName || entry === ".owner.recovery"
+    || entry.startsWith(".owner.stage.") || entry.startsWith(".owner.retired.");
 }
 
 function canonicalJson(value: unknown): string {

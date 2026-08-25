@@ -22,6 +22,7 @@ import { createSafeArtifactPathSegment } from "../shared/artifact-sanitization.j
 import { executeSweepCell } from "./cell-execution.js";
 import { acquireSweepLease, sweepLeaseFileName } from "./sweep-lease.js";
 import { bindSweepPlan, createSweepPlanFingerprint } from "./sweep-plan.js";
+import { validateMatrixSweepConfig } from "./sweep-config-validation.js";
 export class MatrixSweepEngine implements IMatrixSweepEngine {
   public sweepId: string;
   private readonly constructorSweepId?: string;
@@ -156,6 +157,7 @@ export class MatrixSweepEngine implements IMatrixSweepEngine {
     return cells;
   }
   async run(config: MatrixSweepConfig): Promise<MatrixSweepSummary> {
+    validateMatrixSweepConfig(config);
     this.applyConfiguredSweepIdentity(config.sweepId);
     const startedAt = new Date().toISOString();
     this.startTimeMs = Date.now();
