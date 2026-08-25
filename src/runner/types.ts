@@ -2,6 +2,7 @@ import type {
   IContainerInstance,
   IContainerPoolManager,
 } from "../infrastructure/container/types.js";
+import type { ExecutionMode } from "../shared/execution-mode.js";
 
 export type MessageRole = "system" | "user" | "assistant" | "tool";
 
@@ -113,6 +114,8 @@ export interface LLMProviderAdapter {
     | "custom"
     | string;
   readonly modelId: string;
+  readonly executionMode?: ExecutionMode;
+  readonly simulated?: boolean;
   generateStream(
     messages: ReadonlyArray<AgentMessage>,
     tools: ReadonlyArray<ToolDefinition>,
@@ -246,6 +249,8 @@ export interface ScenarioResult {
   readonly scenarioId: string;
   readonly skillIds: ReadonlyArray<string>;
   readonly modelId: string;
+  readonly executionMode: ExecutionMode;
+  readonly simulated: boolean;
   readonly thinkingLevel?: "none" | "low" | "medium" | "high" | "max";
   readonly thinkingBudget?: number;
   readonly terminationReason: RunTerminationReason;
@@ -327,4 +332,3 @@ export interface ScenarioCatalog {
   readonly categories: readonly string[];
   readonly scenarios: readonly ScenarioCatalogEntry[];
 }
-

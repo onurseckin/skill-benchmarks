@@ -1,4 +1,3 @@
-import { calculateTokenCostUSD } from "./pricing";
 import {
   AgentMessage,
   CompletionChunk,
@@ -14,14 +13,19 @@ import {
 } from "./types";
 
 export class MockProviderAdapter implements LLMProviderAdapter {
-  public readonly providerId: ProviderId = "custom";
+  public readonly providerId: ProviderId;
   public readonly modelId: string;
+  public readonly executionMode = "fake" as const;
+  public readonly simulated = true;
   private readonly config: ProviderConfig;
 
   constructor(modelId?: string, config?: Partial<ProviderConfig>) {
     this.modelId = modelId !== undefined && modelId.length > 0 ? modelId : "mock-claude-3-7-sonnet";
+    this.providerId = config?.providerId ?? "custom";
     this.config = {
-      providerId: "custom",
+      providerId: this.providerId,
+      executionMode: "fake",
+      runId: config?.runId ?? "mock-run",
       apiKey: config !== undefined && config.apiKey !== undefined ? config.apiKey : "mock-key",
       baseUrl: config !== undefined && config.baseUrl !== undefined ? config.baseUrl : "http://localhost:8080/mock",
       timeoutMs: config !== undefined && config.timeoutMs !== undefined ? config.timeoutMs : 30000,
@@ -32,7 +36,8 @@ export class MockProviderAdapter implements LLMProviderAdapter {
   }
 
   public calculateCostUSD(usage: TokenUsage): number {
-    return calculateTokenCostUSD(this.modelId, usage);
+    void usage;
+    return 0;
   }
 
   public async *generateStream(
@@ -51,6 +56,17 @@ export class MockProviderAdapter implements LLMProviderAdapter {
       };
     }
 
+    for (const toolCall of turn.toolCalls) {
+      yield {
+        toolCallDeltas: [{
+          index: 0,
+          id: toolCall.id,
+          name: toolCall.name,
+          argumentsDelta: toolCall.rawArguments,
+        }],
+      };
+    }
+
     yield {
       finishReason: turn.finishReason,
       usage: turn.usage,
@@ -63,39 +79,30 @@ export class MockProviderAdapter implements LLMProviderAdapter {
     options: GenerateOptions
   ): Promise<ModelTurnResponse> {
     const turnCount = messages.filter((m) => m.role === "assistant").length;
-    const lastUserMessage = [...messages].reverse().find((m) => m.role === "user" || m.role === "tool");
-    const lastContent = typeof lastUserMessage?.content === "string" ? lastUserMessage.content : "";
-
     const toolCalls: ToolCallRequest[] = [];
     let text = "";
     let finishReason: FinishReason = "stop";
 
-    if (tools.length > 0 && turnCount === 0) {
-      const execTool = tools.find((t) => t.name.includes("exec") || t.name.includes("bash") || t.name.includes("run")) ?? tools[0];
-      if (execTool !== undefined) {
-        toolCalls.push({
-          id: `call_${Math.random().toString(36).substring(2, 9)}`,
-          name: execTool.name,
-          arguments: { command: "git status" },
-          rawArguments: JSON.stringify({ command: "git status" }),
-        });
-        text = "Inspecting workspace state and checking available file fixtures.";
-        finishReason = "tool_calls";
-      }
-    } else if (tools.length > 0 && turnCount === 1) {
-      const writeTool = tools.find((t) => t.name.includes("write") || t.name.includes("edit") || t.name.includes("replace")) ?? tools[0];
-      if (writeTool !== undefined) {
-        toolCalls.push({
-          id: `call_${Math.random().toString(36).substring(2, 9)}`,
-          name: writeTool.name,
-          arguments: { targetFile: "src/main.ts", content: "export const initialized = true;" },
-          rawArguments: JSON.stringify({ targetFile: "src/main.ts", content: "export const initialized = true;" }),
-        });
-        text = "Applying verified code modifications to satisfy benchmark requirements.";
-        finishReason = "tool_calls";
-      }
+    if (turnCount === 0) {
+      toolCalls.push({
+        id: `${this.config.runId}-turn-0`,
+        name: "list_directory",
+        arguments: { path: ".", max_depth: 2 },
+        rawArguments: JSON.stringify({ path: ".", max_depth: 2 }),
+      });
+      text = "Inspecting the disposable benchmark workspace.";
+      finishReason = "tool_calls";
+    } else if (turnCount === 1) {
+      toolCalls.push({
+        id: `${this.config.runId}-turn-1`,
+        name: "write_file",
+        arguments: { path: "benchmark-output.txt", content: "fake benchmark artifact\n" },
+        rawArguments: JSON.stringify({ path: "benchmark-output.txt", content: "fake benchmark artifact\n" }),
+      });
+      text = "Writing the deterministic benchmark artifact.";
+      finishReason = "tool_calls";
     } else {
-      text = `Task completed successfully. All requirements and invariant checks verified. Output summary: ${lastContent.slice(0, 100)}`;
+      text = "Fake benchmark trajectory completed successfully.";
       finishReason = "stop";
     }
 

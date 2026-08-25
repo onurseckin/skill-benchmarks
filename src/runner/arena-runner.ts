@@ -91,6 +91,7 @@ export class ArenaRunner {
   private buildSyntheticResult(runId: string, scenarioId: string, skillId: string, modelId: string, durationMs: number): ScenarioResult {
     return {
       runId, scenarioId, skillIds: [skillId], modelId,
+      executionMode: "fake", simulated: true,
       terminationReason: "success", completed: true, turns: 3, turnHistory: [], toolHistory: [], messages: [],
       finalOutput: `Synthetic solution produced by ${modelId} for ${scenarioId}`,
       totalDurationMs: durationMs,

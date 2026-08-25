@@ -231,6 +231,7 @@ export class MatrixSweepEngine implements IMatrixSweepEngine {
             durationMs = 50 + Math.floor(Math.random() * 50);
             scenarioResult = {
               runId: cell.runId, scenarioId: cell.scenarioId, skillIds: [cell.skillId], modelId: cell.modelId,
+              executionMode: "fake", simulated: true,
               terminationReason: "success", completed: true, turns: 2, turnHistory: [], toolHistory: [], messages: [],
               finalOutput: "Dry run completed", totalDurationMs: durationMs,
               totalTokens: { inputTokens: 500, outputTokens: 200, cacheCreationInputTokens: 0, cacheReadInputTokens: 0, totalTokens: 700 },

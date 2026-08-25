@@ -297,6 +297,8 @@ export class ScenarioRunnerEngine {
       scenarioId: config.scenarioId,
       skillIds: config.skillIds,
       modelId: config.modelId,
+      executionMode: config.provider.executionMode ?? "live",
+      simulated: config.provider.executionMode === "fake",
       thinkingLevel: config.thinkingLevel,
       thinkingBudget: config.thinkingBudget,
       terminationReason,

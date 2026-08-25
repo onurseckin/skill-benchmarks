@@ -1,3 +1,5 @@
+import type { ExecutionMode } from "../shared/execution-mode";
+
 export type MessageRole = "system" | "user" | "assistant" | "tool";
 
 export type FinishReason = "stop" | "tool_calls" | "length" | "content_filter" | "error";
@@ -134,6 +136,8 @@ export interface ModelConfig {
 }
 
 export interface ProviderConfig {
+  readonly executionMode?: ExecutionMode;
+  readonly runId?: string;
   readonly providerId: ProviderId;
   readonly apiKey?: string;
   readonly baseUrl?: string;
@@ -157,6 +161,8 @@ export type ProviderPricingConfig = Readonly<Record<string, ModelPricingRate>>;
 export interface LLMProviderAdapter {
   readonly providerId: ProviderId;
   readonly modelId: string;
+  readonly executionMode?: ExecutionMode;
+  readonly simulated?: boolean;
   generateStream(
     messages: ReadonlyArray<AgentMessage>,
     tools: ReadonlyArray<ToolDefinition>,

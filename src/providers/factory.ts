@@ -10,41 +10,71 @@ import {
 } from "./types";
 
 export function createProviderAdapter(config: ProviderConfig): LLMProviderAdapter {
-  const providerId = config.providerId;
+  const normalizedConfig = normalizeProviderConfig(config);
+  const providerId = normalizedConfig.providerId;
+  const executionMode = normalizedConfig.executionMode ?? "fake";
+
+  if (executionMode === "fake") {
+    return new MockProviderAdapter(normalizedConfig.defaultModel, normalizedConfig);
+  }
 
   if (providerId === "anthropic") {
-    if (config.apiKey === undefined && process.env.ANTHROPIC_API_KEY === undefined && process.env.SKILL_BENCHMARKS_MOCK !== "false") {
-      return new MockProviderAdapter(config.defaultModel, config);
-    }
-    return new AnthropicProviderAdapter(config.defaultModel, config);
+    requireCredential(normalizedConfig, "ANTHROPIC_API_KEY");
+    return new AnthropicProviderAdapter(normalizedConfig.defaultModel, normalizedConfig);
   }
 
   if (providerId === "google") {
-    if (config.apiKey === undefined && process.env.GEMINI_API_KEY === undefined && process.env.GOOGLE_API_KEY === undefined && process.env.SKILL_BENCHMARKS_MOCK !== "false") {
-      return new MockProviderAdapter(config.defaultModel, config);
-    }
-    return new GeminiProviderAdapter(config.defaultModel, config);
+    requireCredential(normalizedConfig, "GEMINI_API_KEY", "GOOGLE_API_KEY");
+    return new GeminiProviderAdapter(normalizedConfig.defaultModel, normalizedConfig);
   }
 
   if (providerId === "openai") {
-    if (config.apiKey === undefined && process.env.OPENAI_API_KEY === undefined && process.env.SKILL_BENCHMARKS_MOCK !== "false") {
-      return new MockProviderAdapter(config.defaultModel, config);
-    }
-    return new OpenAIProviderAdapter(config.defaultModel, config);
+    requireCredential(normalizedConfig, "OPENAI_API_KEY");
+    return new OpenAIProviderAdapter(normalizedConfig.defaultModel, normalizedConfig);
   }
 
   if (providerId === "ollama") {
-    return new OpenAIProviderAdapter(config.defaultModel, config);
+    if (hasCredential(normalizedConfig.apiKey)) {
+      throw new ProviderError("Live Ollama provider does not support API credentials", providerId);
+    }
+    return new OpenAIProviderAdapter(normalizedConfig.defaultModel, normalizedConfig);
   }
 
   if (providerId === "custom") {
-    return new MockProviderAdapter(config.defaultModel, config);
+    throw new ProviderError("Live custom providers are unsupported", providerId);
   }
 
   const safeProviderId: ProviderId = "custom";
   throw new ProviderError(
     `Unsupported provider ID: ${String(providerId)}`,
     safeProviderId
+  );
+}
+
+function normalizeProviderConfig(config: ProviderConfig): ProviderConfig {
+  return {
+    ...config,
+    apiKey: hasCredential(config.apiKey) ? config.apiKey : undefined,
+    baseUrl: hasCredential(config.baseUrl) ? config.baseUrl : undefined,
+  };
+}
+
+function hasCredential(value: string | undefined): value is string {
+  return value !== undefined && value.trim().length > 0;
+}
+
+function requireCredential(config: ProviderConfig, ...environmentNames: ReadonlyArray<string>): void {
+  if (hasCredential(config.apiKey)) {
+    return;
+  }
+  for (const environmentName of environmentNames) {
+    if (hasCredential(process.env[environmentName])) {
+      return;
+    }
+  }
+  throw new ProviderError(
+    `Live ${config.providerId} provider requires ${environmentNames.join(" or ")}`,
+    config.providerId
   );
 }
 
@@ -118,4 +148,3 @@ export function createMockAdapter(
     config !== undefined ? { ...baseConfig, ...config } : baseConfig;
   return new MockProviderAdapter(modelId, mergedConfig);
 }
-

@@ -226,6 +226,8 @@ export class MatrixRunner {
         scenarioId: cell.scenarioId,
         skillIds: cell.skillIds,
         modelId: cell.modelId,
+        executionMode: cell.provider.executionMode ?? "live",
+        simulated: cell.provider.executionMode === "fake",
         terminationReason: "error",
         completed: false,
         turns: 0,
