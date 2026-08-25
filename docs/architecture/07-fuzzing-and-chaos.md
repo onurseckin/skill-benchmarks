@@ -81,4 +81,13 @@ Agent resilience under chaos is quantified through three standardized indices ([
 
 ---
 
+## 4. Chaos & Fuzzing Module Reference
+
+- [`src/chaos/chaos-engine.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/chaos/chaos-engine.ts): Chaos experiment orchestrator and scheduler.
+- [`src/chaos/fault-injector.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/chaos/fault-injector.ts): Kernel fault injection primitives (`tc netem`, signals, cgroups OOM).
+- [`src/fuzzer/fuzzer-engine.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/fuzzer/fuzzer-engine.ts): AST mutator runner.
+- [`src/fuzzer/mutator.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/fuzzer/mutator.ts): TypeScript AST mutation transformers.
+
+---
+
 [← Previous: 06. Telemetry & Reporting](06-telemetry-and-reporting.md) | [Architecture Index](README.md) | [Next: 08. Binary Terminal Streaming →](08-binary-terminal-streaming.md)

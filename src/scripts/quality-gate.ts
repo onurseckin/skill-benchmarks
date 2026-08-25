@@ -179,6 +179,27 @@ function runQualityAudit(): void {
     process.exit(1);
   }
 
+  const evalContent = readFileSync(archEval, "utf8");
+  if (!evalContent.includes("## 5. Evaluation Module Reference")) {
+    process.stderr.write("Evaluation doc missing module reference section.\n");
+    process.exit(1);
+  }
+  const teleContent = readFileSync(archTelemetry, "utf8");
+  if (!teleContent.includes("## 4. Telemetry Module Reference")) {
+    process.stderr.write("Telemetry doc missing module reference section.\n");
+    process.exit(1);
+  }
+  const chaosContent = readFileSync(archChaos, "utf8");
+  if (!chaosContent.includes("## 4. Chaos & Fuzzing Module Reference")) {
+    process.stderr.write("Chaos doc missing module reference section.\n");
+    process.exit(1);
+  }
+  const streamContent = readFileSync(archStreaming, "utf8");
+  if (!streamContent.includes("## 4. Streaming & Tunnel Module Reference")) {
+    process.stderr.write("Streaming doc missing module reference section.\n");
+    process.exit(1);
+  }
+
   const allViolations: Violation[] = [];
 
   try {

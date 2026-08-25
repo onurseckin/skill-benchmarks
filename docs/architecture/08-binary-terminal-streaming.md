@@ -103,4 +103,13 @@ To render flicker-free terminal sessions in headless or terminal UI environments
 
 ---
 
+## 4. Streaming & Tunnel Module Reference
+
+- [`src/streaming/canvas-streamer.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/streaming/canvas-streamer.ts): Double-buffered screen matrix and ANSI terminal renderer.
+- [`src/streaming/telemetry-broadcaster.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/streaming/telemetry-broadcaster.ts): Real-time telemetry broadcasting engine.
+- [`src/tunnel/stream-tunnel.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/tunnel/stream-tunnel.ts): Binary WebSocket protocol tunnel server.
+- [`src/tunnel/pty-multiplexer.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/tunnel/pty-multiplexer.ts): PTY stream multiplexer and frame serializer.
+
+---
+
 [← Previous: 07. Scenario Fuzzing & Chaos](07-fuzzing-and-chaos.md) | [Architecture Index](README.md)
