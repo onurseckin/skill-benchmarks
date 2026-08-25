@@ -71,7 +71,6 @@ Each benchmark invocation creates the standard top-level directories below its o
 ```text
 <output-root>/
 ├── db/benchmarks.sqlite
-├── exports/
 ├── runs/<run-id>/
 │   ├── manifest.json
 │   ├── result.json
@@ -81,11 +80,13 @@ Each benchmark invocation creates the standard top-level directories below its o
 
 `manifest.json` records the planned run identity and execution provenance. `result.json` records its terminal status and the available runtime totals. The workspace is created only beneath the run directory and is not the repository checkout. Future evidence files use these same run directories when their producers are enabled.
 
+`<output-root>/exports/` is the reserved destination for files requested with `report --output`; it is not per-run evidence and may be empty until a report is written.
+
 Generated runtime output is ignored by Git. The checked-in `data/` directory contains demonstrations and must not be treated as CLI output.
 
 ## Report exports
 
-Reports read an explicit SQLite database. Write exports into the output root's `exports/` directory after a benchmark run has created it.
+Reports read an explicit SQLite database and write only to the path supplied with `--output`. Use the output root's reserved `exports/` destination for those files.
 
 ```bash
 bun run cli -- report \

@@ -46,7 +46,7 @@ The default output root is `.benchmarks/`. Every cell receives a distinct run di
 
 `manifest.json` identifies the effective provider, model, scenario, execution mode, and simulated status before provider work begins. `result.json` records the terminal status, termination reason, and available aggregate runtime values. The fake workspace is below the run directory; tool calls do not fall back to the repository checkout.
 
-The SQLite index is `.benchmarks/db/benchmarks.sqlite`, and the current sweep's resumable checkpoint is `.benchmarks/sweeps/<sweep-id>/checkpoint.json`. For a custom output root, replace `.benchmarks` in those paths with the value passed to `--output-dir`.
+The SQLite index is `.benchmarks/db/benchmarks.sqlite`. For a custom output root, replace `.benchmarks` in that path with the value passed to `--output-dir`. The command-line workflow does not expose automatic checkpoint resume.
 
 ## Export a report
 

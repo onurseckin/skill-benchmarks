@@ -61,7 +61,7 @@ bun run cli -- report \
 
 ## Runtime output
 
-`run` creates its output under `.benchmarks/` by default. The runtime root contains `db/`, `runs/`, `sweeps/`, and `exports/`. Each run has `manifest.json` and `result.json`, and each sweep has `sweeps/<sweep-id>/checkpoint.json`. Runtime output is ignored by Git; checked-in `data/` files are demonstrations, not generated benchmark results.
+`run` creates its evidence under `.benchmarks/` by default: `db/`, `runs/`, and `sweeps/`. Each run has `manifest.json` and `result.json`, and each sweep has `sweeps/<sweep-id>/checkpoint.json`. `exports/` is reserved for files requested through `report --output`; it is not per-run evidence. Runtime output is ignored by Git; checked-in `data/` files are demonstrations, not generated benchmark results.
 
 ## Result terminology
 
