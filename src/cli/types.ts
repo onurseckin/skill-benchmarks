@@ -51,10 +51,14 @@ export interface TournamentOptions {
   readonly scenarioIds: readonly string[];
   readonly skillIds: readonly string[];
   readonly modelIds?: readonly string[];
+  readonly tournamentMode?: "round-robin" | "swiss";
+  readonly rounds?: number;
   readonly judgeModelId?: string;
   readonly judgeProviderId?: string;
   readonly kFactor?: number;
   readonly initialRating?: number;
+  readonly dryRun?: boolean;
+  readonly live?: boolean;
   readonly dbPath?: string;
   readonly outputFormat?: CliOutputFormat;
   readonly outputPath?: string;

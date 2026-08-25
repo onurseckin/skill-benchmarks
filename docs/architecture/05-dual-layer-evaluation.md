@@ -85,11 +85,43 @@ To eliminate position bias, the judge engine ([`src/judge/judge-engine.ts`](file
 
 ---
 
-## 4. Bradley-Terry Pairwise Elo Solver
+## 4. Multi-Model Arena Battle Engine & Bradley-Terry Elo Solver
 
-Skill-Benchmarks resolves non-transitive pairwise judge outcomes into calibrated numerical Elo ratings via Maximum Likelihood Estimation (MLE) in [`src/eval/pairwise-elo.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/eval/pairwise-elo.ts).
+The Arena Battle Runner ([`src/runner/arena-runner.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/runner/arena-runner.ts)) coordinates head-to-head model matches in isolated Docker containers:
+
+```
++───────────────────────────────────────────────────────────────────────────────+
+|                          HEAD-TO-HEAD ARENA WORKFLOW                          |
++───────────────────────────────────────────────────────────────────────────────+
+|                                                                               |
+|   ┌───────────────────────────┐           ┌───────────────────────────┐       |
+|   │ Candidate A: Model Trial  │           │ Candidate B: Model Trial  │       |
+|   │ (e.g. Claude 3.7 Sonnet)  │           │ (e.g. OpenAI o3-mini)     │       |
+|   └─────────────┬─────────────┘           └─────────────┬─────────────┘       |
+|                 │ Diff & Final Output                   │ Diff & Output       |
+|                 └───────────────────┬───────────────────┘                     |
+|                                     ▼                                         |
+|                 ┌───────────────────────────────────────┐                     |
+|                 │ BLIND PAIRWISE ELO ENGINE             │                     |
+|                 │ (Permutation 1: A vs B)               │                     |
+|                 │ (Permutation 2: B vs A - Inversion)   │                     |
+|                 └───────────────────┬───────────────────┘                     |
+|                                     ▼                                         |
+|                 ┌───────────────────────────────────────┐                     |
+|                 │ Position Bias Verification & Decision │                     |
+|                 │ Winner: Model A / Model B / Tie       │                     |
+|                 └───────────────────┬───────────────────┘                     |
+|                                     ▼                                         |
+|                 ┌───────────────────────────────────────┐                     |
+|                 │ Bradley-Terry Elo Rating Update       │                     |
+|                 │ Persisted to Telemetry Database       │                     |
+|                 └───────────────────────────────────────┘                     |
++───────────────────────────────────────────────────────────────────────────────+
+```
 
 ### 4.1 Mathematical Formulation
+
+Skill-Benchmarks resolves non-transitive pairwise judge outcomes into calibrated numerical Elo ratings via Maximum Likelihood Estimation (MLE) in [`src/judge/bradley-terry.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/judge/bradley-terry.ts) and [`src/eval/pairwise-elo.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/eval/pairwise-elo.ts):
 
 1. **Pairwise Win Probability**:
    The probability that model $i$ beats model $j$ given latent skill ratings $R_i, R_j$:
@@ -111,6 +143,8 @@ Skill-Benchmarks resolves non-transitive pairwise judge outcomes into calibrated
 - [`src/eval/deterministic.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/eval/deterministic.ts): AST parsing, syntax tree inspection, and test execution runner.
 - [`src/eval/llm-judge.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/eval/llm-judge.ts): Blind pairwise judge debate coordinator.
 - [`src/eval/pairwise-elo.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/eval/pairwise-elo.ts): Iterative Bradley-Terry Elo estimation solver.
+- [`src/runner/arena-runner.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/runner/arena-runner.ts): Head-to-head arena battle match runner.
+- [`src/cli/arena-command.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/cli/arena-command.ts): CLI interactive arena controller.
 - [`src/arena/consensus-scorer.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/arena/consensus-scorer.ts): Multi-judge consensus aggregation.
 
 ---

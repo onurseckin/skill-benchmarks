@@ -19,8 +19,9 @@ bun run src/cli/index.ts <command> [options]
 | Command | Aliases | Description |
 | :--- | :--- | :--- |
 | `run` | `bench` | Execute a benchmark trial or full parameter sweep |
+| `arena` | — | Execute head-to-head model matches with blind judge & Elo updates |
 | `tournament` | — | Run an Elo-rated tournament across skill pairs |
-| `report` | — | Generate aggregated leaderboards and HTML dashboards |
+| `report` | — | Generate aggregated leaderboards, HTML dashboards, and SVG badges |
 | `sync` | — | Download, index, and validate skills from the catalog |
 | `list` | — | List available scenarios, skills, models, or categories |
 | `replay` | — | Replay recorded trajectory frames in TUI or export to Web/HTML |
@@ -31,6 +32,25 @@ bun run src/cli/index.ts <command> [options]
 ---
 
 ## 2. Command Reference
+
+### `arena`
+Execute head-to-head model matches on a single benchmark scenario with double-blind judging and live Elo rating updates.
+
+```bash
+bun run src/cli/index.ts arena --model claude-3-7-sonnet,o3-mini --scenario git-worktrees
+```
+
+#### Options & Flags
+
+| Flag | Short Alias | Type | Default | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `--model` | `-m` | `string[]` | `["claude-3-7-sonnet", "o3-mini"]` | The two models competing in the arena |
+| `--scenario` | `-s` | `string` | `git-worktrees` | Benchmark scenario to execute |
+| `--judge-model` | — | `string` | `claude-3-7-sonnet` | Model to serve as the blind pairwise judge |
+| `--k-factor` | — | `number` | `32` | Bradley-Terry Elo K-factor |
+| `--db-path` | `--db` | `string` | `./benchmarks.db` | Target SQLite telemetry database path |
+
+---
 
 ### `run` / `bench`
 Execute a single benchmark trial or multi-dimensional matrix sweep across scenarios, skills, and models.
@@ -95,7 +115,7 @@ bun run src/cli/index.ts tournament [options]
 ---
 
 ### `report`
-Generate benchmark summary reports, markdown leaderboards, cost-efficiency scatter plots, or standalone HTML dashboards.
+Generate benchmark summary reports, markdown leaderboards, standalone SVG badges, or HTML report cards.
 
 ```bash
 bun run src/cli/index.ts report [options]
@@ -107,6 +127,8 @@ bun run src/cli/index.ts report [options]
 | :--- | :--- | :--- | :--- | :--- |
 | `--format` | `-f` | `string` | `console` | Report format: `console`, `markdown`, `html`, `json` |
 | `--output` | `-o` | `string` | Inferred from format | Output file destination path |
+| `--export-card` | `--card` | `string` | — | Export standalone card format: `svg` or `html` |
+| `--card-output` | — | `string` | `report-card.<ext>` | Destination path for exported card |
 | `--db-path` | `--db` | `string` | `./benchmarks.db` | Source telemetry SQLite database |
 | `--control-skill` | — | `string` | `generic-agent` | Baseline skill ID used for delta comparisons |
 | `--title` | — | `string` | `"Agent Skill Benchmark Dashboard"` | Dashboard display title |

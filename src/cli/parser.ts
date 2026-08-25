@@ -36,8 +36,9 @@ const SPECS: readonly (readonly [string, FlagValueKind, readonly string[]])[] = 
   ["thinkingBudget", "number", ["thinking-budget", "thinkingBudget", "budget-tokens", "budgetTokens"]],
   ["matrixThinking", "array", ["matrix-thinking", "matrixThinking", "thinking-matrix", "thinkingMatrix"]],
   ["arena", "array", ["arena", "arena-models", "arenaModels"]],
-  ["dryRun", "boolean", ["dry-run", "dryRun"]],
-  ["mock", "boolean", ["mock"]],
+  ["tournamentMode", "string", ["tournament-mode", "tournamentMode", "mode"]],
+  ["rounds", "number", ["rounds", "num-rounds", "numRounds"]],
+  ["dryRun", "boolean", ["dry-run", "dryRun"]], ["mock", "boolean", ["mock"]],
   ["exportCard", "string", ["export-card", "exportCard", "card", "report-card", "reportCard"]],
   ["cardOutputPath", "string", ["card-output", "cardOutputPath", "card-out", "cardOut"]],
 ];
@@ -184,9 +185,11 @@ export function parseCliArgs(argv: readonly string[]): CliParsedArgs {
 
   const tournamentOptions: TournamentOptions = {
     scenarioIds: toArr(flags["scenario"]).concat(positionals), skillIds: toArr(flags["skill"]),
-    modelIds: toArr(flags["model"]), judgeModelId: toStr(flags["judgeModelId"]),
+    modelIds: toArr(flags["model"]), tournamentMode: toStr(flags["tournamentMode"]) as TournamentOptions["tournamentMode"],
+    rounds: toNum(flags["rounds"]), judgeModelId: toStr(flags["judgeModelId"]),
     judgeProviderId: toStr(flags["judgeProviderId"]), kFactor: toNum(flags["kFactor"]),
     initialRating: toNum(flags["initialRating"]), dbPath: toStr(flags["dbPath"]),
+    dryRun: toBool(flags["dryRun"]), live: toBool(flags["live"]),
     outputFormat: toStr(flags["format"]) as CliOutputFormat | undefined,
     outputPath: toStr(flags["outputPath"]), verbose: toBool(flags["verbose"]), maxMatches: toNum(flags["maxMatches"]),
   };
@@ -276,10 +279,12 @@ const ARENA_OPTS: readonly (readonly [string, string])[] = [
 
 const TOURNAMENT_OPTS: readonly (readonly [string, string])[] = [
   ["-s, --scenario <ids>", "Scenario IDs"], ["-k, --skill <ids>", "Skill IDs to compete"],
-  ["-m, --model <ids>", "Model IDs for participants"], ["--judge-model <id>", "Judge model ID"],
+  ["-m, --model <ids>", "Model IDs for participants"], ["--tournament-mode <mode>", "Tournament mode: round-robin, swiss"],
+  ["--rounds <n>", "Number of tournament rounds"], ["--judge-model <id>", "Judge model ID"],
   ["--judge-provider <id>", "Judge provider ID"], ["--k-factor <n>", "Elo K-factor (default: 32)"],
   ["--initial-rating <n>", "Initial rating (default: 1500)"], ["--max-matches <n>", "Max tournament matches"],
-  ["--db <path>", "SQLite database path"], ["-f, --format <format>", "Output format: console, json, markdown, html"],
+  ["--dry-run", "Simulate tournament matches"], ["--db <path>", "SQLite database path"],
+  ["-f, --format <format>", "Output format: console, json, markdown, html"],
   ["-o, --output <path>", "Output file path"], ["-v, --verbose", "Enable verbose logs"], ["-h, --help", "Show help for tournament command"],
 ];
 

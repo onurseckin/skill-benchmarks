@@ -63,9 +63,35 @@ Where $K$ is the rating volatility factor (default: 32), $S_A$ is the actual mat
 
 ---
 
-## 4. Running an Arena Tournament
+## 4. Running a Head-to-Head Arena Battle
 
-Execute tournament pairings directly from the CLI:
+Execute a direct head-to-head battle between two frontier models on a specific scenario:
+
+```bash
+bun run src/cli/index.ts arena \
+  --scenario git-worktrees \
+  --model claude-3-7-sonnet,o3-mini \
+  --judge-model claude-3-7-sonnet \
+  --k-factor 32 \
+  --verbose
+```
+
+### Head-to-Head Terminal Output
+
+```text
+================================================================================
+Head-to-Head Arena Battle: claude-3-7-sonnet (Elo: 1500) vs o3-mini (Elo: 1500) [Scenario: git-worktrees]
+================================================================================
+[ARENA] Match: arena-8b1f-A vs arena-8b1f-B | Winner: claude-3-7-sonnet
+[ARENA] Rating Shift: claude-3-7-sonnet (1500 -> 1516, +16) | o3-mini (1500 -> 1484, -16)
+[ARENA] Rationale: Model A produced complete git worktree isolation with clean deterministic teardown.
+```
+
+---
+
+## 5. Running a Multi-Skill Tournament
+
+Execute multi-round round-robin tournament pairings across multiple skills:
 
 ```bash
 bun run src/cli/index.ts tournament \
@@ -79,9 +105,24 @@ bun run src/cli/index.ts tournament \
 
 ---
 
+## 6. Exporting Standalone Report Cards & Badges
+
+Generate standalone SVG shield badges and self-contained HTML report cards for arena winners or benchmark runs:
+
+```bash
+# Export SVG badge for GitHub README
+bun run src/cli/index.ts report --export-card svg --card-output ./badges/claude-skill.svg
+
+# Export standalone self-contained HTML report card
+bun run src/cli/index.ts report --export-card html --card-output ./reports/trial-card.html
+```
+
+---
+
 ## Next Steps
 
 Learn how to author custom benchmark scenarios:
 
 - [Previous: Live Web Streaming](web-streaming.md)
 - [Next: Authoring Custom Scenarios](../custom-scenarios/authoring-scenarios.md)
+

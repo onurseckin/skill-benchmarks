@@ -25,9 +25,7 @@ import { exportWebReplayHtml } from "../replay/web-player.js";
 import type { ReplaySession } from "../replay/types.js";
 import { FuzzerEngine } from "../fuzzer/fuzzer-engine.js";
 import type { FuzzingStrategy, MutationSeverity } from "../fuzzer/types.js";
-import { ScenarioSynthesizer } from "../generator/index.js";
-import type { ScenarioDefinition } from "../runner/types.js";
-import type { ChaosPerturbationMatrix } from "../chaos/index.js";
+import { TournamentScheduler } from "../runner/tournament-scheduler.js";
 import { getOrCreateModelDefinition } from "../models/index.js";
 import { runArenaCommand } from "./arena-command.js";
 
@@ -101,14 +99,49 @@ export async function runTournamentCommand(args: CliParsedArgs): Promise<CliComm
   const startTime = Date.now();
   const options = args.tournamentOptions !== undefined ? args.tournamentOptions : ({} as TournamentOptions);
   const scenarioIds = options.scenarioIds.length > 0 ? options.scenarioIds : ["git-worktrees"];
-  const skillIds = options.skillIds.length > 0 ? options.skillIds : ["using-git-worktrees", "generic-agent"];
+  const skillIds = options.skillIds.length > 0 ? options.skillIds : ["using-git-worktrees"];
+  const modelIds = options.modelIds && options.modelIds.length >= 2
+    ? options.modelIds
+    : ["claude-3-7-sonnet", "o3-mini", "gemini-2-0-flash", "gpt-4o"];
   const dbPath = options.dbPath !== undefined ? options.dbPath : resolve(process.cwd(), "benchmarks.db");
+  const mode = options.tournamentMode ?? (modelIds.length > 4 ? "swiss" : "round-robin");
+  const dryRun = options.dryRun ?? false;
 
-  console.log(formatSectionHeader(`Starting Elo Tournament: ${skillIds.length} skills on ${scenarioIds.length} scenario(s)`));
+  console.log(formatSectionHeader(`Tournament Match Matrix: [${mode.toUpperCase()}] ${modelIds.length} models across ${scenarioIds.length} scenario(s)`));
+
   const db = new TelemetryDatabase(dbPath);
-  const leaderboard = db.getEloLeaderboard();
-  console.log(`Current Tournament Leaderboard entries: ${leaderboard.length}`);
-  return { success: true, exitCode: 0, durationMs: Date.now() - startTime };
+  const scheduler = new TournamentScheduler();
+  const result = await scheduler.runTournament({
+    mode,
+    models: modelIds,
+    scenarios: scenarioIds,
+    skillId: skillIds[0],
+    rounds: options.rounds,
+    kFactor: options.kFactor ?? 32,
+    initialRating: options.initialRating ?? 1500,
+    judgeModelId: options.judgeModelId,
+    judgeProviderId: options.judgeProviderId,
+    dryRun,
+    telemetryDb: db,
+  });
+
+  console.log("\n─── Tournament Standings ─────────────────────────────────────────");
+  for (const p of result.standings) {
+    const delta = p.rating - p.initialRating;
+    const deltaStr = delta >= 0 ? `+${delta}` : `${delta}`;
+    const badge = p.rank === 1 ? formatBadge("success", "CHAMPION") : p.rank <= 3 ? formatBadge("info", `TOP ${p.rank}`) : formatBadge("neutral", `#${p.rank}`);
+    console.log(`  ${badge} ${bold(p.modelId.padEnd(24))} Pts: ${p.points.toFixed(1)} | W-L-D: ${p.wins}-${p.losses}-${p.draws} | Elo: ${p.rating} (${cyan(deltaStr)}) | Buchholz: ${p.buchholzScore}`);
+  }
+  console.log(`\n  Total Matches: ${result.totalMatches} | Rounds: ${result.totalRounds} | Duration: ${(result.totalDurationMs / 1000).toFixed(2)}s`);
+  console.log("──────────────────────────────────────────────────────────────────\n");
+
+  if (options.outputPath) {
+    writeFileSync(options.outputPath, JSON.stringify(result, null, 2), "utf8");
+    console.log(`  ${formatBadge("success", "EXPORT")} Tournament report saved to ${cyan(options.outputPath)}`);
+  }
+
+  db.close();
+  return { success: true, exitCode: 0, durationMs: Date.now() - startTime, data: result };
 }
 
 export async function runReportCommand(args: CliParsedArgs): Promise<CliCommandResult> {
@@ -211,51 +244,15 @@ export async function runListCommand(args: CliParsedArgs): Promise<CliCommandRes
 }
 
 function createSampleReplaySession(): ReplaySession {
-  const engine = new ReplayEngine({
-    runId: "sample-run-1",
-    scenarioId: "git-worktrees",
-    skillId: "using-git-worktrees",
-    modelId: "claude-3-7-sonnet",
-  });
-
+  const engine = new ReplayEngine({ runId: "sample-run-1", scenarioId: "git-worktrees", skillId: "using-git-worktrees", modelId: "claude-3-7-sonnet" });
   engine.recordEvent({ type: "run:start", timestamp: new Date(Date.now() - 10000).toISOString() });
   engine.recordEvent({ type: "turn:start", turnNumber: 1, timestamp: new Date(Date.now() - 9000).toISOString() });
-  engine.recordEvent({
-    type: "tool:call",
-    toolName: "run_command",
-    callId: "call-1",
-    payload: { command: "git worktree add -b feat-new ../worktree-feat" },
-    timestamp: new Date(Date.now() - 8500).toISOString(),
-  });
-  engine.recordEvent({
-    type: "RESOURCE_SAMPLE",
-    cpuPercent: 32.5,
-    memoryRssMb: 128.4,
-    memoryLimitMb: 512,
-    diskReadKb: 1024,
-    diskWriteKb: 2048,
-    networkRxKb: 12,
-    networkTxKb: 8,
-    activePids: 4,
-    timestamp: new Date(Date.now() - 8000).toISOString(),
-  });
-  engine.recordEvent({
-    type: "tool:result",
-    toolName: "run_command",
-    callId: "call-1",
-    stdout: "Preparing worktree (new branch 'feat-new')\nHEAD is now at 6ab0dc7 feat",
-    exitCode: 0,
-    durationMs: 420,
-    timestamp: new Date(Date.now() - 7500).toISOString(),
-  });
-  engine.recordEvent({
-    type: "GIT_DIFF_CAPTURED",
-    rawDiff: "diff --git a/src/feature.ts b/src/feature.ts\n--- a/src/feature.ts\n+++ b/src/feature.ts\n@@ -1,3 +1,4 @@\n+export const feature = true;\n",
-    timestamp: new Date(Date.now() - 6500).toISOString(),
-  });
+  engine.recordEvent({ type: "tool:call", toolName: "run_command", callId: "call-1", payload: { command: "git worktree add -b feat-new ../worktree-feat" }, timestamp: new Date(Date.now() - 8500).toISOString() });
+  engine.recordEvent({ type: "RESOURCE_SAMPLE", cpuPercent: 32.5, memoryRssMb: 128.4, memoryLimitMb: 512, diskReadKb: 1024, diskWriteKb: 2048, networkRxKb: 12, networkTxKb: 8, activePids: 4, timestamp: new Date(Date.now() - 8000).toISOString() });
+  engine.recordEvent({ type: "tool:result", toolName: "run_command", callId: "call-1", stdout: "Preparing worktree (new branch 'feat-new')\nHEAD is now at 6ab0dc7 feat", exitCode: 0, durationMs: 420, timestamp: new Date(Date.now() - 7500).toISOString() });
+  engine.recordEvent({ type: "GIT_DIFF_CAPTURED", rawDiff: "diff --git a/src/feature.ts b/src/feature.ts\n--- a/src/feature.ts\n+++ b/src/feature.ts\n@@ -1,3 +1,4 @@\n+export const feature = true;\n", timestamp: new Date(Date.now() - 6500).toISOString() });
   engine.recordEvent({ type: "turn:finish", timestamp: new Date(Date.now() - 5000).toISOString() });
   engine.recordEvent({ type: "run:finish", timestamp: new Date().toISOString() });
-
   return engine.finalizeSession("completed");
 }
 

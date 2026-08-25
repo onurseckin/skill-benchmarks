@@ -79,3 +79,14 @@ export {
   type ArenaTournamentResult,
 } from "./arena-runner.js";
 
+export {
+  TournamentScheduler,
+  type TournamentMode,
+  type TournamentPairing,
+  type TournamentRoundSchedule,
+  type TournamentParticipantState,
+  type TournamentSchedulerConfig,
+  type TournamentRoundResult,
+  type TournamentExecutionResult,
+} from "./tournament-scheduler.js";
+
