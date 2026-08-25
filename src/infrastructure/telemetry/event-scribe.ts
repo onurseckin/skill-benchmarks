@@ -1,4 +1,3 @@
-import * as fs from "node:fs";
 import * as path from "node:path";
 import type {
   TelemetryEvent,
@@ -7,7 +6,8 @@ import type {
 } from "./types.js";
 import { BenchmarkArtifactValueStreamSanitizer } from "../../shared/artifact-sanitization.js";
 import { ArtifactTextStreamSanitizers } from "../../shared/artifact-stream-sanitizers.js";
-import { initializeEventArtifactFiles } from "./event-artifact-files.js";
+import type { RunArtifactLayout } from "../workspace/types.js";
+import { EventArtifactWriter } from "./event-artifact-writer.js";
 
 export const DEFAULT_MAX_OUTPUT_BYTES_PER_COMMAND = 5 * 1024 * 1024;
 export const DEFAULT_BATCH_SIZE = 50;
@@ -39,6 +39,7 @@ export function createTelemetryEvent(
 export interface EventScribeOptions {
   readonly runId: string;
   readonly outputDir: string;
+  readonly artifactLayout?: RunArtifactLayout;
   readonly maxOutputBytesPerCommand?: number;
   readonly batchSize?: number;
   readonly flushIntervalMs?: number;
@@ -73,16 +74,17 @@ export class EventScribe {
 
   private flushTimer: ReturnType<typeof setInterval> | null = null;
   private isClosed: boolean = false;
-  private artifactsInitialized: boolean = false;
   private writeLock: Promise<void> = Promise.resolve();
   private readonly textSanitizers = new ArtifactTextStreamSanitizers();
   private readonly valueSanitizer = new BenchmarkArtifactValueStreamSanitizer();
+  private readonly artifactWriter: EventArtifactWriter;
 
   constructor(options: EventScribeOptions) {
     this.runId = options.runId;
     this.outputDir = options.outputDir;
     this.eventsFilePath = path.join(this.outputDir, "events.jsonl");
     this.rawLogFilePath = path.join(this.outputDir, "raw.log");
+    this.artifactWriter = new EventArtifactWriter(this.outputDir, options.artifactLayout);
     this.maxOutputBytesPerCommand =
       options.maxOutputBytesPerCommand ?? DEFAULT_MAX_OUTPUT_BYTES_PER_COMMAND;
     this.batchSize = options.batchSize ?? DEFAULT_BATCH_SIZE;
@@ -330,7 +332,8 @@ export class EventScribe {
 
   public async flush(): Promise<void> {
     this.writeLock = this.writeLock.then(async () => {
-      if (this.artifactsInitialized && this.eventBuffer.length === 0 && this.rawLogBuffer.length === 0) {
+      if (this.eventBuffer.length === 0 && this.rawLogBuffer.length === 0) {
+        this.artifactWriter.initialize();
         return;
       }
 
@@ -338,27 +341,7 @@ export class EventScribe {
       const rawLogsToWrite = this.rawLogBuffer.splice(0, this.rawLogBuffer.length);
 
       try {
-        await fs.promises.mkdir(this.outputDir, { recursive: true });
-        if (!this.artifactsInitialized) {
-          await initializeEventArtifactFiles(this.eventsFilePath, this.rawLogFilePath);
-          this.artifactsInitialized = true;
-        }
-
-        if (eventsToWrite.length > 0) {
-          await fs.promises.appendFile(
-            this.eventsFilePath,
-            eventsToWrite.join(""),
-            "utf-8"
-          );
-        }
-
-        if (rawLogsToWrite.length > 0) {
-          await fs.promises.appendFile(
-            this.rawLogFilePath,
-            rawLogsToWrite.join(""),
-            "utf-8"
-          );
-        }
+        this.artifactWriter.append(eventsToWrite.join(""), rawLogsToWrite.join(""));
       } catch (err) {
         this.eventBuffer.unshift(...eventsToWrite);
         this.rawLogBuffer.unshift(...rawLogsToWrite);
@@ -380,8 +363,12 @@ export class EventScribe {
       this.flushTimer = null;
     }
 
-    await this.flush();
-    this.textSanitizers.clearAll();
+    try {
+      await this.flush();
+    } finally {
+      this.artifactWriter.close();
+      this.textSanitizers.clearAll();
+    }
   }
 
   private appendRecentLines(target: string[], text: string): void {

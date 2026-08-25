@@ -43,7 +43,11 @@ export class ScenarioRunnerEngine {
     const startTimeMs = performance.now();
     const basePath = config.artifactOutputDir ?? config.workspace?.rootPath ?? ".benchmarks/runs/" + config.runId;
     const artifactPaths = resolveArtifactPaths(basePath);
-    const scribe = new EventScribe({ runId: config.runId, outputDir: artifactPaths.runDir });
+    const scribe = new EventScribe({
+      runId: config.runId,
+      outputDir: artifactPaths.runDir,
+      artifactLayout: config.artifactLayout,
+    });
 
     scribe.emit("run:start", {
       runId: config.runId,

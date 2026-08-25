@@ -4,7 +4,13 @@ import type { RunArtifactLayout } from "../infrastructure/workspace/types.js";
 import type { RunRecord, RunStatus } from "../reporting/types.js";
 import type { ScenarioResult, RunTerminationReason } from "../runner/types.js";
 import type { ExecutionMode } from "../shared/execution-mode.js";
-import { commitAtomicEvidenceJson, EvidenceCommitError, removeAtomicEvidence, writeAtomicEvidenceJson } from "./atomic-evidence-writer.js";
+import {
+  commitAtomicEvidenceJson,
+  EvidenceCommitError,
+  removeAtomicEvidence,
+  writeAtomicEvidenceJson,
+  type EvidenceArtifactIdentity,
+} from "./atomic-evidence-writer.js";
 
 export interface RunEvidenceContext {
   readonly sweepId: string;
@@ -41,8 +47,12 @@ export function commitRunResult(
   result: ScenarioResult | undefined,
   attemptCount: number,
   durationMs: number
-): void {
-  commitAtomicEvidenceJson(layout, layout.resultPath, createRunResultValue(context, terminal, result, attemptCount, durationMs, "result"));
+): EvidenceArtifactIdentity {
+  return commitAtomicEvidenceJson(
+    layout,
+    layout.resultPath,
+    createRunResultValue(context, terminal, result, attemptCount, durationMs, "result")
+  );
 }
 
 export function commitTerminalFailure(
@@ -66,8 +76,11 @@ export function commitTerminalFailure(
   return layout.terminalFailurePath;
 }
 
-export function discardCommittedRunResult(layout: RunArtifactLayout): void {
-  removeAtomicEvidence(layout, layout.resultPath);
+export function discardCommittedRunResult(
+  layout: RunArtifactLayout,
+  expectedIdentity: EvidenceArtifactIdentity
+): void {
+  removeAtomicEvidence(layout, layout.resultPath, expectedIdentity);
 }
 
 export function removeStaleRunEvidenceTemporaryFiles(layout: RunArtifactLayout): void {

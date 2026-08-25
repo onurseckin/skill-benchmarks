@@ -154,7 +154,10 @@ export class MatrixSweepEngine implements IMatrixSweepEngine {
       checkpointLoaded = await checkpointLedger.load() !== null;
       if (checkpointLoaded) startedAt = checkpointLedger.getState().metadata.sweepStartedAt;
       validateCheckpointTemporaryFiles(checkpointPath);
-      const readOnlyDb = existsSync(telemetryDbPath) ? new TelemetryDatabase(telemetryDbPath, { readonly: true }) : undefined;
+      const readOnlyDb = existsSync(telemetryDbPath) ? new TelemetryDatabase(telemetryDbPath, {
+        readonly: true,
+        authorityRoot: config.runtimeConfig.outputRoot,
+      }) : undefined;
       try {
         validateCheckpointTerminalEvidence(allPlannedCells, checkpointLedger.getState(), readOnlyDb, config);
         validateSweepOutcomeEvidence(
@@ -175,7 +178,7 @@ export class MatrixSweepEngine implements IMatrixSweepEngine {
     let telemetryDb: TelemetryDatabase;
     try {
       await mkdir(join(config.runtimeConfig.outputRoot, "db"), { recursive: true });
-      telemetryDb = new TelemetryDatabase(telemetryDbPath);
+      telemetryDb = new TelemetryDatabase(telemetryDbPath, { authorityRoot: config.runtimeConfig.outputRoot });
     } catch {
       try {
         writeDatabasePreflightFailureOutcome(config.runtimeConfig.outputRoot, this.sweepId, planFingerprint, startedAt, allPlannedCells);

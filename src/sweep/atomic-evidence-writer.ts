@@ -1,14 +1,17 @@
 import { randomUUID } from "node:crypto";
-import { closeSync, constants, fchmodSync, fsyncSync, fstatSync, lstatSync, openSync, writeFileSync } from "node:fs";
-import { basename, dirname, join } from "node:path";
-import type {
-  RunArtifactDirectoryIdentity,
-  RunArtifactLayout,
-} from "../infrastructure/workspace/types.js";
+import { closeSync, constants, fchmodSync, fsyncSync, fstatSync, writeFileSync } from "node:fs";
+import { basename, dirname } from "node:path";
+import { openAuthorizedRunDirectory, requireRunArtifactAuthority } from "../infrastructure/workspace/run-artifact-authority.js";
+import type { RunArtifactLayout } from "../infrastructure/workspace/types.js";
 import { sanitizeBenchmarkArtifactValue } from "../shared/artifact-sanitization.js";
-import { linkDirectoryEntry, openDirectoryEntry, unlinkDirectoryEntry } from "./directory-entry-operations.js";
+import {
+  linkDirectoryEntry,
+  openDirectoryEntry,
+  renameDirectoryEntryNoReplace,
+  unlinkDirectoryEntry,
+} from "../infrastructure/filesystem/directory-entry-operations.js";
 
-interface FileIdentity {
+export interface EvidenceArtifactIdentity {
   readonly device: number;
   readonly inode: number;
 }
@@ -27,11 +30,13 @@ const durableEvidenceSync: EvidenceSyncOperations = {
 
 export class EvidenceCommitError extends Error {
   public readonly targetCommitted: boolean;
+  public readonly committedIdentity?: EvidenceArtifactIdentity;
 
-  public constructor(targetCommitted: boolean) {
+  public constructor(targetCommitted: boolean, committedIdentity?: EvidenceArtifactIdentity) {
     super("terminal evidence persistence failed");
     this.name = "EvidenceCommitError";
     this.targetCommitted = targetCommitted;
+    this.committedIdentity = committedIdentity;
   }
 }
 
@@ -40,8 +45,8 @@ export async function writeAtomicEvidenceJson(
   path: string,
   value: unknown,
   syncOperations: EvidenceSyncOperations = durableEvidenceSync
-): Promise<void> {
-  commitEvidence(layout, path, value, syncOperations);
+): Promise<EvidenceArtifactIdentity> {
+  return commitEvidence(layout, path, value, syncOperations);
 }
 
 export function commitAtomicEvidenceJson(
@@ -49,31 +54,56 @@ export function commitAtomicEvidenceJson(
   path: string,
   value: unknown,
   syncOperations: EvidenceSyncOperations = durableEvidenceSync
-): void {
-  commitEvidence(layout, path, value, syncOperations);
+): EvidenceArtifactIdentity {
+  return commitEvidence(layout, path, value, syncOperations);
 }
 
-export function removeAtomicEvidence(layout: RunArtifactLayout, path: string): void {
+export function removeAtomicEvidence(
+  layout: RunArtifactLayout,
+  path: string,
+  expectedIdentity: EvidenceArtifactIdentity
+): void {
   const directoryDescriptor = openAuthorizedArtifactDirectory(layout, path);
   const targetName = basename(path);
-  let targetDescriptor: number | undefined;
+  const quarantineName = `.${targetName}.rollback.${randomUUID()}`;
+  let quarantineDescriptor: number | undefined;
+  let quarantined = false;
   try {
-    targetDescriptor = openDirectoryEntry(
+    requireRunArtifactAuthority(layout);
+    renameDirectoryEntryNoReplace(directoryDescriptor, targetName, quarantineName);
+    quarantined = true;
+    quarantineDescriptor = openDirectoryEntry(
       directoryDescriptor,
-      targetName,
+      quarantineName,
       constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK
     );
-    const targetStats = fstatSync(targetDescriptor);
-    if (!targetStats.isFile() || targetStats.nlink !== 1) throw new EvidenceCommitError(true);
-    closeSync(targetDescriptor);
-    targetDescriptor = undefined;
-    unlinkDirectoryEntry(directoryDescriptor, targetName);
+    const targetStats = fstatSync(quarantineDescriptor);
+    const targetIdentity = { device: targetStats.dev, inode: targetStats.ino };
+    if (!targetStats.isFile() || targetStats.nlink !== 1 || !sameFileIdentity(targetIdentity, expectedIdentity)) {
+      throw new EvidenceCommitError(true, expectedIdentity);
+    }
+    closeSync(quarantineDescriptor);
+    quarantineDescriptor = undefined;
+    unlinkDirectoryEntry(directoryDescriptor, quarantineName);
+    quarantined = false;
     fsyncSync(directoryDescriptor);
-    requireArtifactDirectoryAuthority(layout);
+    requireRunArtifactAuthority(layout);
   } catch {
-    throw new EvidenceCommitError(true);
+    if (quarantineDescriptor !== undefined) {
+      closeSync(quarantineDescriptor);
+      quarantineDescriptor = undefined;
+    }
+    if (quarantined) {
+      try {
+        renameDirectoryEntryNoReplace(directoryDescriptor, quarantineName, targetName);
+        quarantined = false;
+        fsyncSync(directoryDescriptor);
+        requireRunArtifactAuthority(layout);
+      } catch {}
+    }
+    throw new EvidenceCommitError(true, expectedIdentity);
   } finally {
-    if (targetDescriptor !== undefined) closeSync(targetDescriptor);
+    if (quarantineDescriptor !== undefined) closeSync(quarantineDescriptor);
     closeSync(directoryDescriptor);
   }
 }
@@ -83,12 +113,12 @@ function commitEvidence(
   path: string,
   value: unknown,
   syncOperations: EvidenceSyncOperations
-): void {
+): EvidenceArtifactIdentity {
   const directoryDescriptor = openAuthorizedArtifactDirectory(layout, path);
   const targetName = basename(path);
   const temporaryName = `.${targetName}.${randomUUID()}.tmp`;
   let temporaryDescriptor: number | undefined;
-  let temporaryIdentity: FileIdentity | undefined;
+  let temporaryIdentity: EvidenceArtifactIdentity | undefined;
   let targetCommitted = false;
   let temporaryExists = false;
   try {
@@ -104,19 +134,20 @@ function commitEvidence(
     writeFileSync(temporaryDescriptor, serializeEvidence(value), "utf8");
     syncOperations.syncDescriptor(temporaryDescriptor, "payload");
     assertOwnedDirectoryEntry(directoryDescriptor, temporaryName, temporaryIdentity, 1, 1);
-    requireArtifactDirectoryAuthority(layout);
+    requireRunArtifactAuthority(layout);
     linkDirectoryEntry(directoryDescriptor, temporaryName, targetName);
     targetCommitted = true;
     assertOwnedDirectoryEntry(directoryDescriptor, targetName, temporaryIdentity, 2, 2);
     syncOperations.syncDescriptor(directoryDescriptor, "publication");
-    requireArtifactDirectoryAuthority(layout);
+    requireRunArtifactAuthority(layout);
     unlinkDirectoryEntry(directoryDescriptor, temporaryName);
     temporaryExists = false;
     syncOperations.syncDescriptor(directoryDescriptor, "cleanup");
     assertOwnedDirectoryEntry(directoryDescriptor, targetName, temporaryIdentity, 1, 1);
-    requireArtifactDirectoryAuthority(layout);
+    requireRunArtifactAuthority(layout);
+    return temporaryIdentity;
   } catch {
-    throw new EvidenceCommitError(targetCommitted);
+    throw new EvidenceCommitError(targetCommitted, targetCommitted ? temporaryIdentity : undefined);
   } finally {
     if (temporaryDescriptor !== undefined) closeSync(temporaryDescriptor);
     let cleanupFailed = false;
@@ -130,45 +161,17 @@ function commitEvidence(
       }
     }
     closeSync(directoryDescriptor);
-    if (cleanupFailed) throw new EvidenceCommitError(targetCommitted);
+    if (cleanupFailed) {
+      throw new EvidenceCommitError(targetCommitted, targetCommitted ? temporaryIdentity : undefined);
+    }
   }
 }
 
 function openAuthorizedArtifactDirectory(layout: RunArtifactLayout, path: string): number {
   if (dirname(path) !== layout.runDirectory) throw new EvidenceCommitError(false);
-  requireArtifactDirectoryAuthority(layout);
-  const descriptor = openSync(
-    layout.runDirectory,
-    constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW
-  );
   try {
-    const authority = requireAuthority(layout);
-    requireDirectoryIdentity(fstatSync(descriptor), authority.runDirectory);
-    requireArtifactDirectoryAuthority(layout);
-    return descriptor;
+    return openAuthorizedRunDirectory(layout);
   } catch {
-    closeSync(descriptor);
-    throw new EvidenceCommitError(false);
-  }
-}
-
-function requireArtifactDirectoryAuthority(layout: RunArtifactLayout): void {
-  const authority = requireAuthority(layout);
-  requireDirectoryIdentity(lstatSync(layout.outputRoot), authority.outputRoot);
-  requireDirectoryIdentity(lstatSync(join(layout.outputRoot, "runs")), authority.runsDirectory);
-  requireDirectoryIdentity(lstatSync(layout.runDirectory), authority.runDirectory);
-}
-
-function requireAuthority(layout: RunArtifactLayout): NonNullable<RunArtifactLayout["authority"]> {
-  if (layout.authority === undefined) throw new EvidenceCommitError(false);
-  return layout.authority;
-}
-
-function requireDirectoryIdentity(
-  stats: { isDirectory(): boolean; isSymbolicLink(): boolean; dev: number; ino: number },
-  expected: RunArtifactDirectoryIdentity
-): void {
-  if (!stats.isDirectory() || stats.isSymbolicLink() || stats.dev !== expected.device || stats.ino !== expected.inode) {
     throw new EvidenceCommitError(false);
   }
 }
@@ -176,7 +179,7 @@ function requireDirectoryIdentity(
 function assertOwnedDirectoryEntry(
   directoryDescriptor: number,
   entryName: string,
-  expected: FileIdentity,
+  expected: EvidenceArtifactIdentity,
   minimumLinks: number,
   maximumLinks: number
 ): void {
@@ -195,12 +198,12 @@ function assertOwnedDirectoryEntry(
   }
 }
 
-function descriptorIdentity(descriptor: number): FileIdentity {
+function descriptorIdentity(descriptor: number): EvidenceArtifactIdentity {
   const stats = fstatSync(descriptor);
   return { device: stats.dev, inode: stats.ino };
 }
 
-function sameFileIdentity(left: FileIdentity, right: FileIdentity): boolean {
+function sameFileIdentity(left: EvidenceArtifactIdentity, right: EvidenceArtifactIdentity): boolean {
   return left.device === right.device && left.inode === right.inode;
 }
 

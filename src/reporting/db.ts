@@ -14,6 +14,7 @@ import type { ExecutionMode } from "../shared/execution-mode.js";
 import { sanitizeBenchmarkArtifactValue } from "../shared/artifact-sanitization.js";
 import { claimTerminalRunIdentity, TerminalRunIdentityConflictError } from "./run-identity.js";
 import { TelemetryArtifactSanitizer } from "./telemetry-artifact-sanitizer.js";
+import { validateDatabasePathBeforeOpen } from "./database-path-authority.js";
 export { TerminalRunIdentityConflictError } from "./run-identity.js";
 interface RunRow {
   readonly sweep_id: string | null;
@@ -70,11 +71,9 @@ interface TrendRow {
   readonly elo_rating: number;
   readonly sample_count: number;
 }
-
 function parseJsonField<T>(raw: string | null): T | undefined {
   return raw && raw !== "" ? (JSON.parse(raw) as T) : undefined;
 }
-
 function mapRowToRunRecord(row: RunRow): RunRecord {
   const manifest = parseJsonField<RunManifest>(row.manifest_json);
   const metrics = parseJsonField<RunMetricsSummary>(row.metrics_json);
@@ -114,7 +113,6 @@ function mapRowToRunRecord(row: RunRow): RunRecord {
     ...(evaluation !== undefined ? { evaluation } : {}),
   };
 }
-
 function computeConfidenceInterval(wins: number, ties: number, matches: number): readonly [number, number] {
   if (matches <= 0) return [0, 0] as const;
   const score = (wins + 0.5 * ties) / matches;
@@ -125,16 +123,21 @@ function computeConfidenceInterval(wins: number, ties: number, matches: number):
   const margin = (z * Math.sqrt((score * (1 - score) + z2 / (4 * matches)) / matches)) / denominator;
   return [Math.max(0, center - margin), Math.min(1, center + margin)] as const;
 }
-
 export class TelemetryDatabase {
   private readonly db: Database;
   private readonly telemetrySanitizer = new TelemetryArtifactSanitizer();
-
-  public constructor(dbPath: string = ":memory:", options?: { readonly readonly?: boolean }) {
-    this.db = options?.readonly === true ? new Database(dbPath, { readonly: true }) : new Database(dbPath);
-    if (options?.readonly !== true) this.initSchema();
+  public constructor(dbPath: string = ":memory:", options?: { readonly readonly?: boolean; readonly authorityRoot?: string }) {
+    validateDatabasePathBeforeOpen(dbPath, options?.authorityRoot);
+    const database = options?.readonly === true ? new Database(dbPath, { readonly: true }) : new Database(dbPath);
+    try {
+      validateDatabasePathBeforeOpen(dbPath, options?.authorityRoot);
+      this.db = database;
+      if (options?.readonly !== true) this.initSchema();
+    } catch (error) {
+      database.close();
+      throw error;
+    }
   }
-
   public initSchema(): void {
     this.db.exec("PRAGMA journal_mode = DELETE; PRAGMA synchronous = FULL; PRAGMA foreign_keys = ON; PRAGMA temp_store = MEMORY;");
     this.db.exec(`
@@ -194,7 +197,6 @@ export class TelemetryDatabase {
     try { this.db.exec("ALTER TABLE runs ADD COLUMN matrix_occurrence_index INTEGER;"); } catch {}
     try { this.db.exec("ALTER TABLE runs ADD COLUMN attempt_count INTEGER NOT NULL DEFAULT 0;"); } catch {}
   }
-
   public saveRunRecord(record: RunRecord): void {
     const sanitizedRecord = sanitizeBenchmarkArtifactValue(record) as RunRecord;
     const skillVersion = sanitizedRecord.skillVersion ?? sanitizedRecord.manifest?.skillVersion ?? null;
@@ -234,7 +236,6 @@ export class TelemetryDatabase {
       throw error;
     }
   }
-
   public saveRunRecordWithArtifact(record: RunRecord, commitArtifact: () => void): void {
     this.db.transaction(() => {
       this.saveRunRecord(record);

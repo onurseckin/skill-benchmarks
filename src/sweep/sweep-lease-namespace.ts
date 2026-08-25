@@ -1,11 +1,22 @@
-import { constants } from "node:fs";
+import { closeSync, constants, fstatSync } from "node:fs";
 import type { FileHandle } from "node:fs/promises";
 import { lstat, mkdir, open, realpath } from "node:fs/promises";
 import { basename, dirname, join, parse, resolve } from "node:path";
+import {
+  openDirectoryEntry,
+  renameDirectoryEntryNoReplace,
+  unlinkDirectoryEntry,
+} from "../infrastructure/filesystem/directory-entry-operations.js";
+
+export interface SweepLeaseEntryIdentity {
+  readonly device: number;
+  readonly inode: number;
+}
 
 export interface SweepLeaseNamespace {
   readonly path: string;
   sync(): Promise<void>;
+  removeEntry(name: string, expected: SweepLeaseEntryIdentity, expectedLinkCount: number): Promise<void>;
   close(): Promise<void>;
 }
 
@@ -52,6 +63,55 @@ function createNamespace(
       await handle.sync();
       await validateHandleIdentity(handle, identity, conflict);
       await validatePathIdentity(path, identity, conflict);
+    },
+    async removeEntry(name, expected, expectedLinkCount): Promise<void> {
+      if (closed) throw conflict();
+      await validateHandleIdentity(handle, identity, conflict);
+      await validatePathIdentity(path, identity, conflict);
+      const quarantineName = `${name}.remove`;
+      let descriptor: number | undefined;
+      let quarantinePresent = false;
+      let ownedQuarantine = false;
+      try {
+        try {
+          renameDirectoryEntryNoReplace(handle.fd, name, quarantineName);
+        } catch {}
+        descriptor = openDirectoryEntry(
+          handle.fd,
+          quarantineName,
+          constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK
+        );
+        quarantinePresent = true;
+        const value = fstatSync(descriptor);
+        const processUserId = process.getuid?.();
+        if (
+          !value.isFile()
+          || value.dev !== expected.device
+          || value.ino !== expected.inode
+          || value.nlink !== expectedLinkCount
+          || (value.mode & 0o777) !== 0o600
+          || (processUserId !== undefined && value.uid !== processUserId)
+        ) {
+          throw conflict();
+        }
+        ownedQuarantine = true;
+        closeSync(descriptor);
+        descriptor = undefined;
+        unlinkDirectoryEntry(handle.fd, quarantineName);
+        quarantinePresent = false;
+        await handle.sync();
+        await validateHandleIdentity(handle, identity, conflict);
+        await validatePathIdentity(path, identity, conflict);
+      } catch {
+        if (descriptor !== undefined) closeSync(descriptor);
+        if (quarantinePresent && !ownedQuarantine) {
+          try {
+            renameDirectoryEntryNoReplace(handle.fd, quarantineName, name);
+            await handle.sync();
+          } catch {}
+        }
+        throw conflict();
+      }
     },
     async close(): Promise<void> {
       if (closed) return;

@@ -120,6 +120,7 @@ export async function executeSweepCell(input: CellExecutionInput): Promise<Matri
             prompt: scenarioDefinition.instructions,
             workspace,
             artifactOutputDir: artifactLayout.runDirectory,
+            artifactLayout,
             container,
             limits: cell.limits,
             temperature: cell.temperature,
@@ -216,20 +217,27 @@ function persistTerminalCell(input: PersistTerminalCellInput): MatrixCellResult 
     completedAt: scenarioResult?.finishedAt ?? new Date().toISOString(),
   } as const;
   const runRecord = createTerminalRunRecord(input.context, terminal, scenarioResult, input.attemptCount, durationMs);
-  let resultCommitted = false;
+  let resultIdentity: ReturnType<typeof commitRunResult> | undefined;
   try {
     input.telemetryDb.saveRunRecordWithArtifact(runRecord, () => {
-      commitRunResult(input.artifactLayout, input.context, terminal, scenarioResult, input.attemptCount, durationMs);
-      resultCommitted = true;
+      resultIdentity = commitRunResult(
+        input.artifactLayout,
+        input.context,
+        terminal,
+        scenarioResult,
+        input.attemptCount,
+        durationMs
+      );
     });
   } catch (error) {
     if (error instanceof TerminalRunIdentityConflictError) {
       return createTerminalIdentityConflict(input.cell, input.context.startedAt, input.startedMs);
     }
-    const targetCommitted = resultCommitted || (error instanceof EvidenceCommitError && error.targetCommitted);
+    const committedIdentity = resultIdentity ?? (error instanceof EvidenceCommitError ? error.committedIdentity : undefined);
+    const targetCommitted = committedIdentity !== undefined;
     if (targetCommitted) {
       try {
-        discardCommittedRunResult(input.artifactLayout);
+        discardCommittedRunResult(input.artifactLayout, committedIdentity);
       } catch {
         return createPersistenceFailureResult(input, scenarioResult, false);
       }

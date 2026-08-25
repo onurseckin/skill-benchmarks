@@ -27,19 +27,25 @@ export class ArtifactTextStreamSanitizers {
 
 export function sanitizeBenchmarkArtifactStreamValue(value: unknown): unknown {
   const streams = new ArtifactTextStreamSanitizers();
-  return sanitizeBenchmarkArtifactValue(normalizeStreamRecords(value, streams));
+  return sanitizeBenchmarkArtifactValue(normalizeStreamRecords(value, streams, ""));
 }
 
-function normalizeStreamRecords(value: unknown, streams: ArtifactTextStreamSanitizers): unknown {
-  if (Array.isArray(value)) return value.map((child) => normalizeStreamRecords(child, streams));
+function normalizeStreamRecords(
+  value: unknown,
+  streams: ArtifactTextStreamSanitizers,
+  inheritedRunId: string
+): unknown {
+  if (Array.isArray(value)) {
+    return value.map((child) => normalizeStreamRecords(child, streams, inheritedRunId));
+  }
   if (value === null || typeof value !== "object") return value;
   const record = value as Readonly<Record<string, unknown>>;
+  const runId = resolveRunId(record, inheritedRunId);
   const normalized = Object.fromEntries(
-    Object.entries(record).map(([key, child]) => [key, normalizeStreamRecords(child, streams)])
+    Object.entries(record).map(([key, child]) => [key, normalizeStreamRecords(child, streams, runId)])
   );
   const commandId = resolveCommandId(record);
   if (commandId === undefined) return normalized;
-  const runId = typeof record.runId === "string" ? record.runId : "";
   const scopeId = `${runId.length}:${runId}:${commandId}`;
   const eventType = resolveEventType(record);
   if (eventType.includes("START")) streams.clear(scopeId);
@@ -55,6 +61,17 @@ function normalizeStreamRecords(value: unknown, streams: ArtifactTextStreamSanit
   }
   if (eventType.includes("COMPLET") || eventType.includes("END")) streams.clear(scopeId);
   return normalized;
+}
+
+function resolveRunId(record: Readonly<Record<string, unknown>>, inheritedRunId: string): string {
+  if (typeof record.runId === "string") return record.runId;
+  for (const field of ["cell", "scenarioResult", "runRecord"] as const) {
+    const nested = record[field];
+    if (nested !== null && typeof nested === "object" && "runId" in nested && typeof nested.runId === "string") {
+      return nested.runId;
+    }
+  }
+  return inheritedRunId;
 }
 
 function resolveCommandId(record: Readonly<Record<string, unknown>>): string | undefined {

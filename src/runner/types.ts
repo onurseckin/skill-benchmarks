@@ -3,6 +3,7 @@ import type {
   IContainerPoolManager,
 } from "../infrastructure/container/types.js";
 import type { ExecutionMode } from "../shared/execution-mode.js";
+import type { RunArtifactLayout } from "../infrastructure/workspace/types.js";
 
 export type MessageRole = "system" | "user" | "assistant" | "tool";
 
@@ -239,6 +240,7 @@ export interface ScenarioRunConfig {
   readonly prompt: string;
   readonly systemPrompt?: string;
   readonly artifactOutputDir?: string;
+  readonly artifactLayout?: RunArtifactLayout;
   readonly workspace?: WorkspaceRoot;
   readonly container?: IContainerInstance;
   readonly limits: ExecutionLimits;

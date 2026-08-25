@@ -2,9 +2,9 @@ import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { constants } from "node:fs";
 import type { FileHandle } from "node:fs/promises";
-import { link, lstat, open, rename } from "node:fs/promises";
+import { link, lstat, open, readdir } from "node:fs/promises";
 import { hostname } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { openSweepLeaseNamespace, type SweepLeaseNamespace } from "./sweep-lease-namespace.js";
 import { bindSweepPlan } from "./sweep-plan.js";
 
@@ -13,7 +13,6 @@ export const sweepLeaseConflictMessage = "Sweep identity is already running in t
 
 const recoveryFileName = ".owner.recovery";
 const candidatePrefix = ".owner.stage.";
-const historyPrefix = ".owner.retired.";
 const maximumLockBytes = 4096;
 
 type OwnerRole = "owner" | "recovery";
@@ -41,11 +40,6 @@ interface OwnedFile {
   readonly candidatePath: string;
 }
 
-interface RetirementState {
-  readonly historyPath: string;
-  moved: boolean;
-}
-
 export interface SweepLeaseProbeHooks {
   beforeRecoveryFinalize?(): void | Promise<void>;
   beforeReleaseRetirement?(lockPath: string): void | Promise<void>;
@@ -63,34 +57,39 @@ export async function acquireSweepLease(
   const namespaceDirectory = leaseNamespace.path;
   const lockPath = join(namespaceDirectory, sweepLeaseFileName);
   const recoveryPath = join(namespaceDirectory, recoveryFileName);
+  let candidate: OwnedFile | undefined;
+  let recoveryCandidate: OwnedFile | undefined;
   try {
     await clearStaleRecovery(leaseNamespace, recoveryPath);
-    const candidate = await prepareCandidate(leaseNamespace, "owner");
-    const recoveryCandidate = await prepareCandidate(leaseNamespace, "recovery");
+    candidate = await prepareCandidate(leaseNamespace, "owner");
+    recoveryCandidate = await prepareCandidate(leaseNamespace, "recovery");
     if (!await publishCandidate(recoveryCandidate, recoveryPath, leaseNamespace)) throw conflict();
     let replacementPublished = false;
     let recoveryPublished = true;
     try {
+      await reclaimStaleLeaseDebris(leaseNamespace, lockPath, recoveryPath, candidate);
       if (await pathExists(lockPath)) {
         const existingOwner = await readPublishedOwner(lockPath, namespaceDirectory);
         if (existingOwner === undefined || !isStaleOwner(existingOwner.owner)) throw conflict();
-        await retirePublishedPath(lockPath, existingOwner, leaseNamespace, "stale");
+        await reclaimPublishedPath(lockPath, existingOwner, leaseNamespace);
       }
       if (!await publishCandidate(candidate, lockPath, leaseNamespace)) throw conflict();
       replacementPublished = true;
       await probeHooks.beforeRecoveryFinalize?.();
-      await retirePublishedPath(recoveryPath, recoveryCandidate, leaseNamespace, "recovery");
+      await reclaimPublishedPath(recoveryPath, recoveryCandidate, leaseNamespace);
       recoveryPublished = false;
       await assertPublishedPath(lockPath, candidate, namespaceDirectory);
       return createLease(lockPath, leaseNamespace, candidate, probeHooks);
     } catch (error) {
-      if (replacementPublished) await retirePublishedPath(lockPath, candidate, leaseNamespace, "rollback");
+      if (replacementPublished) await reclaimPublishedPath(lockPath, candidate, leaseNamespace);
       if (recoveryPublished) {
-        await retirePublishedPath(recoveryPath, recoveryCandidate, leaseNamespace, "recovery-failed");
+        await reclaimPublishedPath(recoveryPath, recoveryCandidate, leaseNamespace);
       }
       throw error;
     }
   } catch (error) {
+    if (candidate !== undefined) await reclaimCandidate(candidate, leaseNamespace).catch(() => {});
+    if (recoveryCandidate !== undefined) await reclaimCandidate(recoveryCandidate, leaseNamespace).catch(() => {});
     await leaseNamespace.close();
     throw error;
   }
@@ -102,9 +101,9 @@ function createLease(
   const namespaceDirectory = leaseNamespace.path;
   let released = false;
   let releaseRecovery: OwnedFile | undefined;
-  let ownerRetirement: RetirementState | undefined;
-  let recoveryRetirement: RetirementState | undefined;
   let releaseHookCalled = false;
+  let ownerReclaimed = false;
+  let recoveryReclaimed = false;
   return {
     async bindPlan(sweepId: string, fingerprint: string, autoResume: boolean): Promise<void> {
       if (released) throw conflict();
@@ -126,12 +125,14 @@ function createLease(
         releaseHookCalled = true;
         await probeHooks.beforeReleaseRetirement?.(lockPath);
       }
-      ownerRetirement ??= createRetirement(namespaceDirectory, "released");
-      await finishRetirement(lockPath, ownedFile, leaseNamespace, ownerRetirement);
-      recoveryRetirement ??= createRetirement(namespaceDirectory, "release-transition");
-      await finishRetirement(
-        join(namespaceDirectory, recoveryFileName), releaseRecovery, leaseNamespace, recoveryRetirement
-      );
+      if (!ownerReclaimed) {
+        await reclaimPublishedPath(lockPath, ownedFile, leaseNamespace);
+        ownerReclaimed = true;
+      }
+      if (!recoveryReclaimed) {
+        await reclaimPublishedPath(join(namespaceDirectory, recoveryFileName), releaseRecovery, leaseNamespace);
+        recoveryReclaimed = true;
+      }
       await leaseNamespace.close();
       released = true;
     },
@@ -144,10 +145,13 @@ async function prepareCandidate(leaseNamespace: SweepLeaseNamespace, role: Owner
   const candidateName = `${candidatePrefix}${role}.${token}`;
   const candidatePath = join(namespaceDirectory, candidateName);
   let handle: FileHandle | undefined;
+  let candidateIdentity: FileIdentity | undefined;
   try {
     await leaseNamespace.sync();
     handle = await open(candidatePath, "wx", 0o600);
+    await handle.chmod(0o600);
     const identity = await handleIdentity(handle);
+    candidateIdentity = identity;
     const owner: LeaseOwner = {
       version: "2",
       role,
@@ -168,8 +172,8 @@ async function prepareCandidate(leaseNamespace: SweepLeaseNamespace, role: Owner
     return candidate;
   } catch (error) {
     if (handle !== undefined) await handle.close().catch(() => {});
-    if (await pathExists(candidatePath)) {
-      await retireUnknownPath(candidatePath, leaseNamespace, "incomplete").catch(() => {});
+    if (candidateIdentity !== undefined) {
+      await leaseNamespace.removeEntry(candidateName, candidateIdentity, 1).catch(() => {});
     }
     throw error;
   }
@@ -189,44 +193,23 @@ async function publishCandidate(
   } catch (error) {
     if (!published && isExistingPathError(error)) return false;
     if (published) {
-      await retirePublishedPath(publishedPath, candidate, leaseNamespace, "publication-failed");
+      await reclaimPublishedPath(publishedPath, candidate, leaseNamespace);
     }
     throw error;
   }
 }
 
-async function retirePublishedPath(
-  publishedPath: string, expected: OwnedFile, leaseNamespace: SweepLeaseNamespace, reason: string
-): Promise<void> {
-  await finishRetirement(
-    publishedPath, expected, leaseNamespace, createRetirement(leaseNamespace.path, reason)
-  );
-}
-
-function createRetirement(namespaceDirectory: string, reason: string): RetirementState {
-  return { historyPath: join(namespaceDirectory, `${historyPrefix}${reason}.${randomUUID()}`), moved: false };
-}
-
-async function finishRetirement(
-  publishedPath: string, expected: OwnedFile, leaseNamespace: SweepLeaseNamespace, state: RetirementState
+async function reclaimPublishedPath(
+  publishedPath: string, expected: OwnedFile, leaseNamespace: SweepLeaseNamespace
 ): Promise<void> {
   await leaseNamespace.sync();
-  if (!state.moved) {
-    await assertPublishedPath(publishedPath, expected, leaseNamespace.path);
-    await rename(publishedPath, state.historyPath);
-    state.moved = true;
-  }
-  await leaseNamespace.sync();
-  const retiredOwner = await readPublishedOwner(state.historyPath, leaseNamespace.path);
-  if (!sameOwnedFile(retiredOwner, expected)) throw conflict();
+  await assertPublishedPath(publishedPath, expected, leaseNamespace.path);
+  await leaseNamespace.removeEntry(basename(publishedPath), expected.identity, 2);
+  await reclaimCandidate(expected, leaseNamespace);
 }
 
-async function retireUnknownPath(path: string, leaseNamespace: SweepLeaseNamespace, reason: string): Promise<void> {
-  const namespaceDirectory = leaseNamespace.path;
-  const historyPath = join(namespaceDirectory, `${historyPrefix}${reason}.${randomUUID()}`);
-  await leaseNamespace.sync();
-  await rename(path, historyPath);
-  await leaseNamespace.sync();
+async function reclaimCandidate(candidate: OwnedFile, leaseNamespace: SweepLeaseNamespace): Promise<void> {
+  await leaseNamespace.removeEntry(candidate.owner.candidateName, candidate.identity, 1);
 }
 
 async function clearStaleRecovery(leaseNamespace: SweepLeaseNamespace, recoveryPath: string): Promise<void> {
@@ -234,7 +217,29 @@ async function clearStaleRecovery(leaseNamespace: SweepLeaseNamespace, recoveryP
   if (!await pathExists(recoveryPath)) return;
   const recoveryOwner = await readPublishedOwner(recoveryPath, namespaceDirectory);
   if (recoveryOwner === undefined || !isStaleOwner(recoveryOwner.owner)) throw conflict();
-  await retirePublishedPath(recoveryPath, recoveryOwner, leaseNamespace, "stale-recovery");
+  await reclaimPublishedPath(recoveryPath, recoveryOwner, leaseNamespace);
+}
+
+async function reclaimStaleLeaseDebris(
+  leaseNamespace: SweepLeaseNamespace,
+  lockPath: string,
+  recoveryPath: string,
+  pendingOwner: OwnedFile
+): Promise<void> {
+  const protectedCandidates = new Set([pendingOwner.owner.candidateName]);
+  for (const publishedPath of [lockPath, recoveryPath]) {
+    const published = await readPublishedOwner(publishedPath, leaseNamespace.path);
+    if (published !== undefined) protectedCandidates.add(published.owner.candidateName);
+  }
+  for (const entry of await readdir(leaseNamespace.path)) {
+    const isStage = entry.startsWith(candidatePrefix);
+    const isRetired = entry.startsWith(".owner.retired.");
+    if ((!isStage && !isRetired) || protectedCandidates.has(entry)) continue;
+    const inspected = await readOwnerFile(join(leaseNamespace.path, entry));
+    if (inspected === undefined || !isStaleOwner(inspected.owner)) continue;
+    if (isStage && entry !== inspected.owner.candidateName) throw conflict();
+    await leaseNamespace.removeEntry(entry, inspected.identity, inspected.identity.linkCount);
+  }
 }
 
 async function assertCandidatePath(candidate: OwnedFile): Promise<void> {
