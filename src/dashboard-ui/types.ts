@@ -56,6 +56,14 @@ export interface ThemeTokens {
   readonly fontSans: string;
 }
 
+export interface NeoBrutalistComponentTokens {
+  readonly borderWidth: string;
+  readonly borderColor: string;
+  readonly shadowOffset: string;
+  readonly borderRadius: string;
+  readonly fontMono: string;
+}
+
 export type SseConnectionStatus = "connecting" | "connected" | "disconnected" | "reconnecting" | "error";
 
 export interface SseSubscriptionConfig {

@@ -1,0 +1,26 @@
+body {
+  margin: 0;
+  font-family: sans-serif;
+  background-color: #f7f7f7;
+  color: #888888;
+}
+
+.low-contrast-text {
+  color: #a0a0a0;
+  background-color: #b0b0b0;
+}
+
+.low-contrast-button {
+  background-color: #d1d5db;
+  color: #e5e7eb;
+  border: 1px solid #d1d5db;
+  padding: 8px 16px;
+  cursor: pointer;
+}
+
+.broken-nav-item {
+  cursor: pointer;
+  padding: 10px;
+  background-color: #e2e8f0;
+  color: #94a3b8;
+}

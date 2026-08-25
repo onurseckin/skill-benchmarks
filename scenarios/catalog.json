@@ -1,6 +1,6 @@
 {
-  "version": "1.0.0",
-  "generatedAt": "2026-08-24T20:03:00.000Z",
+  "version": "1.1.0",
+  "generatedAt": "2026-08-25T02:00:37.682Z",
   "totalScenarios": 8,
   "categories": [
     "coding",
@@ -85,5 +85,1289 @@
       "path": "scenarios/optimization/zero-alloc-pipeline.json",
       "description": "High-performance optimization benchmark scenario evaluating an agent's capability to refactor a high-throughput Go streaming pipeline into a zero-allocation architecture using sync.Pool, byte slice recycling, custom arena allocators, and pprof heap profile verification."
     }
-  ]
+  ],
+  "canonicalSkills": [
+    {
+      "id": "find-skills",
+      "name": "find-skills",
+      "domain": "overall",
+      "category": "general",
+      "source": "vercel-labs/skills",
+      "author": {
+        "name": "vercel-labs",
+        "handle": "vercel-labs",
+        "repository": "vercel-labs/skills"
+      },
+      "installs": {
+        "rawInstalls": 3100000,
+        "display": "3.1M"
+      },
+      "description": "Discover and install AI agent skills across the ecosystem",
+      "tags": [
+        "discovery",
+        "catalog",
+        "ecosystem"
+      ],
+      "mappedScenarioId": "git-worktrees",
+      "mappedScenarioName": "Isolated Worktree Feature Branching"
+    },
+    {
+      "id": "grill-me",
+      "name": "grill-me",
+      "domain": "overall",
+      "category": "general",
+      "source": "mattpocock/skills",
+      "author": {
+        "name": "mattpocock",
+        "handle": "mattpocock",
+        "repository": "mattpocock/skills"
+      },
+      "installs": {
+        "rawInstalls": 936700,
+        "display": "936.7K"
+      },
+      "description": "Interactive design, architecture, and logic interrogation",
+      "tags": [
+        "interview",
+        "architecture",
+        "socratic"
+      ],
+      "mappedScenarioId": "fullstack-refactor",
+      "mappedScenarioName": "Full-Stack React Modernization, Go Concurrent Backend, and Docker Isolation"
+    },
+    {
+      "id": "frontend-design",
+      "name": "frontend-design",
+      "domain": "overall",
+      "category": "frontend",
+      "source": "anthropics/skills",
+      "author": {
+        "name": "anthropics",
+        "handle": "anthropics",
+        "repository": "anthropics/skills"
+      },
+      "installs": {
+        "rawInstalls": 806600,
+        "display": "806.6K"
+      },
+      "description": "Modern frontend design and responsive UI patterns",
+      "tags": [
+        "frontend",
+        "ui",
+        "react"
+      ],
+      "mappedScenarioId": "a11y-audit",
+      "mappedScenarioName": "Comprehensive WCAG 2.1 AA Accessibility Audit & Remediation"
+    },
+    {
+      "id": "grill-with-docs",
+      "name": "grill-with-docs",
+      "domain": "overall",
+      "category": "general",
+      "source": "mattpocock/skills",
+      "author": {
+        "name": "mattpocock",
+        "handle": "mattpocock",
+        "repository": "mattpocock/skills"
+      },
+      "installs": {
+        "rawInstalls": 797700,
+        "display": "797.7K"
+      },
+      "description": "Deep technical interrogation against official documentation",
+      "tags": [
+        "docs",
+        "interrogation",
+        "validation"
+      ],
+      "mappedScenarioId": "fullstack-refactor",
+      "mappedScenarioName": "Full-Stack React Modernization, Go Concurrent Backend, and Docker Isolation"
+    },
+    {
+      "id": "improve-codebase-architecture",
+      "name": "improve-codebase-architecture",
+      "domain": "overall",
+      "category": "workflow",
+      "source": "mattpocock/skills",
+      "author": {
+        "name": "mattpocock",
+        "handle": "mattpocock",
+        "repository": "mattpocock/skills"
+      },
+      "installs": {
+        "rawInstalls": 769000,
+        "display": "769.0K"
+      },
+      "description": "Architectural refactoring and code organization heuristics",
+      "tags": [
+        "architecture",
+        "refactoring",
+        "clean-code"
+      ],
+      "mappedScenarioId": "composition-patterns",
+      "mappedScenarioName": "React Compound Component Refactoring"
+    },
+    {
+      "id": "azure-diagnostics",
+      "name": "azure-diagnostics",
+      "domain": "debugging",
+      "category": "debugging",
+      "source": "microsoft/azure-skills",
+      "author": {
+        "name": "microsoft",
+        "handle": "microsoft",
+        "repository": "microsoft/azure-skills"
+      },
+      "installs": {
+        "rawInstalls": 465100,
+        "display": "465.1K"
+      },
+      "description": "Azure cloud infrastructure diagnostic and telemetry triage",
+      "tags": [
+        "azure",
+        "cloud",
+        "diagnostics"
+      ],
+      "mappedScenarioId": "memory-leak",
+      "mappedScenarioName": "Event Stream Memory Leak Diagnosis and Fix"
+    },
+    {
+      "id": "azure-messaging",
+      "name": "azure-messaging",
+      "domain": "debugging",
+      "category": "debugging",
+      "source": "microsoft/azure-skills",
+      "author": {
+        "name": "microsoft",
+        "handle": "microsoft",
+        "repository": "microsoft/azure-skills"
+      },
+      "installs": {
+        "rawInstalls": 453600,
+        "display": "453.6K"
+      },
+      "description": "Azure messaging queue and event stream troubleshooting",
+      "tags": [
+        "azure",
+        "messaging",
+        "queues"
+      ],
+      "mappedScenarioId": "memory-leak",
+      "mappedScenarioName": "Event Stream Memory Leak Diagnosis and Fix"
+    },
+    {
+      "id": "diagnosing-bugs",
+      "name": "diagnosing-bugs",
+      "domain": "debugging",
+      "category": "debugging",
+      "source": "mattpocock/skills",
+      "author": {
+        "name": "mattpocock",
+        "handle": "mattpocock",
+        "repository": "mattpocock/skills"
+      },
+      "installs": {
+        "rawInstalls": 450300,
+        "display": "450.3K"
+      },
+      "description": "Systematic root cause analysis and bug reproduction",
+      "tags": [
+        "debugging",
+        "troubleshooting",
+        "root-cause"
+      ],
+      "mappedScenarioId": "memory-leak",
+      "mappedScenarioName": "Event Stream Memory Leak Diagnosis and Fix"
+    },
+    {
+      "id": "safe-debug",
+      "name": "safe-debug",
+      "domain": "debugging",
+      "category": "debugging",
+      "source": "lllllllama/rigorpilot-skills",
+      "author": {
+        "name": "lllllllama",
+        "handle": "lllllllama",
+        "repository": "lllllllama/rigorpilot-skills"
+      },
+      "installs": {
+        "rawInstalls": 153900,
+        "display": "153.9K"
+      },
+      "description": "Non-destructive debugging with invariant guardrails",
+      "tags": [
+        "safe",
+        "debugging",
+        "invariants"
+      ],
+      "mappedScenarioId": "memory-leak",
+      "mappedScenarioName": "Event Stream Memory Leak Diagnosis and Fix"
+    },
+    {
+      "id": "golang-troubleshooting",
+      "name": "golang-troubleshooting",
+      "domain": "debugging",
+      "category": "debugging",
+      "source": "samber/cc-skills-golang",
+      "author": {
+        "name": "samber",
+        "handle": "samber",
+        "repository": "samber/cc-skills-golang"
+      },
+      "installs": {
+        "rawInstalls": 33500,
+        "display": "33.5K"
+      },
+      "description": "Go runtime, goroutine leak, and race detector triage",
+      "tags": [
+        "golang",
+        "concurrency",
+        "troubleshooting"
+      ],
+      "mappedScenarioId": "golang-concurrency",
+      "mappedScenarioName": "Bounded Concurrency Worker Pool with Graceful Shutdown"
+    },
+    {
+      "id": "tdd",
+      "name": "tdd",
+      "domain": "testing",
+      "category": "testing",
+      "source": "mattpocock/skills",
+      "author": {
+        "name": "mattpocock",
+        "handle": "mattpocock",
+        "repository": "mattpocock/skills"
+      },
+      "installs": {
+        "rawInstalls": 742800,
+        "display": "742.8K"
+      },
+      "description": "Test-driven development workflows and red-green cycles",
+      "tags": [
+        "tdd",
+        "unit-testing",
+        "workflow"
+      ],
+      "mappedScenarioId": "fullstack-refactor",
+      "mappedScenarioName": "Full-Stack React Modernization, Go Concurrent Backend, and Docker Isolation"
+    },
+    {
+      "id": "qa",
+      "name": "qa",
+      "domain": "testing",
+      "category": "testing",
+      "source": "mattpocock/skills",
+      "author": {
+        "name": "mattpocock",
+        "handle": "mattpocock",
+        "repository": "mattpocock/skills"
+      },
+      "installs": {
+        "rawInstalls": 204200,
+        "display": "204.2K"
+      },
+      "description": "Automated quality assurance and test suite design",
+      "tags": [
+        "qa",
+        "testing",
+        "automation"
+      ],
+      "mappedScenarioId": "a11y-audit",
+      "mappedScenarioName": "Comprehensive WCAG 2.1 AA Accessibility Audit & Remediation"
+    },
+    {
+      "id": "webapp-testing",
+      "name": "webapp-testing",
+      "domain": "testing",
+      "category": "testing",
+      "source": "anthropics/skills",
+      "author": {
+        "name": "anthropics",
+        "handle": "anthropics",
+        "repository": "anthropics/skills"
+      },
+      "installs": {
+        "rawInstalls": 138900,
+        "display": "138.9K"
+      },
+      "description": "End-to-end web application testing and browser verification",
+      "tags": [
+        "webapp",
+        "e2e",
+        "browser"
+      ],
+      "mappedScenarioId": "a11y-audit",
+      "mappedScenarioName": "Comprehensive WCAG 2.1 AA Accessibility Audit & Remediation"
+    },
+    {
+      "id": "playwright-cli",
+      "name": "playwright-cli",
+      "domain": "testing",
+      "category": "testing",
+      "source": "microsoft/playwright-cli",
+      "author": {
+        "name": "microsoft",
+        "handle": "microsoft",
+        "repository": "microsoft/playwright-cli"
+      },
+      "installs": {
+        "rawInstalls": 127900,
+        "display": "127.9K"
+      },
+      "description": "Playwright CLI headless browser automation and traces",
+      "tags": [
+        "playwright",
+        "e2e",
+        "cli"
+      ],
+      "mappedScenarioId": "a11y-audit",
+      "mappedScenarioName": "Comprehensive WCAG 2.1 AA Accessibility Audit & Remediation"
+    },
+    {
+      "id": "playwright-best-practices",
+      "name": "playwright-best-practices",
+      "domain": "testing",
+      "category": "testing",
+      "source": "currents-dev",
+      "author": {
+        "name": "currents-dev",
+        "handle": "currents-dev",
+        "repository": "currents-dev"
+      },
+      "installs": {
+        "rawInstalls": 63000,
+        "display": "63K"
+      },
+      "description": "Playwright robust locators and flaky test mitigation",
+      "tags": [
+        "playwright",
+        "best-practices",
+        "testing"
+      ],
+      "mappedScenarioId": "a11y-audit",
+      "mappedScenarioName": "Comprehensive WCAG 2.1 AA Accessibility Audit & Remediation"
+    },
+    {
+      "id": "azure-compliance",
+      "name": "azure-compliance",
+      "domain": "security",
+      "category": "security",
+      "source": "microsoft/azure-skills",
+      "author": {
+        "name": "microsoft",
+        "handle": "microsoft",
+        "repository": "microsoft/azure-skills"
+      },
+      "installs": {
+        "rawInstalls": 464000,
+        "display": "464K"
+      },
+      "description": "Azure cloud security compliance and policy verification",
+      "tags": [
+        "azure",
+        "compliance",
+        "security"
+      ],
+      "mappedScenarioId": "polyglot-sanitization",
+      "mappedScenarioName": "Cross-Boundary Polyglot Input Sanitization and Exploit Triage"
+    },
+    {
+      "id": "firebase-security-rules-auditor",
+      "name": "firebase-security-rules-auditor",
+      "domain": "security",
+      "category": "security",
+      "source": "firebase/agent-skills",
+      "author": {
+        "name": "firebase",
+        "handle": "firebase",
+        "repository": "firebase/agent-skills"
+      },
+      "installs": {
+        "rawInstalls": 74800,
+        "display": "74.8K"
+      },
+      "description": "Firebase Firestore and Storage security rules auditor",
+      "tags": [
+        "firebase",
+        "security",
+        "rules"
+      ],
+      "mappedScenarioId": "polyglot-sanitization",
+      "mappedScenarioName": "Cross-Boundary Polyglot Input Sanitization and Exploit Triage"
+    },
+    {
+      "id": "skill-vetter",
+      "name": "skill-vetter",
+      "domain": "security",
+      "category": "security",
+      "source": "useai-pro/openclaw-skills-security",
+      "author": {
+        "name": "useai-pro",
+        "handle": "useai-pro",
+        "repository": "useai-pro/openclaw-skills-security"
+      },
+      "installs": {
+        "rawInstalls": 20500,
+        "display": "20.5K"
+      },
+      "description": "Agent skill sandbox isolation and permission vetter",
+      "tags": [
+        "security",
+        "sandbox",
+        "audit"
+      ],
+      "mappedScenarioId": "polyglot-sanitization",
+      "mappedScenarioName": "Cross-Boundary Polyglot Input Sanitization and Exploit Triage"
+    },
+    {
+      "id": "security-review",
+      "name": "security-review",
+      "domain": "security",
+      "category": "security",
+      "source": "affaan-m/ecc",
+      "author": {
+        "name": "affaan-m",
+        "handle": "affaan-m",
+        "repository": "affaan-m/ecc"
+      },
+      "installs": {
+        "rawInstalls": 11700,
+        "display": "11.7K"
+      },
+      "description": "OWASP top-10 vulnerability and input sanitization review",
+      "tags": [
+        "security",
+        "owasp",
+        "vulnerabilities"
+      ],
+      "mappedScenarioId": "polyglot-sanitization",
+      "mappedScenarioName": "Cross-Boundary Polyglot Input Sanitization and Exploit Triage"
+    },
+    {
+      "id": "pci-compliance",
+      "name": "pci-compliance",
+      "domain": "security",
+      "category": "security",
+      "source": "wshobson/agents",
+      "author": {
+        "name": "wshobson",
+        "handle": "wshobson",
+        "repository": "wshobson/agents"
+      },
+      "installs": {
+        "rawInstalls": 8000,
+        "display": "8K"
+      },
+      "description": "PCI-DSS payment card data security standard compliance",
+      "tags": [
+        "pci",
+        "compliance",
+        "payments"
+      ],
+      "mappedScenarioId": "polyglot-sanitization",
+      "mappedScenarioName": "Cross-Boundary Polyglot Input Sanitization and Exploit Triage"
+    },
+    {
+      "id": "golang-documentation",
+      "name": "golang-documentation",
+      "domain": "documentation",
+      "category": "documentation",
+      "source": "samber/cc-skills-golang",
+      "author": {
+        "name": "samber",
+        "handle": "samber",
+        "repository": "samber/cc-skills-golang"
+      },
+      "installs": {
+        "rawInstalls": 33700,
+        "display": "33.7K"
+      },
+      "description": "Idiomatic Go package documentation and godoc conventions",
+      "tags": [
+        "golang",
+        "godoc",
+        "documentation"
+      ],
+      "mappedScenarioId": "golang-concurrency",
+      "mappedScenarioName": "Bounded Concurrency Worker Pool with Graceful Shutdown"
+    },
+    {
+      "id": "documentation-writer",
+      "name": "documentation-writer",
+      "domain": "documentation",
+      "category": "documentation",
+      "source": "github/awesome-copilot",
+      "author": {
+        "name": "github",
+        "handle": "github",
+        "repository": "github/awesome-copilot"
+      },
+      "installs": {
+        "rawInstalls": 23400,
+        "display": "23.4K"
+      },
+      "description": "Technical architecture and API documentation authoring",
+      "tags": [
+        "docs",
+        "technical-writing",
+        "architecture"
+      ],
+      "mappedScenarioId": "fullstack-refactor",
+      "mappedScenarioName": "Full-Stack React Modernization, Go Concurrent Backend, and Docker Isolation"
+    },
+    {
+      "id": "create-readme",
+      "name": "create-readme",
+      "domain": "documentation",
+      "category": "documentation",
+      "source": "github/awesome-copilot",
+      "author": {
+        "name": "github",
+        "handle": "github",
+        "repository": "github/awesome-copilot"
+      },
+      "installs": {
+        "rawInstalls": 15900,
+        "display": "15.9K"
+      },
+      "description": "Project README blueprint generation and quickstart scaffolds",
+      "tags": [
+        "readme",
+        "scaffold",
+        "documentation"
+      ],
+      "mappedScenarioId": "fullstack-refactor",
+      "mappedScenarioName": "Full-Stack React Modernization, Go Concurrent Backend, and Docker Isolation"
+    },
+    {
+      "id": "documentation-and-adrs",
+      "name": "documentation-and-adrs",
+      "domain": "documentation",
+      "category": "documentation",
+      "source": "addyosmani/agent-skills",
+      "author": {
+        "name": "addyosmani",
+        "handle": "addyosmani",
+        "repository": "addyosmani/agent-skills"
+      },
+      "installs": {
+        "rawInstalls": 14300,
+        "display": "14.3K"
+      },
+      "description": "Architecture Decision Record (ADR) synthesis and capture",
+      "tags": [
+        "adr",
+        "architecture",
+        "decisions"
+      ],
+      "mappedScenarioId": "fullstack-refactor",
+      "mappedScenarioName": "Full-Stack React Modernization, Go Concurrent Backend, and Docker Isolation"
+    },
+    {
+      "id": "readme-blueprint-generator",
+      "name": "readme-blueprint-generator",
+      "domain": "documentation",
+      "category": "documentation",
+      "source": "github/awesome-copilot",
+      "author": {
+        "name": "github",
+        "handle": "github",
+        "repository": "github/awesome-copilot"
+      },
+      "installs": {
+        "rawInstalls": 9300,
+        "display": "9.3K"
+      },
+      "description": "Structured markdown README scaffold generator",
+      "tags": [
+        "readme",
+        "markdown",
+        "scaffold"
+      ],
+      "mappedScenarioId": "fullstack-refactor",
+      "mappedScenarioName": "Full-Stack React Modernization, Go Concurrent Backend, and Docker Isolation"
+    },
+    {
+      "id": "code-review",
+      "name": "code-review",
+      "domain": "code-review",
+      "category": "code-review",
+      "source": "mattpocock/skills",
+      "author": {
+        "name": "mattpocock",
+        "handle": "mattpocock",
+        "repository": "mattpocock/skills"
+      },
+      "installs": {
+        "rawInstalls": 390300,
+        "display": "390.3K"
+      },
+      "description": "Automated code review heuristics and maintainability checks",
+      "tags": [
+        "review",
+        "clean-code",
+        "quality"
+      ],
+      "mappedScenarioId": "fullstack-refactor",
+      "mappedScenarioName": "Full-Stack React Modernization, Go Concurrent Backend, and Docker Isolation"
+    },
+    {
+      "id": "code-review-excellence",
+      "name": "code-review-excellence",
+      "domain": "code-review",
+      "category": "code-review",
+      "source": "wshobson/agents",
+      "author": {
+        "name": "wshobson",
+        "handle": "wshobson",
+        "repository": "wshobson/agents"
+      },
+      "installs": {
+        "rawInstalls": 25200,
+        "display": "25.2K"
+      },
+      "description": "Rigorous stylistic, architectural, and edge-case review",
+      "tags": [
+        "review",
+        "quality",
+        "excellence"
+      ],
+      "mappedScenarioId": "fullstack-refactor",
+      "mappedScenarioName": "Full-Stack React Modernization, Go Concurrent Backend, and Docker Isolation"
+    },
+    {
+      "id": "code-review-and-quality",
+      "name": "code-review-and-quality",
+      "domain": "code-review",
+      "category": "code-review",
+      "source": "addyosmani/agent-skills",
+      "author": {
+        "name": "addyosmani",
+        "handle": "addyosmani",
+        "repository": "addyosmani/agent-skills"
+      },
+      "installs": {
+        "rawInstalls": 17100,
+        "display": "17.1K"
+      },
+      "description": "Code quality metrics, complexity analysis, and reviews",
+      "tags": [
+        "review",
+        "quality",
+        "metrics"
+      ],
+      "mappedScenarioId": "fullstack-refactor",
+      "mappedScenarioName": "Full-Stack React Modernization, Go Concurrent Backend, and Docker Isolation"
+    },
+    {
+      "id": "frontend-code-review",
+      "name": "frontend-code-review",
+      "domain": "code-review",
+      "category": "frontend",
+      "source": "langgenius/dify",
+      "author": {
+        "name": "langgenius",
+        "handle": "langgenius",
+        "repository": "langgenius/dify"
+      },
+      "installs": {
+        "rawInstalls": 8900,
+        "display": "8.9K"
+      },
+      "description": "Frontend accessibility, performance, and state review",
+      "tags": [
+        "frontend",
+        "react",
+        "review"
+      ],
+      "mappedScenarioId": "a11y-audit",
+      "mappedScenarioName": "Comprehensive WCAG 2.1 AA Accessibility Audit & Remediation"
+    },
+    {
+      "id": "code-reviewer",
+      "name": "code-reviewer",
+      "domain": "code-review",
+      "category": "code-review",
+      "source": "google-gemini/gemini-cli",
+      "author": {
+        "name": "google-gemini",
+        "handle": "google-gemini",
+        "repository": "google-gemini/gemini-cli"
+      },
+      "installs": {
+        "rawInstalls": 8400,
+        "display": "8.4K"
+      },
+      "description": "Multi-pass code quality and edge-case analyzer",
+      "tags": [
+        "review",
+        "analysis",
+        "gemini"
+      ],
+      "mappedScenarioId": "fullstack-refactor",
+      "mappedScenarioName": "Full-Stack React Modernization, Go Concurrent Backend, and Docker Isolation"
+    },
+    {
+      "id": "azure-deploy",
+      "name": "azure-deploy",
+      "domain": "devops",
+      "category": "devops",
+      "source": "microsoft/azure-skills",
+      "author": {
+        "name": "microsoft",
+        "handle": "microsoft",
+        "repository": "microsoft/azure-skills"
+      },
+      "installs": {
+        "rawInstalls": 465300,
+        "display": "465.3K"
+      },
+      "description": "Azure resource provisioning and deployment automation",
+      "tags": [
+        "azure",
+        "deploy",
+        "devops"
+      ],
+      "mappedScenarioId": "fullstack-refactor",
+      "mappedScenarioName": "Full-Stack React Modernization, Go Concurrent Backend, and Docker Isolation"
+    },
+    {
+      "id": "agent-browser",
+      "name": "agent-browser",
+      "domain": "browser-automation",
+      "category": "browser-automation",
+      "source": "vercel-labs/agent-browser",
+      "author": {
+        "name": "vercel-labs",
+        "handle": "vercel-labs",
+        "repository": "vercel-labs/agent-browser"
+      },
+      "installs": {
+        "rawInstalls": 713800,
+        "display": "713.8K"
+      },
+      "description": "Browser automation agent runtime and DOM interactions",
+      "tags": [
+        "browser",
+        "automation",
+        "agent"
+      ],
+      "mappedScenarioId": "a11y-audit",
+      "mappedScenarioName": "Comprehensive WCAG 2.1 AA Accessibility Audit & Remediation"
+    },
+    {
+      "id": "supabase-postgres-best-practices",
+      "name": "supabase-postgres-best-practices",
+      "domain": "database",
+      "category": "database",
+      "source": "supabase/agent-skills",
+      "author": {
+        "name": "supabase",
+        "handle": "supabase",
+        "repository": "supabase/agent-skills"
+      },
+      "installs": {
+        "rawInstalls": 363500,
+        "display": "363.5K"
+      },
+      "description": "PostgreSQL schema design and index query optimization",
+      "tags": [
+        "postgres",
+        "database",
+        "supabase"
+      ],
+      "mappedScenarioId": "zero-alloc-pipeline",
+      "mappedScenarioName": "Zero-Allocation Streaming Data Pipeline and Heap Profiling"
+    },
+    {
+      "id": "caveman-commit",
+      "name": "caveman-commit",
+      "domain": "workflow",
+      "category": "workflow",
+      "source": "juliusbrussee/caveman",
+      "author": {
+        "name": "juliusbrussee",
+        "handle": "juliusbrussee",
+        "repository": "juliusbrussee/caveman"
+      },
+      "installs": {
+        "rawInstalls": 253700,
+        "display": "253.7K"
+      },
+      "description": "Atomic git commits, diff hygiene, and git worktrees",
+      "tags": [
+        "git",
+        "commits",
+        "worktree"
+      ],
+      "mappedScenarioId": "git-worktrees",
+      "mappedScenarioName": "Isolated Worktree Feature Branching"
+    },
+    {
+      "id": "just-scrape",
+      "name": "just-scrape",
+      "domain": "integrations",
+      "category": "integrations",
+      "source": "ScrapeGraphAI/just-scrape",
+      "author": {
+        "name": "ScrapeGraphAI",
+        "handle": "ScrapeGraphAI",
+        "repository": "ScrapeGraphAI/just-scrape"
+      },
+      "installs": {
+        "rawInstalls": 244900,
+        "display": "244.9K"
+      },
+      "description": "LLM-driven web scraping and data extraction pipelines",
+      "tags": [
+        "scraping",
+        "extraction",
+        "web"
+      ],
+      "mappedScenarioId": "zero-alloc-pipeline",
+      "mappedScenarioName": "Zero-Allocation Streaming Data Pipeline and Heap Profiling"
+    },
+    {
+      "id": "pdf",
+      "name": "pdf",
+      "domain": "productivity",
+      "category": "productivity",
+      "source": "anthropics/skills",
+      "author": {
+        "name": "anthropics",
+        "handle": "anthropics",
+        "repository": "anthropics/skills"
+      },
+      "installs": {
+        "rawInstalls": 183000,
+        "display": "183.0K"
+      },
+      "description": "PDF text extraction, form parsing, and document layout",
+      "tags": [
+        "pdf",
+        "documents",
+        "extraction"
+      ],
+      "mappedScenarioId": "polyglot-sanitization",
+      "mappedScenarioName": "Cross-Boundary Polyglot Input Sanitization and Exploit Triage"
+    },
+    {
+      "id": "request-refactor-plan",
+      "name": "request-refactor-plan",
+      "domain": "refactoring",
+      "category": "refactoring",
+      "source": "mattpocock/skills",
+      "author": {
+        "name": "mattpocock",
+        "handle": "mattpocock",
+        "repository": "mattpocock/skills"
+      },
+      "installs": {
+        "rawInstalls": 157900,
+        "display": "157.9K"
+      },
+      "description": "Step-by-step refactoring plans with safety invariants",
+      "tags": [
+        "refactoring",
+        "planning",
+        "clean-code"
+      ],
+      "mappedScenarioId": "fullstack-refactor",
+      "mappedScenarioName": "Full-Stack React Modernization, Go Concurrent Backend, and Docker Isolation"
+    },
+    {
+      "id": "mcp-builder",
+      "name": "mcp-builder",
+      "domain": "integrations",
+      "category": "integrations",
+      "source": "anthropics/skills",
+      "author": {
+        "name": "anthropics",
+        "handle": "anthropics",
+        "repository": "anthropics/skills"
+      },
+      "installs": {
+        "rawInstalls": 92100,
+        "display": "92.1K"
+      },
+      "description": "Model Context Protocol (MCP) server and tool builders",
+      "tags": [
+        "mcp",
+        "tools",
+        "integrations"
+      ],
+      "mappedScenarioId": "fullstack-refactor",
+      "mappedScenarioName": "Full-Stack React Modernization, Go Concurrent Backend, and Docker Isolation"
+    },
+    {
+      "id": "convex-performance-audit",
+      "name": "convex-performance-audit",
+      "domain": "productivity",
+      "category": "database",
+      "source": "get-convex",
+      "author": {
+        "name": "get-convex",
+        "handle": "get-convex",
+        "repository": "get-convex"
+      },
+      "installs": {
+        "rawInstalls": 88200,
+        "display": "88.2K"
+      },
+      "description": "Convex reactive backend query and index performance audit",
+      "tags": [
+        "convex",
+        "performance",
+        "audit"
+      ],
+      "mappedScenarioId": "zero-alloc-pipeline",
+      "mappedScenarioName": "Zero-Allocation Streaming Data Pipeline and Heap Profiling"
+    },
+    {
+      "id": "api-design-principles",
+      "name": "api-design-principles",
+      "domain": "api-design",
+      "category": "backend",
+      "source": "wshobson/agents",
+      "author": {
+        "name": "wshobson",
+        "handle": "wshobson",
+        "repository": "wshobson/agents"
+      },
+      "installs": {
+        "rawInstalls": 24900,
+        "display": "24.9K"
+      },
+      "description": "REST, GraphQL, and RPC API contract design principles",
+      "tags": [
+        "api",
+        "design",
+        "rest"
+      ],
+      "mappedScenarioId": "fullstack-refactor",
+      "mappedScenarioName": "Full-Stack React Modernization, Go Concurrent Backend, and Docker Isolation"
+    }
+  ],
+  "skillMappings": {
+    "find-skills": {
+      "domain": "overall",
+      "category": "general",
+      "installs": 3100000,
+      "installsDisplay": "3.1M",
+      "scenarioId": "git-worktrees",
+      "scenarioName": "Isolated Worktree Feature Branching"
+    },
+    "grill-me": {
+      "domain": "overall",
+      "category": "general",
+      "installs": 936700,
+      "installsDisplay": "936.7K",
+      "scenarioId": "fullstack-refactor",
+      "scenarioName": "Full-Stack React Modernization, Go Concurrent Backend, and Docker Isolation"
+    },
+    "frontend-design": {
+      "domain": "overall",
+      "category": "frontend",
+      "installs": 806600,
+      "installsDisplay": "806.6K",
+      "scenarioId": "a11y-audit",
+      "scenarioName": "Comprehensive WCAG 2.1 AA Accessibility Audit & Remediation"
+    },
+    "grill-with-docs": {
+      "domain": "overall",
+      "category": "general",
+      "installs": 797700,
+      "installsDisplay": "797.7K",
+      "scenarioId": "fullstack-refactor",
+      "scenarioName": "Full-Stack React Modernization, Go Concurrent Backend, and Docker Isolation"
+    },
+    "improve-codebase-architecture": {
+      "domain": "overall",
+      "category": "workflow",
+      "installs": 769000,
+      "installsDisplay": "769.0K",
+      "scenarioId": "composition-patterns",
+      "scenarioName": "React Compound Component Refactoring"
+    },
+    "azure-diagnostics": {
+      "domain": "debugging",
+      "category": "debugging",
+      "installs": 465100,
+      "installsDisplay": "465.1K",
+      "scenarioId": "memory-leak",
+      "scenarioName": "Event Stream Memory Leak Diagnosis and Fix"
+    },
+    "azure-messaging": {
+      "domain": "debugging",
+      "category": "debugging",
+      "installs": 453600,
+      "installsDisplay": "453.6K",
+      "scenarioId": "memory-leak",
+      "scenarioName": "Event Stream Memory Leak Diagnosis and Fix"
+    },
+    "diagnosing-bugs": {
+      "domain": "debugging",
+      "category": "debugging",
+      "installs": 450300,
+      "installsDisplay": "450.3K",
+      "scenarioId": "memory-leak",
+      "scenarioName": "Event Stream Memory Leak Diagnosis and Fix"
+    },
+    "safe-debug": {
+      "domain": "debugging",
+      "category": "debugging",
+      "installs": 153900,
+      "installsDisplay": "153.9K",
+      "scenarioId": "memory-leak",
+      "scenarioName": "Event Stream Memory Leak Diagnosis and Fix"
+    },
+    "golang-troubleshooting": {
+      "domain": "debugging",
+      "category": "debugging",
+      "installs": 33500,
+      "installsDisplay": "33.5K",
+      "scenarioId": "golang-concurrency",
+      "scenarioName": "Bounded Concurrency Worker Pool with Graceful Shutdown"
+    },
+    "tdd": {
+      "domain": "testing",
+      "category": "testing",
+      "installs": 742800,
+      "installsDisplay": "742.8K",
+      "scenarioId": "fullstack-refactor",
+      "scenarioName": "Full-Stack React Modernization, Go Concurrent Backend, and Docker Isolation"
+    },
+    "qa": {
+      "domain": "testing",
+      "category": "testing",
+      "installs": 204200,
+      "installsDisplay": "204.2K",
+      "scenarioId": "a11y-audit",
+      "scenarioName": "Comprehensive WCAG 2.1 AA Accessibility Audit & Remediation"
+    },
+    "webapp-testing": {
+      "domain": "testing",
+      "category": "testing",
+      "installs": 138900,
+      "installsDisplay": "138.9K",
+      "scenarioId": "a11y-audit",
+      "scenarioName": "Comprehensive WCAG 2.1 AA Accessibility Audit & Remediation"
+    },
+    "playwright-cli": {
+      "domain": "testing",
+      "category": "testing",
+      "installs": 127900,
+      "installsDisplay": "127.9K",
+      "scenarioId": "a11y-audit",
+      "scenarioName": "Comprehensive WCAG 2.1 AA Accessibility Audit & Remediation"
+    },
+    "playwright-best-practices": {
+      "domain": "testing",
+      "category": "testing",
+      "installs": 63000,
+      "installsDisplay": "63K",
+      "scenarioId": "a11y-audit",
+      "scenarioName": "Comprehensive WCAG 2.1 AA Accessibility Audit & Remediation"
+    },
+    "azure-compliance": {
+      "domain": "security",
+      "category": "security",
+      "installs": 464000,
+      "installsDisplay": "464K",
+      "scenarioId": "polyglot-sanitization",
+      "scenarioName": "Cross-Boundary Polyglot Input Sanitization and Exploit Triage"
+    },
+    "firebase-security-rules-auditor": {
+      "domain": "security",
+      "category": "security",
+      "installs": 74800,
+      "installsDisplay": "74.8K",
+      "scenarioId": "polyglot-sanitization",
+      "scenarioName": "Cross-Boundary Polyglot Input Sanitization and Exploit Triage"
+    },
+    "skill-vetter": {
+      "domain": "security",
+      "category": "security",
+      "installs": 20500,
+      "installsDisplay": "20.5K",
+      "scenarioId": "polyglot-sanitization",
+      "scenarioName": "Cross-Boundary Polyglot Input Sanitization and Exploit Triage"
+    },
+    "security-review": {
+      "domain": "security",
+      "category": "security",
+      "installs": 11700,
+      "installsDisplay": "11.7K",
+      "scenarioId": "polyglot-sanitization",
+      "scenarioName": "Cross-Boundary Polyglot Input Sanitization and Exploit Triage"
+    },
+    "pci-compliance": {
+      "domain": "security",
+      "category": "security",
+      "installs": 8000,
+      "installsDisplay": "8K",
+      "scenarioId": "polyglot-sanitization",
+      "scenarioName": "Cross-Boundary Polyglot Input Sanitization and Exploit Triage"
+    },
+    "golang-documentation": {
+      "domain": "documentation",
+      "category": "documentation",
+      "installs": 33700,
+      "installsDisplay": "33.7K",
+      "scenarioId": "golang-concurrency",
+      "scenarioName": "Bounded Concurrency Worker Pool with Graceful Shutdown"
+    },
+    "documentation-writer": {
+      "domain": "documentation",
+      "category": "documentation",
+      "installs": 23400,
+      "installsDisplay": "23.4K",
+      "scenarioId": "fullstack-refactor",
+      "scenarioName": "Full-Stack React Modernization, Go Concurrent Backend, and Docker Isolation"
+    },
+    "create-readme": {
+      "domain": "documentation",
+      "category": "documentation",
+      "installs": 15900,
+      "installsDisplay": "15.9K",
+      "scenarioId": "fullstack-refactor",
+      "scenarioName": "Full-Stack React Modernization, Go Concurrent Backend, and Docker Isolation"
+    },
+    "documentation-and-adrs": {
+      "domain": "documentation",
+      "category": "documentation",
+      "installs": 14300,
+      "installsDisplay": "14.3K",
+      "scenarioId": "fullstack-refactor",
+      "scenarioName": "Full-Stack React Modernization, Go Concurrent Backend, and Docker Isolation"
+    },
+    "readme-blueprint-generator": {
+      "domain": "documentation",
+      "category": "documentation",
+      "installs": 9300,
+      "installsDisplay": "9.3K",
+      "scenarioId": "fullstack-refactor",
+      "scenarioName": "Full-Stack React Modernization, Go Concurrent Backend, and Docker Isolation"
+    },
+    "code-review": {
+      "domain": "code-review",
+      "category": "code-review",
+      "installs": 390300,
+      "installsDisplay": "390.3K",
+      "scenarioId": "fullstack-refactor",
+      "scenarioName": "Full-Stack React Modernization, Go Concurrent Backend, and Docker Isolation"
+    },
+    "code-review-excellence": {
+      "domain": "code-review",
+      "category": "code-review",
+      "installs": 25200,
+      "installsDisplay": "25.2K",
+      "scenarioId": "fullstack-refactor",
+      "scenarioName": "Full-Stack React Modernization, Go Concurrent Backend, and Docker Isolation"
+    },
+    "code-review-and-quality": {
+      "domain": "code-review",
+      "category": "code-review",
+      "installs": 17100,
+      "installsDisplay": "17.1K",
+      "scenarioId": "fullstack-refactor",
+      "scenarioName": "Full-Stack React Modernization, Go Concurrent Backend, and Docker Isolation"
+    },
+    "frontend-code-review": {
+      "domain": "code-review",
+      "category": "frontend",
+      "installs": 8900,
+      "installsDisplay": "8.9K",
+      "scenarioId": "a11y-audit",
+      "scenarioName": "Comprehensive WCAG 2.1 AA Accessibility Audit & Remediation"
+    },
+    "code-reviewer": {
+      "domain": "code-review",
+      "category": "code-review",
+      "installs": 8400,
+      "installsDisplay": "8.4K",
+      "scenarioId": "fullstack-refactor",
+      "scenarioName": "Full-Stack React Modernization, Go Concurrent Backend, and Docker Isolation"
+    },
+    "azure-deploy": {
+      "domain": "devops",
+      "category": "devops",
+      "installs": 465300,
+      "installsDisplay": "465.3K",
+      "scenarioId": "fullstack-refactor",
+      "scenarioName": "Full-Stack React Modernization, Go Concurrent Backend, and Docker Isolation"
+    },
+    "agent-browser": {
+      "domain": "browser-automation",
+      "category": "browser-automation",
+      "installs": 713800,
+      "installsDisplay": "713.8K",
+      "scenarioId": "a11y-audit",
+      "scenarioName": "Comprehensive WCAG 2.1 AA Accessibility Audit & Remediation"
+    },
+    "supabase-postgres-best-practices": {
+      "domain": "database",
+      "category": "database",
+      "installs": 363500,
+      "installsDisplay": "363.5K",
+      "scenarioId": "zero-alloc-pipeline",
+      "scenarioName": "Zero-Allocation Streaming Data Pipeline and Heap Profiling"
+    },
+    "caveman-commit": {
+      "domain": "workflow",
+      "category": "workflow",
+      "installs": 253700,
+      "installsDisplay": "253.7K",
+      "scenarioId": "git-worktrees",
+      "scenarioName": "Isolated Worktree Feature Branching"
+    },
+    "just-scrape": {
+      "domain": "integrations",
+      "category": "integrations",
+      "installs": 244900,
+      "installsDisplay": "244.9K",
+      "scenarioId": "zero-alloc-pipeline",
+      "scenarioName": "Zero-Allocation Streaming Data Pipeline and Heap Profiling"
+    },
+    "pdf": {
+      "domain": "productivity",
+      "category": "productivity",
+      "installs": 183000,
+      "installsDisplay": "183.0K",
+      "scenarioId": "polyglot-sanitization",
+      "scenarioName": "Cross-Boundary Polyglot Input Sanitization and Exploit Triage"
+    },
+    "request-refactor-plan": {
+      "domain": "refactoring",
+      "category": "refactoring",
+      "installs": 157900,
+      "installsDisplay": "157.9K",
+      "scenarioId": "fullstack-refactor",
+      "scenarioName": "Full-Stack React Modernization, Go Concurrent Backend, and Docker Isolation"
+    },
+    "mcp-builder": {
+      "domain": "integrations",
+      "category": "integrations",
+      "installs": 92100,
+      "installsDisplay": "92.1K",
+      "scenarioId": "fullstack-refactor",
+      "scenarioName": "Full-Stack React Modernization, Go Concurrent Backend, and Docker Isolation"
+    },
+    "convex-performance-audit": {
+      "domain": "productivity",
+      "category": "database",
+      "installs": 88200,
+      "installsDisplay": "88.2K",
+      "scenarioId": "zero-alloc-pipeline",
+      "scenarioName": "Zero-Allocation Streaming Data Pipeline and Heap Profiling"
+    },
+    "api-design-principles": {
+      "domain": "api-design",
+      "category": "backend",
+      "installs": 24900,
+      "installsDisplay": "24.9K",
+      "scenarioId": "fullstack-refactor",
+      "scenarioName": "Full-Stack React Modernization, Go Concurrent Backend, and Docker Isolation"
+    }
+  }
 }

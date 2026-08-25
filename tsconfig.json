@@ -22,6 +22,7 @@
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/*"]
@@ -34,7 +35,11 @@
     "src/providers/openai.ts",
     "src/providers/pricing.ts",
     "src/providers/factory.ts",
-    "src/providers/index.ts"
+    "src/providers/index.ts",
+    "testbed/frontend/src/types.ts",
+    "testbed/backend/src/types.ts",
+    "testbed/microservice/types.ts",
+    "testbed/package.json"
   ],
   "include": [
     "src/**/*"

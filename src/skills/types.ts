@@ -21,6 +21,24 @@ export type SkillCategory =
   | "general"
   | (string & {});
 
+export type CanonicalSkillDomain =
+  | "overall"
+  | "debugging"
+  | "testing"
+  | "security"
+  | "documentation"
+  | "code-review"
+  | "devops"
+  | "browser-automation"
+  | "database"
+  | "workflow"
+  | "integrations"
+  | "productivity"
+  | "refactoring"
+  | "api-design"
+  | "general"
+  | (string & {});
+
 export type SkillSourceType = "git" | "github-raw" | "local" | "tarball";
 
 export type RuleSeverity = "critical" | "warning" | "info" | "guideline";
@@ -84,6 +102,56 @@ export interface SkillManifest {
   readonly metadata?: Readonly<Record<string, unknown>>;
 }
 
+export interface SkillAuthor {
+  readonly name: string;
+  readonly handle: string;
+  readonly repository: string;
+  readonly url?: string;
+  readonly organization?: string;
+}
+
+export interface SkillInstallStats {
+  readonly rawInstalls: number;
+  readonly display: string;
+  readonly rank?: number;
+  readonly categoryRank?: number;
+  readonly sharePercentage?: number;
+  readonly telemetrySnapshotDate?: string;
+}
+
+export interface SkillCategoryMapping {
+  readonly domain: CanonicalSkillDomain;
+  readonly category: SkillCategory;
+  readonly keywords: ReadonlyArray<string>;
+  readonly description?: string;
+}
+
+export interface CatalogComposition {
+  readonly category: SkillCategory;
+  readonly count: number;
+  readonly sharePercentage: number;
+}
+
+export interface CanonicalSkill {
+  readonly id: string;
+  readonly name: string;
+  readonly domain: CanonicalSkillDomain;
+  readonly category: SkillCategory;
+  readonly source: string;
+  readonly sourceType: SkillSourceType;
+  readonly author: SkillAuthor;
+  readonly installs: SkillInstallStats;
+  readonly description: string;
+  readonly tags: ReadonlyArray<string>;
+  readonly rules?: ReadonlyArray<SkillRule>;
+  readonly guidelines?: ReadonlyArray<string>;
+  readonly tools?: ReadonlyArray<SkillTool>;
+  readonly version?: string;
+  readonly status: "available" | "downloaded" | "failed" | "valid" | "invalid";
+  readonly verified?: boolean;
+  readonly updatedAt?: string;
+}
+
 export interface CatalogEntry {
   readonly id: string;
   readonly name: string;
@@ -101,6 +169,27 @@ export interface CatalogEntry {
   readonly manifest?: SkillManifest;
   readonly status: "available" | "downloaded" | "failed" | "valid" | "invalid";
   readonly updatedAt?: string;
+  readonly domain?: CanonicalSkillDomain;
+  readonly author?: SkillAuthor;
+}
+
+export interface SkillCatalogStats {
+  readonly totalSkills: number;
+  readonly totalInstalls: number;
+  readonly domainCounts: Readonly<Record<string, number>>;
+  readonly categoryCounts: Readonly<Record<string, number>>;
+  readonly topSkills: ReadonlyArray<CanonicalSkill>;
+}
+
+export interface SkillLookupQuery {
+  readonly id?: string;
+  readonly name?: string;
+  readonly category?: SkillCategory;
+  readonly domain?: CanonicalSkillDomain;
+  readonly minInstalls?: number;
+  readonly author?: string;
+  readonly query?: string;
+  readonly tags?: ReadonlyArray<string>;
 }
 
 export interface SkillDownloadOptions {
@@ -157,10 +246,14 @@ export interface SkillParseOptions {
 
 export interface SkillFilterOptions {
   readonly category?: SkillCategory;
+  readonly domain?: CanonicalSkillDomain;
   readonly tags?: ReadonlyArray<string>;
   readonly minInstalls?: number;
+  readonly minRules?: number;
+  readonly hasTools?: boolean;
   readonly searchQuery?: string;
   readonly status?: string;
+  readonly author?: string;
 }
 
 export interface SkillPromptFormatOptions {

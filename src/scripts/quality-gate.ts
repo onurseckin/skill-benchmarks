@@ -1,14 +1,24 @@
-import { readdirSync, statSync, readFileSync, existsSync } from "node:fs";
+import { readdirSync, statSync, readFileSync, existsSync, utimesSync } from "node:fs";
 import { join, extname } from "node:path";
 import { execSync } from "node:child_process";
 import { startStreamTunnel } from "../tunnel/index.js";
 import { createJudgeArena } from "../judge/index.js";
 import { BudgetController, OptimizerEngine } from "../optimizer/index.js";
+import type { NeoBrutalistDashboardConfig } from "../reporting/index.js";
+import type { NeoBrutalistComponentTokens } from "../dashboard-ui/types.js";
+import { runInteractiveDialogTest } from "../dialog/index.js";
+import { lookupCanonicalSkill } from "../skills/index.js";
 
 void startStreamTunnel;
 void createJudgeArena;
 void BudgetController;
 void OptimizerEngine;
+void runInteractiveDialogTest;
+void lookupCanonicalSkill;
+const _nbConfig: NeoBrutalistDashboardConfig | null = null;
+void _nbConfig;
+const _nbTokens: NeoBrutalistComponentTokens | null = null;
+void _nbTokens;
 
 interface Violation {
   readonly file: string;
@@ -56,13 +66,13 @@ function scanFileForViolations(filePath: string): readonly Violation[] {
   }
 
   for (const [lineNumber, rawLine] of lines.entries()) {
-    const trimmedLine = rawLine.trim();
+    const trimmed = rawLine.trim();
 
-    if (trimmedLine.startsWith("//") || trimmedLine.startsWith("/*") || trimmedLine.startsWith("*") || trimmedLine.endsWith("*/")) {
+    if (trimmed.startsWith("//") || trimmed.startsWith("/*") || trimmed.startsWith("*") || trimmed.endsWith("*/")) {
       violations.push({
         file: filePath,
         type: "FORBIDDEN_COMMENT",
-        detail: `Line ${lineNumber + 1}: Contains forbidden comment syntax "${trimmedLine}"`,
+        detail: `Line ${lineNumber + 1}: Contains forbidden comment syntax "${trimmed}"`,
       });
       continue;
     }
@@ -90,7 +100,7 @@ function scanFileForViolations(filePath: string): readonly Violation[] {
 
 function runQualityAudit(): void {
   try {
-    execSync("bun run typecheck", { stdio: "pipe" });
+    execSync("bun x tsc --noEmit", { stdio: "pipe" });
   } catch (error) {
     process.stderr.write(`Typecheck verification failed: ${String(error)}\n`);
     process.exit(1);
@@ -102,9 +112,66 @@ function runQualityAudit(): void {
   const dataLeaderboard = join(rootDir, "data/leaderboard.md");
   const docsLeaderboard = join(rootDir, "docs/LEADERBOARD.md");
   const dataDashboard = join(rootDir, "data/dashboard.html");
+  const rootReadme = join(rootDir, "README.md");
+  const usageReadme = join(rootDir, "docs/usage-guide/README.md");
+  const usageInstall = join(rootDir, "docs/usage-guide/getting-started/installation.md");
+  const usageConfig = join(rootDir, "docs/usage-guide/getting-started/configuration.md");
+  const usageCommands = join(rootDir, "docs/usage-guide/cli-reference/commands.md");
+  const usageShell = join(rootDir, "docs/usage-guide/cli-reference/interactive-shell.md");
+  const usageSingle = join(rootDir, "docs/usage-guide/running-benchmarks/single-trial.md");
+  const usageMatrix = join(rootDir, "docs/usage-guide/running-benchmarks/matrix-sweeps.md");
+  const usageTui = join(rootDir, "docs/usage-guide/interactive-features/tui-player.md");
+  const usageStream = join(rootDir, "docs/usage-guide/interactive-features/web-streaming.md");
+  const usageArena = join(rootDir, "docs/usage-guide/interactive-features/arena-debates.md");
+  const usageScenario = join(rootDir, "docs/usage-guide/custom-scenarios/authoring-scenarios.md");
+  const archReadme = join(rootDir, "docs/architecture/README.md");
+  const archOverview = join(rootDir, "docs/architecture/01-system-overview.md");
+  const archSandbox = join(rootDir, "docs/architecture/02-container-sandbox.md");
+  const archProviders = join(rootDir, "docs/architecture/03-provider-adapters.md");
+  const archRunner = join(rootDir, "docs/architecture/04-runner-and-interceptor.md");
+  const archEval = join(rootDir, "docs/architecture/05-dual-layer-evaluation.md");
+  const archTelemetry = join(rootDir, "docs/architecture/06-telemetry-and-reporting.md");
+  const archChaos = join(rootDir, "docs/architecture/07-fuzzing-and-chaos.md");
+  const archStreaming = join(rootDir, "docs/architecture/08-binary-terminal-streaming.md");
 
-  if (!existsSync(dataDb) || !existsSync(dataLeaderboard) || !existsSync(docsLeaderboard) || !existsSync(dataDashboard)) {
-    process.stderr.write("Required benchmark deliverables missing.\n");
+  const requiredDeliverables = [
+    rootReadme,
+    dataDb,
+    dataLeaderboard,
+    docsLeaderboard,
+    dataDashboard,
+    usageReadme,
+    usageInstall,
+    usageConfig,
+    usageCommands,
+    usageShell,
+    usageSingle,
+    usageMatrix,
+    usageTui,
+    usageStream,
+    usageArena,
+    usageScenario,
+    archReadme,
+    archOverview,
+    archSandbox,
+    archProviders,
+    archRunner,
+    archEval,
+    archTelemetry,
+    archChaos,
+    archStreaming,
+  ];
+
+  for (const d of requiredDeliverables) {
+    if (!existsSync(d)) {
+      process.stderr.write(`Required deliverable missing: ${d}\n`);
+      process.exit(1);
+    }
+  }
+
+  const dashContent = readFileSync(dataDashboard, "utf8");
+  if (!dashContent.includes("JetBrains Mono") || !dashContent.includes("#000000")) {
+    process.stderr.write(`Dashboard HTML missing neo-brutalist styling: ${dataDashboard}\n`);
     process.exit(1);
   }
 

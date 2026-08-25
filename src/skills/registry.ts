@@ -2,94 +2,26 @@ import { readdir, readFile, writeFile, mkdir, stat } from "node:fs/promises";
 import { join, resolve, dirname } from "node:path";
 import type {
   SkillCategory,
+  CanonicalSkillDomain,
+  CanonicalSkill,
   SkillManifest,
   CatalogEntry,
   SkillFilterOptions,
   SkillPromptFormatOptions,
-  SkillRule,
   SkillSourceType,
 } from "./types";
+import { CANONICAL_SKILLS } from "./canonical";
+import { parseCatalogMarkdown, parseInstallsCount } from "./catalog-parser";
+import { formatSkillPrompt, formatSkillsForAgentContext } from "./formatter";
 import { parseSkillFile } from "./parser";
 import { validateSkillManifest } from "./validator";
 
+export { CANONICAL_SKILLS } from "./canonical";
+export { parseCatalogMarkdown, parseInstallsCount } from "./catalog-parser";
+export { formatSkillPrompt, formatSkillsForAgentContext } from "./formatter";
+
 function normalizeSkillId(id: string): string {
   return id.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "-");
-}
-
-export function parseInstallsCount(raw: string | number | undefined): number {
-  if (raw === undefined) return 0;
-  if (typeof raw === "number") return raw;
-  const c = raw.trim().toUpperCase().replace(/,/g, "");
-  if (c.endsWith("M")) {
-    const n = Number.parseFloat(c.slice(0, -1));
-    return Number.isNaN(n) ? 0 : Math.round(n * 1000000);
-  }
-  if (c.endsWith("K")) {
-    const n = Number.parseFloat(c.slice(0, -1));
-    return Number.isNaN(n) ? 0 : Math.round(n * 1000);
-  }
-  const num = Number.parseFloat(c);
-  return Number.isNaN(num) ? 0 : Math.round(num);
-}
-
-const CATEGORY_MAP: readonly [string, SkillCategory][] = [["debug", "debugging"], ["bug", "debugging"], ["test", "testing"], ["qa", "testing"], ["security", "security"], ["compliance", "security"], ["doc", "documentation"], ["review", "code-review"], ["refactor", "refactoring"], ["devops", "devops"], ["cloud", "devops"], ["browser", "browser-automation"], ["database", "database"], ["sql", "database"], ["postgres", "database"], ["ai", "ai-ml"], ["ml", "ai-ml"], ["front", "frontend"], ["ui", "frontend"], ["back", "backend"], ["api", "backend"], ["workflow", "workflow"], ["git", "workflow"], ["scrap", "integrations"], ["mcp", "integrations"], ["integration", "integrations"], ["productiv", "productivity"], ["pdf", "productivity"], ["perf", "productivity"]];
-
-function mapCategoryHeading(raw: string): SkillCategory {
-  const n = raw.trim().toLowerCase();
-  for (const [kw, cat] of CATEGORY_MAP) {
-    if (n.includes(kw)) return cat;
-  }
-  return "general";
-}
-
-export function parseCatalogMarkdown(content: string): readonly CatalogEntry[] {
-  const lines = content.split(/\r?\n/);
-  const entries: CatalogEntry[] = [];
-  let currentCat: SkillCategory = "general";
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (trimmed.startsWith("## ")) {
-      currentCat = mapCategoryHeading(trimmed.slice(3));
-      continue;
-    }
-    if (!trimmed.startsWith("|") || trimmed.includes("---|---") || trimmed.includes("# | Skill") || trimmed.includes("Category | Count")) continue;
-    const cols = trimmed.split("|").map((c) => c.trim()).filter((c) => c.length > 0);
-    if (cols.length < 3) continue;
-    let skillName = "";
-    let source = "";
-    let installsDisplay = "";
-    let rowCategory = currentCat;
-    const [c0, c1, c2, c3] = cols;
-    if (c0 !== undefined && c1 !== undefined && c2 !== undefined && c3 !== undefined) {
-      if (!Number.isNaN(Number(c0))) {
-        skillName = c1.replace(/`/g, "").trim();
-        source = c2.trim();
-        installsDisplay = c3.trim();
-      } else {
-        rowCategory = mapCategoryHeading(c0);
-        skillName = c1.replace(/`/g, "").trim();
-        source = c2.trim();
-        installsDisplay = c3.trim();
-      }
-    } else if (c0 !== undefined && c1 !== undefined && c2 !== undefined) {
-      skillName = c0.replace(/`/g, "").trim();
-      source = c1.trim();
-      installsDisplay = c2.trim();
-    }
-    if (skillName.length === 0 || source.length === 0) continue;
-    entries.push({
-      id: normalizeSkillId(skillName),
-      name: skillName,
-      category: rowCategory,
-      source,
-      sourceType: source.includes("/") ? "git" : "local",
-      installs: parseInstallsCount(installsDisplay),
-      installsDisplay: installsDisplay.length > 0 ? installsDisplay : undefined,
-      description: `Skill ${skillName} from ${source}`,
-      status: "available",
-    });
-  }
-  return entries;
 }
 
 async function collectSkillFilePaths(dirPath: string): Promise<string[]> {
@@ -104,7 +36,7 @@ async function collectSkillFilePaths(dirPath: string): Promise<string[]> {
     for (const e of entries) {
       if (e.name === ".git" || e.name === "node_modules" || e.name === ".benchmarks" || e.name === "dist") continue;
       const full = join(dirPath, e.name);
-      if (e.isDirectory()) result.push(...await collectSkillFilePaths(full));
+      if (e.isDirectory()) result.push(...(await collectSkillFilePaths(full)));
       else if (e.isFile() && (e.name === "SKILL.md" || e.name === "skill.md" || e.name.endsWith(".skill.md") || e.name === "skill.json")) result.push(full);
     }
   } catch {
@@ -132,26 +64,19 @@ function calculateSkillScore(m: SkillManifest, tokens: readonly string[]): numbe
   return score;
 }
 
-function formatRulesSection(prefix: string, title: string, rules: readonly SkillRule[], limit: number, withEx: boolean): string[] {
-  if (rules.length === 0 || limit <= 0) return [];
-  const lines: string[] = ["", `${prefix} ${title}`];
-  for (let i = 0; i < Math.min(rules.length, limit); i++) {
-    const r = rules[i];
-    if (r !== undefined) {
-      lines.push(`- **${r.title}**: ${r.description}`);
-      if (withEx && r.examples !== undefined && r.examples.length > 0) {
-        for (const ex of r.examples) lines.push(`  - Example: \`${ex}\``);
-      }
-    }
-  }
-  return lines;
-}
-
 export class SkillRegistry {
   private readonly skills: Map<string, SkillManifest> = new Map();
   private readonly catalog: Map<string, CatalogEntry> = new Map();
+  private readonly canonical: Map<string, CanonicalSkill> = new Map();
   private readonly categoryIndex: Map<string, Set<string>> = new Map();
+  private readonly domainIndex: Map<string, Set<string>> = new Map();
   private readonly tagIndex: Map<string, Set<string>> = new Map();
+
+  constructor(preloadCanonical = true) {
+    if (preloadCanonical) {
+      this.loadCanonicalSkills();
+    }
+  }
 
   private index(map: Map<string, Set<string>>, key: string, id: string): void {
     const k = key.toLowerCase();
@@ -159,6 +84,53 @@ export class SkillRegistry {
     const set = existing !== undefined ? existing : new Set<string>();
     set.add(id);
     map.set(k, set);
+  }
+
+  loadCanonicalSkills(): void {
+    for (const skill of CANONICAL_SKILLS) {
+      this.canonical.set(skill.id, skill);
+      this.index(this.domainIndex, skill.domain, skill.id);
+      this.index(this.categoryIndex, skill.category, skill.id);
+      for (const tag of skill.tags) this.index(this.tagIndex, tag, skill.id);
+      this.catalog.set(skill.id, {
+        id: skill.id,
+        name: skill.name,
+        category: skill.category,
+        domain: skill.domain,
+        source: skill.source,
+        sourceType: skill.sourceType,
+        author: skill.author,
+        installs: skill.installs.rawInstalls,
+        installsDisplay: skill.installs.display,
+        description: skill.description,
+        tags: skill.tags,
+        status: skill.status,
+      });
+    }
+  }
+
+  getCanonicalSkills(): readonly CanonicalSkill[] {
+    return Array.from(this.canonical.values());
+  }
+
+  getCanonicalSkill(id: string): CanonicalSkill | undefined {
+    const norm = normalizeSkillId(id);
+    return this.canonical.get(norm);
+  }
+
+  getSkillsByDomain(domain: CanonicalSkillDomain): readonly CanonicalSkill[] {
+    const idSet = this.domainIndex.get(domain.toLowerCase());
+    if (idSet === undefined) return [];
+    const result: CanonicalSkill[] = [];
+    for (const id of idSet) {
+      const s = this.canonical.get(id);
+      if (s !== undefined) result.push(s);
+    }
+    return result;
+  }
+
+  getCanonicalSkillMap(): ReadonlyMap<string, CanonicalSkill> {
+    return new Map(this.canonical);
   }
 
   registerSkill(manifest: SkillManifest, data?: Partial<CatalogEntry>): CatalogEntry {
@@ -171,7 +143,21 @@ export class SkillRegistry {
     const resolvedType: SkillSourceType = data?.sourceType !== undefined ? data.sourceType : existing?.sourceType !== undefined ? existing.sourceType : "local";
     const resolvedInstalls = data?.installs !== undefined ? data.installs : existing?.installs !== undefined ? existing.installs : 0;
     const resolvedDisplay = data?.installsDisplay !== undefined ? data.installsDisplay : existing?.installsDisplay;
-    const entry: CatalogEntry = { id, name: manifest.name, category: manifest.category, source: resolvedSource, sourceType: resolvedType, description: manifest.description, version: manifest.version, tags: manifest.tags, manifest, status: "valid", installs: resolvedInstalls, installsDisplay: resolvedDisplay, updatedAt: new Date().toISOString() };
+    const entry: CatalogEntry = {
+      id,
+      name: manifest.name,
+      category: manifest.category,
+      source: resolvedSource,
+      sourceType: resolvedType,
+      description: manifest.description,
+      version: manifest.version,
+      tags: manifest.tags,
+      manifest,
+      status: "valid",
+      installs: resolvedInstalls,
+      installsDisplay: resolvedDisplay,
+      updatedAt: new Date().toISOString(),
+    };
     this.catalog.set(id, entry);
     return entry;
   }
@@ -181,6 +167,7 @@ export class SkillRegistry {
     this.catalog.set(id, entry);
     if (entry.manifest !== undefined) this.skills.set(id, entry.manifest);
     this.index(this.categoryIndex, entry.category, id);
+    if (entry.domain !== undefined) this.index(this.domainIndex, entry.domain, id);
     if (entry.tags !== undefined) {
       for (const tag of entry.tags) this.index(this.tagIndex, tag, id);
     }
@@ -248,7 +235,7 @@ export class SkillRegistry {
   }
 
   hasSkill(id: string): boolean {
-    return this.getSkill(id) !== undefined;
+    return this.getSkill(id) !== undefined || this.canonical.has(normalizeSkillId(id));
   }
 
   getSkillsByCategory(category: SkillCategory): readonly SkillManifest[] {
@@ -300,6 +287,16 @@ export class SkillRegistry {
       .map((x) => x.m);
   }
 
+  searchCanonicalSkills(query: string): readonly CanonicalSkill[] {
+    const q = query.trim().toLowerCase();
+    if (q.length === 0) return this.getCanonicalSkills();
+    const tokens = q.split(/\s+/).filter((t) => t.length > 0);
+    return this.getCanonicalSkills().filter((skill) => {
+      const target = `${skill.id} ${skill.name} ${skill.domain} ${skill.category} ${skill.description} ${skill.tags.join(" ")}`.toLowerCase();
+      return tokens.every((tok) => target.includes(tok));
+    });
+  }
+
   formatSkillPrompt(manifestOrId: SkillManifest | string, options?: SkillPromptFormatOptions): string {
     return formatSkillPrompt(manifestOrId, options, this);
   }
@@ -311,7 +308,9 @@ export class SkillRegistry {
   clear(): void {
     this.skills.clear();
     this.catalog.clear();
+    this.canonical.clear();
     this.categoryIndex.clear();
+    this.domainIndex.clear();
     this.tagIndex.clear();
   }
 
@@ -321,6 +320,10 @@ export class SkillRegistry {
 }
 
 export const defaultSkillRegistry = new SkillRegistry();
+export const getCanonicalSkill = (id: string): CanonicalSkill | undefined => defaultSkillRegistry.getCanonicalSkill(id);
+export const getCanonicalSkills = (): readonly CanonicalSkill[] => defaultSkillRegistry.getCanonicalSkills();
+export const getSkillsByDomain = (d: CanonicalSkillDomain): readonly CanonicalSkill[] => defaultSkillRegistry.getSkillsByDomain(d);
+export const searchCanonicalSkills = (q: string): readonly CanonicalSkill[] => defaultSkillRegistry.searchCanonicalSkills(q);
 export const registerSkill = (m: SkillManifest, d?: Partial<CatalogEntry>): CatalogEntry => defaultSkillRegistry.registerSkill(m, d);
 export const registerCatalogEntry = (e: CatalogEntry): void => defaultSkillRegistry.registerCatalogEntry(e);
 export const loadSkillsFromDirectory = (p: string): Promise<readonly SkillManifest[]> => defaultSkillRegistry.loadFromDirectory(p);
@@ -332,67 +335,3 @@ export const hasSkill = (id: string): boolean => defaultSkillRegistry.hasSkill(i
 export const listSkills = (o?: SkillFilterOptions): readonly SkillManifest[] => defaultSkillRegistry.listSkills(o);
 export const searchSkills = (q: string, o?: SkillFilterOptions): readonly SkillManifest[] => defaultSkillRegistry.searchSkills(q, o);
 export const getSkillsByCategory = (c: SkillCategory): readonly SkillManifest[] => defaultSkillRegistry.getSkillsByCategory(c);
-
-export function formatSkillPrompt(
-  manifestOrId: SkillManifest | string,
-  options?: SkillPromptFormatOptions,
-  registry?: SkillRegistry
-): string {
-  const m = typeof manifestOrId === "string" ? (registry !== undefined ? registry.getSkill(manifestOrId) : defaultSkillRegistry.getSkill(manifestOrId)) : manifestOrId;
-  if (m === undefined) return `### Skill: ${manifestOrId}\n\nSkill definition not found in registry.\n`;
-
-  const prefix = options !== undefined && options.headerPrefix !== undefined ? options.headerPrefix : "###";
-  const subPrefix = `${prefix}#`;
-  const withRules = options === undefined || options.includeRules === undefined ? true : options.includeRules;
-  const withTools = options === undefined || options.includeTools === undefined ? true : options.includeTools;
-  const withGuides = options === undefined || options.includeGuidelines === undefined ? true : options.includeGuidelines;
-  const withEx = options === undefined || options.includeExamples === undefined ? true : options.includeExamples;
-  const maxR = options !== undefined && options.maxRules !== undefined ? options.maxRules : Number.MAX_SAFE_INTEGER;
-
-  const lines: string[] = [`${prefix} Skill: ${m.name} (v${m.version})`];
-  if (m.description.length > 0) lines.push(m.description);
-
-  const meta: string[] = [];
-  if (m.category.length > 0) meta.push(`Category: ${m.category}`);
-  if (m.tags.length > 0) meta.push(`Tags: ${m.tags.join(", ")}`);
-  if (meta.length > 0) lines.push(meta.join(" | "));
-
-  if (withRules && m.rules.length > 0) {
-    const critical = m.rules.filter((r) => r.severity === "critical");
-    const nonCritical = m.rules.filter((r) => r.severity !== "critical");
-    lines.push(...formatRulesSection(subPrefix, "Critical Invariants (Must Follow):", critical, maxR, withEx));
-    const rem = Math.max(0, maxR - critical.length);
-    lines.push(...formatRulesSection(subPrefix, "Rules & Guidelines:", nonCritical, rem, withEx));
-  }
-
-  if (withGuides && m.guidelines.length > 0 && m.rules.length === 0) {
-    lines.push("", `${subPrefix} Guidelines:`, ...m.guidelines.map((g) => `- ${g}`));
-  }
-
-  if (withTools && m.tools.length > 0) {
-    lines.push("", `${subPrefix} Available Tools:`);
-    for (const tool of m.tools) {
-      lines.push(`- \`${tool.name}\`: ${tool.description}`);
-      if (tool.command !== undefined && tool.command.length > 0) lines.push(`  - Command: \`${tool.command}\``);
-    }
-  }
-
-  if (m.promptTemplate !== undefined && m.promptTemplate.length > 0) {
-    lines.push("", `${subPrefix} Instructions:`, m.promptTemplate);
-  }
-
-  return lines.join("\n");
-}
-
-export function formatSkillsForAgentContext(
-  manifestsOrIds: ReadonlyArray<SkillManifest | string>,
-  options?: SkillPromptFormatOptions,
-  registry?: SkillRegistry
-): string {
-  if (manifestsOrIds.length === 0) return "";
-  const headerPrefix = options !== undefined && options.headerPrefix !== undefined ? options.headerPrefix : "##";
-  const nestedOptions: SkillPromptFormatOptions = { ...options, headerPrefix: `${headerPrefix}#` };
-  const formatted = manifestsOrIds.map((item) => formatSkillPrompt(item, nestedOptions, registry)).filter((s) => s.length > 0);
-  if (formatted.length === 0) return "";
-  return [`${headerPrefix} Active Agent Skills & Knowledge`, "The following skills and guidelines are active in this workspace:", "", formatted.join("\n\n---\n\n")].join("\n");
-}

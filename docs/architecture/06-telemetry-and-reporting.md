@@ -1,0 +1,100 @@
+# Chapter 06: Telemetry Storage & Reporting Pipeline
+
+[← Previous: 05. Dual-Layer Evaluation](05-dual-layer-evaluation.md) | [Architecture Index](README.md) | [Next: 07. Scenario Fuzzing & Chaos →](07-fuzzing-and-chaos.md)
+
+---
+
+## 1. SQLite Telemetry Storage Engine
+
+All benchmark execution runs, scenario steps, kernel telemetry metrics, judge outcomes, and Elo ratings are persisted into a high-performance SQLite database ([`src/reporting/db.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/reporting/db.ts)) configured in **Write-Ahead Logging (WAL)** mode.
+
+### 1.1 Relational Entity-Relationship Diagram
+
+```
++─────────────────────────+            +─────────────────────────+
+|     benchmark_runs      | 1        * |       benchmarks        |
+|─────────────────────────|───────────►|─────────────────────────|
+| id (TEXT PRIMARY KEY)   |            | id (TEXT PRIMARY KEY)   |
+| run_timestamp (INTEGER) |            | run_id (TEXT FK)        |
+| total_scenarios (INT)   |            | scenario_id (TEXT)      |
+| total_cost (REAL)       |            | model (TEXT)            |
+| overall_pass_rate (REAL)|            | status (TEXT)           |
++─────────────────────────+            | pass (INTEGER)          |
+                                       | duration_ms (INTEGER)   |
+                                       | cost (REAL)             |
+                                       +───────────┬─────────────+
+                                                   │ 1
+                                                   │
+                                                   │ *
+                                       +───────────▼─────────────+
+                                       |     benchmark_steps     |
+                                       |─────────────────────────|
+                                       | id (TEXT PRIMARY KEY)   |
+                                       | benchmark_id (TEXT FK)  |
+                                       | step_number (INTEGER)   |
+                                       | turn_type (TEXT)        |
+                                       | tool_name (TEXT)        |
+                                       | prompt_tokens (INT)     |
+                                       | completion_tokens (INT) |
+                                       | step_cost (REAL)        |
+                                       | duration_ms (INTEGER)   |
+                                       | cpu_usec (INTEGER)      |
+                                       | memory_bytes (INTEGER)  |
+                                       +─────────────────────────+
+```
+
+### 1.2 Performance & Concurrency Invariants
+
+- **`PRAGMA journal_mode = WAL;`**: Allows concurrent readers while asynchronous telemetry transactions commit.
+- **`PRAGMA synchronous = NORMAL;`**: Balances durability with sub-millisecond step append latency.
+- **`PRAGMA foreign_keys = ON;`**: Enforces strict cascading deletions and relational integrity.
+- **Index Optimization**: B-Tree indices on `(run_id, model)`, `(scenario_id)`, and `(benchmark_id, step_number)`.
+
+---
+
+## 2. Multi-Objective Pareto Efficiency Frontiers
+
+Evaluating LLM models requires balancing competing objectives: **Accuracy (Elo Rating)** vs. **Inference Cost ($/task)** vs. **Latency (ms/task)**. The Aggregator engine ([`src/reporting/aggregator.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/reporting/aggregator.ts)) computes the **Pareto Optimal Frontier**.
+
+### 2.1 Pareto Dominance Formalism
+
+A model vector $\mathbf{u} = (\text{Elo}_u, \text{Cost}_u, \text{Latency}_u)$ **dominates** another model vector $\mathbf{v}$ (denoted $\mathbf{u} \succ \mathbf{v}$) if and only if:
+
+$$\forall k \in \{\text{Elo}, \text{Cost}, \text{Latency}\},\; u_k \text{ is at least as good as } v_k \quad \land \quad \exists k \text{ s.t. } u_k \text{ is strictly better than } v_k$$
+
+The **Pareto Frontier** $\mathcal{P}$ is the set of all non-dominated models:
+$$\mathcal{P} = \{ \mathbf{u} \in \mathcal{M} \mid \nexists \mathbf{v} \in \mathcal{M} \text{ such that } \mathbf{v} \succ \mathbf{u} \}$$
+
+### 2.2 Pareto Efficiency Trade-Off Visualization
+
+```
+   ELO RATING (Higher is Better)
+     ▲
+1400 ┼                                   [Claude 3.5 Sonnet] ★ Pareto Front
+     │                                     (High Elo, Moderate Cost)
+1350 ┼                      [GPT-4o] ★
+     │
+1300 ┼
+     │
+1250 ┼                                             [Claude 3 Opus] (Dominated)
+     │
+1200 ┼           [Gemini 1.5 Flash] ★
+     │            (Ultra Low Cost, Moderate Elo)
+1150 ┼─────────────────────────────────────────────────────────────►
+     0.00        0.05        0.10        0.15        0.20        0.25
+                         INFERENCE COST ($ / Scenario)
+```
+
+---
+
+## 3. Reporting Deliverables
+
+The telemetry pipeline renders three primary deliverables:
+
+1. **Relational Database (`data/benchmark-results.db`)**: Direct SQL query access for offline analysis.
+2. **Markdown Leaderboard ([`docs/LEADERBOARD.md`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/docs/LEADERBOARD.md))**: CI/CD-friendly markdown tables summarizing pass rates, Elo scores, token costs, and rankings generated by [`src/reporting/markdown-leaderboard.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/reporting/markdown-leaderboard.ts).
+3. **Interactive Dashboard (`data/dashboard.html`)**: Self-contained Neo-Brutalist HTML/CSS/JS web dashboard generated by [`src/reporting/html-dashboard.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/reporting/html-dashboard.ts) featuring live search, radar charts, and step event transcripts.
+
+---
+
+[← Previous: 05. Dual-Layer Evaluation](05-dual-layer-evaluation.md) | [Architecture Index](README.md) | [Next: 07. Scenario Fuzzing & Chaos →](07-fuzzing-and-chaos.md)

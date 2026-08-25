@@ -8,7 +8,7 @@
   },
   "scripts": {
     "test": "bun test",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && bun src/scripts/quality-gate.ts",
     "gc:containers": "bun run src/infrastructure/container/gc.ts",
     "sync:skills": "bun run src/scripts/sync-skills.ts",
     "cli": "bun run bin/skill-benchmarks"

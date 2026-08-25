@@ -264,3 +264,10 @@ export interface HistoricalTrendPoint {
   readonly eloRating: number;
   readonly sampleCount: number;
 }
+
+export interface NeoBrutalistDashboardConfig {
+  readonly contrastRatio: number;
+  readonly monochrome: true;
+}
+
+export const DASHBOARD_THEME_STYLE = "monochrome-neobrutalist";
