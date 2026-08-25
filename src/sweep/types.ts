@@ -16,6 +16,9 @@ import type {
 import type {
   BenchmarkRuntimeConfig,
 } from "../shared/benchmark-runtime-config.js";
+import type {
+  ExecutionMode,
+} from "../shared/execution-mode.js";
 
 export type SweepExecutionStatus =
   | "pending"
@@ -91,6 +94,8 @@ export interface MatrixCellIdentifier {
 
 export interface MatrixCellDescriptor extends MatrixCellIdentifier {
   readonly runId: string;
+  readonly executionMode: ExecutionMode;
+  readonly outputRoot: string;
   readonly modelEntry: ModelMatrixEntry;
   readonly limits: ExecutionLimits;
   readonly temperature?: number;

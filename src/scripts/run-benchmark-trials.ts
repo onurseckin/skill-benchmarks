@@ -97,12 +97,14 @@ function generateRunData(
 
   const record: RunRecord = {
     runId, scenarioId: scenario.id, category: scenario.category, skillId: scenario.targetSkill,
-    modelId: model.modelId, providerId: model.providerId, status, compositeScore, passedBenchmark,
+    modelId: model.modelId, providerId: model.providerId, executionMode: "fake", simulated: true,
+    status, compositeScore, passedBenchmark,
     wallClockMs, totalTokens: tokenUsage.totalTokens, cacheHitRatio, totalCostUSD, totalTurns,
     errorCount, startedAt, completedAt,
     manifest: {
       runId, scenarioId: scenario.id, scenarioVersion: "1.0.0", category: scenario.category,
       skillId: scenario.targetSkill, modelId: model.modelId, providerId: model.providerId,
+      executionMode: "fake", simulated: true,
       modelParameters: { temperature: 0.2, maxTokens: 4096 },
       environment: { os: "darwin", arch: "arm64", bunVersion: "1.3.14", hostCommitSha: "dd034eff82a5fcec46375f6873e4638416d000d9" },
       startedAt, completedAt, status,

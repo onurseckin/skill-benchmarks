@@ -10,6 +10,7 @@ import type {
   RunStatus,
   TelemetryEventRecord,
 } from "./types.js";
+import type { ExecutionMode } from "../shared/execution-mode.js";
 
 interface RunRow {
   readonly run_id: string;
@@ -19,10 +20,13 @@ interface RunRow {
   readonly skill_version: string | null;
   readonly model_id: string;
   readonly provider_id: string;
+  readonly execution_mode: ExecutionMode;
+  readonly simulated: number;
   readonly thinking_level: string | null;
   readonly thinking_budget_tokens: number | null;
   readonly reasoning_tokens: number | null;
   readonly status: string;
+  readonly termination_reason: string | null;
   readonly composite_score: number;
   readonly passed_benchmark: number;
   readonly wall_clock_ms: number;
@@ -77,10 +81,13 @@ function mapRowToRunRecord(row: RunRow): RunRecord {
     ...(row.skill_version !== null ? { skillVersion: row.skill_version } : {}),
     modelId: row.model_id,
     providerId: row.provider_id,
+    executionMode: row.execution_mode,
+    simulated: row.simulated === 1,
     ...(row.thinking_level !== null ? { thinkingLevel: row.thinking_level as RunRecord["thinkingLevel"] } : {}),
     ...(row.thinking_budget_tokens !== null ? { thinkingBudgetTokens: row.thinking_budget_tokens } : {}),
     ...(row.reasoning_tokens !== null ? { reasoningTokens: row.reasoning_tokens } : {}),
     status: row.status as RunStatus,
+    ...(row.termination_reason !== null ? { terminationReason: row.termination_reason } : {}),
     compositeScore: row.composite_score,
     passedBenchmark: row.passed_benchmark === 1,
     wallClockMs: row.wall_clock_ms,
@@ -122,8 +129,9 @@ export class TelemetryDatabase {
       CREATE TABLE IF NOT EXISTS runs (
         run_id TEXT PRIMARY KEY, scenario_id TEXT NOT NULL, category TEXT NOT NULL,
         skill_id TEXT NOT NULL, skill_version TEXT, model_id TEXT NOT NULL,
-        provider_id TEXT NOT NULL, thinking_level TEXT, thinking_budget_tokens INTEGER, reasoning_tokens INTEGER,
-        status TEXT NOT NULL, composite_score REAL NOT NULL,
+        provider_id TEXT NOT NULL, execution_mode TEXT NOT NULL DEFAULT 'fake', simulated INTEGER NOT NULL DEFAULT 1,
+        thinking_level TEXT, thinking_budget_tokens INTEGER, reasoning_tokens INTEGER,
+        status TEXT NOT NULL, termination_reason TEXT, composite_score REAL NOT NULL,
         passed_benchmark INTEGER NOT NULL, wall_clock_ms REAL NOT NULL,
         total_tokens INTEGER NOT NULL, cache_hit_ratio REAL NOT NULL,
         total_cost_usd REAL NOT NULL, total_turns INTEGER NOT NULL,
@@ -158,6 +166,9 @@ export class TelemetryDatabase {
     try { this.db.exec("ALTER TABLE runs ADD COLUMN thinking_level TEXT;"); } catch {}
     try { this.db.exec("ALTER TABLE runs ADD COLUMN thinking_budget_tokens INTEGER;"); } catch {}
     try { this.db.exec("ALTER TABLE runs ADD COLUMN reasoning_tokens INTEGER;"); } catch {}
+    try { this.db.exec("ALTER TABLE runs ADD COLUMN execution_mode TEXT NOT NULL DEFAULT 'fake';"); } catch {}
+    try { this.db.exec("ALTER TABLE runs ADD COLUMN simulated INTEGER NOT NULL DEFAULT 1;"); } catch {}
+    try { this.db.exec("ALTER TABLE runs ADD COLUMN termination_reason TEXT;"); } catch {}
   }
 
   public saveRunRecord(record: RunRecord): void {
@@ -169,20 +180,22 @@ export class TelemetryDatabase {
 
     const stmt = this.db.prepare(`
       INSERT INTO runs (
-        run_id, scenario_id, category, skill_id, skill_version, model_id, provider_id,
+        run_id, scenario_id, category, skill_id, skill_version, model_id, provider_id, execution_mode, simulated,
         thinking_level, thinking_budget_tokens, reasoning_tokens,
-        status, composite_score, passed_benchmark, wall_clock_ms, total_tokens, cache_hit_ratio,
+        status, termination_reason, composite_score, passed_benchmark, wall_clock_ms, total_tokens, cache_hit_ratio,
         total_cost_usd, total_turns, error_count, started_at, completed_at,
         manifest_json, metrics_json, evaluation_json, commit_sha
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(run_id) DO UPDATE SET
         scenario_id = excluded.scenario_id, category = excluded.category,
         skill_id = excluded.skill_id, skill_version = excluded.skill_version,
         model_id = excluded.model_id, provider_id = excluded.provider_id,
+        execution_mode = excluded.execution_mode, simulated = excluded.simulated,
         thinking_level = excluded.thinking_level,
         thinking_budget_tokens = excluded.thinking_budget_tokens,
         reasoning_tokens = excluded.reasoning_tokens,
-        status = excluded.status, composite_score = excluded.composite_score,
+        status = excluded.status, termination_reason = excluded.termination_reason,
+        composite_score = excluded.composite_score,
         passed_benchmark = excluded.passed_benchmark, wall_clock_ms = excluded.wall_clock_ms,
         total_tokens = excluded.total_tokens, cache_hit_ratio = excluded.cache_hit_ratio,
         total_cost_usd = excluded.total_cost_usd, total_turns = excluded.total_turns,
@@ -194,11 +207,11 @@ export class TelemetryDatabase {
 
     stmt.run(
       record.runId, record.scenarioId, record.category, record.skillId, skillVersion,
-      record.modelId, record.providerId,
+      record.modelId, record.providerId, record.executionMode, record.simulated ? 1 : 0,
       record.thinkingLevel ?? record.manifest?.modelParameters?.thinkingLevel ?? null,
       record.thinkingBudgetTokens ?? record.manifest?.modelParameters?.thinkingBudgetTokens ?? null,
       record.reasoningTokens ?? null,
-      record.status, record.compositeScore,
+      record.status, record.terminationReason ?? null, record.compositeScore,
       record.passedBenchmark ? 1 : 0, record.wallClockMs, record.totalTokens,
       record.cacheHitRatio, record.totalCostUSD, record.totalTurns, record.errorCount,
       record.startedAt, record.completedAt, manifestJson, metricsJson, evaluationJson, commitSha

@@ -1,5 +1,5 @@
 import { writeFileSync, readFileSync, existsSync } from "node:fs";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 import type {
   CliParsedArgs, CliCommandResult, BenchmarkRunOptions,
   TournamentOptions, ReportOptions, SyncOptions, ListOptions,
@@ -56,7 +56,7 @@ export async function runBenchmarkCommand(args: CliParsedArgs): Promise<CliComma
   }
   const skillIds = options.skillIds.length > 0 ? options.skillIds : ["using-git-worktrees"];
   const modelIds = options.modelIds.length > 0 ? options.modelIds : ["claude-3-7-sonnet"];
-  const dbPath = options.dbPath !== undefined ? options.dbPath : resolve(process.cwd(), "benchmarks.db");
+  const dbPath = options.dbPath ?? join(runtimeConfig.outputRoot, "db", "benchmarks.sqlite");
 
   console.log(formatSectionHeader(`Executing Skill Benchmark Matrix: ${scenarioIds.length} scenario(s) x ${skillIds.length} skill(s) x ${modelIds.length} model(s)`));
 
@@ -161,6 +161,7 @@ export async function runReportCommand(args: CliParsedArgs): Promise<CliCommandR
 
   console.log(formatSectionHeader(`Generating Benchmark Report [format: ${format}] from ${dbPath}`));
   const db = new TelemetryDatabase(dbPath);
+  try {
   const runs = db.queryRuns();
   const aggregates = aggregateAllSkills(runs, options.controlSkillId);
   const leaderboard = buildLeaderboardEntries(aggregates);
@@ -211,6 +212,9 @@ export async function runReportCommand(args: CliParsedArgs): Promise<CliCommandR
   }
 
   return { success: true, exitCode: 0, durationMs: Date.now() - startTime };
+  } finally {
+    db.close();
+  }
 }
 
 export async function runSyncCommand(args: CliParsedArgs): Promise<CliCommandResult> {

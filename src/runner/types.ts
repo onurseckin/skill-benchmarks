@@ -138,12 +138,16 @@ export interface StandardTool<
 }
 
 export interface AgentToolContext {
-  readonly workspace?: SandboxedWorkspace;
+  readonly workspace?: WorkspaceRoot;
   readonly container?: IContainerInstance;
   readonly signal?: AbortSignal;
   readonly runId: string;
   readonly scenarioId: string;
   readonly logger?: (message: string) => void;
+}
+
+export interface WorkspaceRoot {
+  readonly rootPath: string;
 }
 
 export interface ToolExecutionRecord {
@@ -233,7 +237,7 @@ export interface ScenarioRunConfig {
   readonly provider: LLMProviderAdapter;
   readonly prompt: string;
   readonly systemPrompt?: string;
-  readonly workspace?: SandboxedWorkspace;
+  readonly workspace?: WorkspaceRoot;
   readonly container?: IContainerInstance;
   readonly limits: ExecutionLimits;
   readonly temperature?: number;

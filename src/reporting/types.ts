@@ -1,3 +1,5 @@
+import type { ExecutionMode } from "../shared/execution-mode.js";
+
 export type RunStatus = "completed" | "failed" | "timed_out" | "aborted";
 
 export type ExportFormat = "json" | "markdown" | "html" | "csv";
@@ -27,11 +29,14 @@ export interface RunManifest {
   readonly skillVersion?: string;
   readonly modelId: string;
   readonly providerId: string;
+  readonly executionMode: ExecutionMode;
+  readonly simulated: boolean;
   readonly modelParameters: ModelParameters;
   readonly environment: HostEnvironment;
   readonly startedAt: string;
   readonly completedAt: string;
   readonly status: RunStatus;
+  readonly terminationReason?: string;
 }
 
 export interface TimingBreakdown {
@@ -150,10 +155,13 @@ export interface RunRecord {
   readonly skillVersion?: string;
   readonly modelId: string;
   readonly providerId: string;
+  readonly executionMode: ExecutionMode;
+  readonly simulated: boolean;
   readonly thinkingLevel?: "none" | "low" | "medium" | "high" | "max";
   readonly thinkingBudgetTokens?: number;
   readonly reasoningTokens?: number;
   readonly status: RunStatus;
+  readonly terminationReason?: string;
   readonly compositeScore: number;
   readonly passedBenchmark: boolean;
   readonly wallClockMs: number;
