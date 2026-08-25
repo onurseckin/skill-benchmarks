@@ -3,6 +3,7 @@ import { isDeepStrictEqual } from "node:util";
 import { createRunArtifactLayout } from "../infrastructure/workspace/run-artifact-layout.js";
 import type { TelemetryDatabase } from "../reporting/db.js";
 import type { RunRecord } from "../reporting/types.js";
+import { isEligibleRunRecord } from "../shared/benchmark-authority.js";
 import type { ScenarioResult } from "../runner/types.js";
 import type { CheckpointState, MatrixCellDescriptor, MatrixCellResult } from "./types.js";
 import { countToolErrors, isRunEvidenceTemporaryName, removeStaleRunEvidenceTemporaryFiles } from "./run-evidence.js";
@@ -107,6 +108,9 @@ export function validateSweepOutcomeEvidence(
       || entry.simulated !== (cell.executionMode === "fake")
       || (database !== undefined && entry.status !== database.status)
       || (database !== undefined && entry.terminationReason !== database.terminationReason)
+      || entry.benchmarkCohort !== (database?.benchmarkCohort ?? checkpointResult?.benchmarkCohort ?? "operational")
+      || entry.eligibilityStatus !== (database?.eligibility.status ?? checkpointResult?.eligibilityStatus ?? "ineligible")
+      || entry.evaluationStatus !== (database?.evaluation.status ?? checkpointResult?.evaluationStatus ?? "not_requested")
       || entry.evidenceDurable !== (database !== undefined)
       || entry.publicStatus !== expectedPublicStatus
       || (database !== undefined && parseCanonicalTimestamp(database.startedAt) < sweepStartedMs)
@@ -168,7 +172,10 @@ function assertCellResult(
     || checkpointResult.executionCompleted !== expectedCompleted
     || checkpointResult.retryable
     || (expectedCompleted ? checkpointResult.error !== undefined : typeof checkpointResult.error !== "string")
-    || checkpointResult.passedBenchmark !== databaseRecord.passedBenchmark
+    || checkpointResult.benchmarkCohort !== databaseRecord.benchmarkCohort
+    || checkpointResult.eligibilityStatus !== databaseRecord.eligibility.status
+    || checkpointResult.evaluationStatus !== databaseRecord.evaluation.status
+    || checkpointResult.passedBenchmark !== (isEligibleRunRecord(databaseRecord) ? databaseRecord.passedBenchmark : undefined)
     || checkpointResult.attemptCount !== databaseRecord.attemptCount
     || checkpointResult.startedAt !== databaseRecord.startedAt
     || checkpointResult.completedAt !== databaseRecord.completedAt
@@ -204,8 +211,8 @@ function assertScenarioResult(
     || scenario.totalTokens.totalTokens !== database.totalTokens
     || !isDeepStrictEqual(scenario.totalTokens, result.usageBreakdown)
     || database.cacheHitRatio !== (scenario.totalTokens.totalTokens > 0 ? scenario.totalTokens.cacheReadInputTokens / scenario.totalTokens.totalTokens : 0)
-    || scenario.totalCostUSD !== result.totalCostUSD
-    || scenario.totalCostUSD !== database.totalCostUSD
+    || scenario.totalCostUSD !== readOperationalCost(result)
+    || scenario.totalCostUSD !== database.operationalCost.amountUSD
     || scenario.turns !== result.totalTurns
     || scenario.turns !== database.totalTurns
     || toolErrorCount !== result.toolErrorCount
@@ -244,7 +251,12 @@ function assertTerminalFields(
     || result.status !== database.status
     || result.terminationReason !== database.terminationReason
     || result.attemptCount !== database.attemptCount
-    || result.passedBenchmark !== database.passedBenchmark
+    || result.benchmarkCohort !== database.benchmarkCohort
+    || !isDeepStrictEqual(result.eligibility, database.eligibility)
+    || !isDeepStrictEqual(result.evidence, database.evidence)
+    || !isDeepStrictEqual(result.evaluation, database.evaluation)
+    || !isDeepStrictEqual(result.operationalCost, database.operationalCost)
+    || !claimsMatchAuthority(result, database)
     || checkpointResult.runRecord?.status !== result.status
     || checkpointResult.runRecord?.terminationReason !== result.terminationReason
   ) failReconciliation();
@@ -257,7 +269,7 @@ function assertArtifactIdentity(
   artifactKind: unknown
 ): void {
   if (
-    record.schemaVersion !== "1.0.0"
+    record.schemaVersion !== (artifactKind === "manifest" ? "1.0.0" : "2.0.0")
     || record.artifactKind !== artifactKind
     || record.sweepId !== cell.sweepId
     || record.planFingerprint !== database.planFingerprint
@@ -271,6 +283,7 @@ function assertArtifactIdentity(
     || record.providerId !== cell.providerId
     || record.executionMode !== cell.executionMode
     || record.simulated !== (cell.executionMode === "fake")
+    || record.dryRun !== database.dryRun
   ) failReconciliation();
 }
 
@@ -282,10 +295,25 @@ function assertMissingScenarioMetrics(result: Readonly<Record<string, unknown>>,
     result.totalDurationMs !== database.wallClockMs
     || result.totalTokens !== database.totalTokens
     || tokenUsage?.totalTokens !== database.totalTokens
-    || result.totalCostUSD !== database.totalCostUSD
+    || readOperationalCost(result) !== database.operationalCost.amountUSD
     || result.totalTurns !== database.totalTurns
     || result.toolErrorCount !== database.errorCount
   ) failReconciliation();
+}
+
+function claimsMatchAuthority(result: Readonly<Record<string, unknown>>, database: RunRecord): boolean {
+  if (isEligibleRunRecord(database)) {
+    return result.compositeScore === database.compositeScore
+      && result.passedBenchmark === database.passedBenchmark
+      && result.actualCostUSD === database.actualCostUSD;
+  }
+  return !("compositeScore" in result) && !("passedBenchmark" in result) && !("actualCostUSD" in result);
+}
+
+function readOperationalCost(result: Readonly<Record<string, unknown>>): number | undefined {
+  if (typeof result.operationalCost !== "object" || result.operationalCost === null) return undefined;
+  const value = result.operationalCost as Readonly<Record<string, unknown>>;
+  return typeof value.amountUSD === "number" ? value.amountUSD : undefined;
 }
 
 function readTerminalResult(

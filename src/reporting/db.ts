@@ -1,399 +1,93 @@
 import { Database } from "bun:sqlite";
+import { validateDatabasePathBeforeOpen } from "./database-path-authority.js";
+import { ReportingQueryStore } from "./query-store.js";
+import { ReportingRunStore } from "./run-store.js";
+import { initializeReportingSchema, validateReportingSchema } from "./schema.js";
 import type {
-  EloRatingRecord,
-  HistoricalTrendPoint,
-  RunEvaluationSummary,
-  RunManifest,
-  RunMetricsSummary,
+  EligibleRunRecord,
   RunQueryFilter,
   RunRecord,
-  RunStatus,
   TelemetryEventRecord,
 } from "./types.js";
-import type { ExecutionMode } from "../shared/execution-mode.js";
-import { sanitizeBenchmarkArtifactValue } from "../shared/artifact-sanitization.js";
-import { claimTerminalRunIdentity, TerminalRunIdentityConflictError } from "./run-identity.js";
-import { TelemetryArtifactSanitizer } from "./telemetry-artifact-sanitizer.js";
-import { validateDatabasePathBeforeOpen } from "./database-path-authority.js";
+
 export { TerminalRunIdentityConflictError } from "./run-identity.js";
-interface RunRow {
-  readonly sweep_id: string | null;
-  readonly plan_fingerprint: string | null;
-  readonly cell_id: string | null;
-  readonly matrix_occurrence_index: number | null;
-  readonly run_id: string;
-  readonly scenario_id: string;
-  readonly category: string;
-  readonly skill_id: string;
-  readonly skill_version: string | null;
-  readonly model_id: string;
-  readonly provider_id: string;
-  readonly execution_mode: ExecutionMode;
-  readonly simulated: number;
-  readonly thinking_level: string | null;
-  readonly thinking_budget_tokens: number | null;
-  readonly reasoning_tokens: number | null;
-  readonly status: string;
-  readonly termination_reason: string | null;
-  readonly composite_score: number;
-  readonly passed_benchmark: number;
-  readonly wall_clock_ms: number;
-  readonly total_tokens: number;
-  readonly cache_hit_ratio: number;
-  readonly total_cost_usd: number;
-  readonly total_turns: number;
-  readonly error_count: number;
-  readonly attempt_count: number;
-  readonly started_at: string;
-  readonly completed_at: string;
-  readonly manifest_json: string | null;
-  readonly metrics_json: string | null;
-  readonly evaluation_json: string | null;
-  readonly commit_sha: string | null;
-}
-interface EloRow {
-  readonly skill_id: string;
-  readonly rating: number;
-  readonly matches_played: number;
-  readonly wins: number;
-  readonly losses: number;
-  readonly ties: number;
-  readonly last_updated: string;
-}
-interface TrendRow {
-  readonly timestamp: string;
-  readonly commit_sha: string | null;
-  readonly skill_version: string | null;
-  readonly pass_rate: number;
-  readonly average_score: number;
-  readonly mean_duration_ms: number;
-  readonly average_cost_usd: number;
-  readonly elo_rating: number;
-  readonly sample_count: number;
-}
-function parseJsonField<T>(raw: string | null): T | undefined {
-  return raw && raw !== "" ? (JSON.parse(raw) as T) : undefined;
-}
-function mapRowToRunRecord(row: RunRow): RunRecord {
-  const manifest = parseJsonField<RunManifest>(row.manifest_json);
-  const metrics = parseJsonField<RunMetricsSummary>(row.metrics_json);
-  const evaluation = parseJsonField<RunEvaluationSummary>(row.evaluation_json);
-  return {
-    ...(row.sweep_id !== null ? { sweepId: row.sweep_id } : {}),
-    ...(row.plan_fingerprint !== null ? { planFingerprint: row.plan_fingerprint } : {}),
-    ...(row.cell_id !== null ? { cellId: row.cell_id } : {}),
-    ...(row.matrix_occurrence_index !== null ? { matrixOccurrenceIndex: row.matrix_occurrence_index } : {}),
-    runId: row.run_id,
-    scenarioId: row.scenario_id,
-    category: row.category,
-    skillId: row.skill_id,
-    ...(row.skill_version !== null ? { skillVersion: row.skill_version } : {}),
-    modelId: row.model_id,
-    providerId: row.provider_id,
-    executionMode: row.execution_mode,
-    simulated: row.simulated === 1,
-    ...(row.thinking_level !== null ? { thinkingLevel: row.thinking_level as RunRecord["thinkingLevel"] } : {}),
-    ...(row.thinking_budget_tokens !== null ? { thinkingBudgetTokens: row.thinking_budget_tokens } : {}),
-    ...(row.reasoning_tokens !== null ? { reasoningTokens: row.reasoning_tokens } : {}),
-    status: row.status as RunStatus,
-    ...(row.termination_reason !== null ? { terminationReason: row.termination_reason } : {}),
-    compositeScore: row.composite_score,
-    passedBenchmark: row.passed_benchmark === 1,
-    wallClockMs: row.wall_clock_ms,
-    totalTokens: row.total_tokens,
-    cacheHitRatio: row.cache_hit_ratio,
-    totalCostUSD: row.total_cost_usd,
-    totalTurns: row.total_turns,
-    errorCount: row.error_count,
-    attemptCount: row.attempt_count,
-    startedAt: row.started_at,
-    completedAt: row.completed_at,
-    ...(manifest !== undefined ? { manifest } : {}),
-    ...(metrics !== undefined ? { metrics } : {}),
-    ...(evaluation !== undefined ? { evaluation } : {}),
-  };
-}
-function computeConfidenceInterval(wins: number, ties: number, matches: number): readonly [number, number] {
-  if (matches <= 0) return [0, 0] as const;
-  const score = (wins + 0.5 * ties) / matches;
-  const z = 1.96;
-  const z2 = z * z;
-  const denominator = 1 + z2 / matches;
-  const center = (score + z2 / (2 * matches)) / denominator;
-  const margin = (z * Math.sqrt((score * (1 - score) + z2 / (4 * matches)) / matches)) / denominator;
-  return [Math.max(0, center - margin), Math.min(1, center + margin)] as const;
-}
+
 export class TelemetryDatabase {
-  private readonly db: Database;
-  private readonly telemetrySanitizer = new TelemetryArtifactSanitizer();
-  public constructor(dbPath: string = ":memory:", options?: { readonly readonly?: boolean; readonly authorityRoot?: string }) {
+  private readonly database: Database;
+  private readonly runStore: ReportingRunStore;
+  private readonly queryStore: ReportingQueryStore;
+
+  public constructor(
+    dbPath: string = ":memory:",
+    options?: { readonly readonly?: boolean; readonly authorityRoot?: string }
+  ) {
     validateDatabasePathBeforeOpen(dbPath, options?.authorityRoot);
-    const database = options?.readonly === true ? new Database(dbPath, { readonly: true }) : new Database(dbPath);
+    const database = options?.readonly === true
+      ? new Database(dbPath, { readonly: true })
+      : new Database(dbPath);
     try {
       validateDatabasePathBeforeOpen(dbPath, options?.authorityRoot);
-      this.db = database;
-      if (options?.readonly !== true) this.initSchema();
+      this.database = database;
+      if (options?.readonly === true) validateReportingSchema(database);
+      else initializeReportingSchema(database);
+      this.runStore = new ReportingRunStore(database);
+      this.queryStore = new ReportingQueryStore(database);
     } catch (error) {
       database.close();
       throw error;
     }
   }
+
   public initSchema(): void {
-    this.db.exec("PRAGMA journal_mode = DELETE; PRAGMA synchronous = FULL; PRAGMA foreign_keys = ON; PRAGMA temp_store = MEMORY;");
-    this.db.exec(`
-      CREATE TABLE IF NOT EXISTS runs (
-        run_id TEXT PRIMARY KEY, sweep_id TEXT, plan_fingerprint TEXT,
-        cell_id TEXT, matrix_occurrence_index INTEGER,
-        scenario_id TEXT NOT NULL, category TEXT NOT NULL,
-        skill_id TEXT NOT NULL, skill_version TEXT, model_id TEXT NOT NULL,
-        provider_id TEXT NOT NULL, execution_mode TEXT NOT NULL DEFAULT 'fake', simulated INTEGER NOT NULL DEFAULT 1,
-        thinking_level TEXT, thinking_budget_tokens INTEGER, reasoning_tokens INTEGER,
-        status TEXT NOT NULL, termination_reason TEXT, composite_score REAL NOT NULL,
-        passed_benchmark INTEGER NOT NULL, wall_clock_ms REAL NOT NULL,
-        total_tokens INTEGER NOT NULL, cache_hit_ratio REAL NOT NULL,
-        total_cost_usd REAL NOT NULL, total_turns INTEGER NOT NULL,
-        error_count INTEGER NOT NULL, attempt_count INTEGER NOT NULL DEFAULT 0,
-        started_at TEXT NOT NULL, completed_at TEXT NOT NULL,
-        manifest_json TEXT, metrics_json TEXT, evaluation_json TEXT, commit_sha TEXT
-      );
-      CREATE TABLE IF NOT EXISTS run_claims (
-        run_id TEXT PRIMARY KEY, sweep_id TEXT NOT NULL, cell_id TEXT NOT NULL,
-        created_at TEXT NOT NULL
-      );
-      CREATE INDEX IF NOT EXISTS idx_runs_scenario_id ON runs(scenario_id);
-      CREATE INDEX IF NOT EXISTS idx_runs_skill_id ON runs(skill_id);
-      CREATE INDEX IF NOT EXISTS idx_runs_model_id ON runs(model_id);
-      CREATE INDEX IF NOT EXISTS idx_runs_provider_id ON runs(provider_id);
-      CREATE INDEX IF NOT EXISTS idx_runs_category ON runs(category);
-      CREATE INDEX IF NOT EXISTS idx_runs_status ON runs(status);
-      CREATE INDEX IF NOT EXISTS idx_runs_started_at ON runs(started_at);
-      CREATE INDEX IF NOT EXISTS idx_runs_completed_at ON runs(completed_at);
-      CREATE INDEX IF NOT EXISTS idx_runs_skill_completed ON runs(skill_id, completed_at);
-
-      CREATE TABLE IF NOT EXISTS telemetry_events (
-        id INTEGER PRIMARY KEY AUTOINCREMENT, run_id TEXT NOT NULL, scenario_id TEXT NOT NULL,
-        skill_id TEXT, model_id TEXT NOT NULL, timestamp_us TEXT NOT NULL,
-        event_type TEXT NOT NULL, sequence_number INTEGER, payload_json TEXT
-      );
-      CREATE INDEX IF NOT EXISTS idx_telemetry_run_id ON telemetry_events(run_id);
-      CREATE INDEX IF NOT EXISTS idx_telemetry_event_type ON telemetry_events(event_type);
-      CREATE INDEX IF NOT EXISTS idx_telemetry_timestamp ON telemetry_events(timestamp_us);
-
-      CREATE TABLE IF NOT EXISTS elo_ratings (
-        skill_id TEXT PRIMARY KEY, rating REAL NOT NULL, matches_played INTEGER NOT NULL,
-        wins INTEGER NOT NULL, losses INTEGER NOT NULL, ties INTEGER NOT NULL, last_updated TEXT NOT NULL
-      );
-      CREATE INDEX IF NOT EXISTS idx_elo_rating ON elo_ratings(rating DESC);
-    `);
-    try { this.db.exec("ALTER TABLE runs ADD COLUMN thinking_level TEXT;"); } catch {}
-    try { this.db.exec("ALTER TABLE runs ADD COLUMN thinking_budget_tokens INTEGER;"); } catch {}
-    try { this.db.exec("ALTER TABLE runs ADD COLUMN reasoning_tokens INTEGER;"); } catch {}
-    try { this.db.exec("ALTER TABLE runs ADD COLUMN execution_mode TEXT NOT NULL DEFAULT 'fake';"); } catch {}
-    try { this.db.exec("ALTER TABLE runs ADD COLUMN simulated INTEGER NOT NULL DEFAULT 1;"); } catch {}
-    try { this.db.exec("ALTER TABLE runs ADD COLUMN termination_reason TEXT;"); } catch {}
-    try { this.db.exec("ALTER TABLE runs ADD COLUMN sweep_id TEXT;"); } catch {}
-    try { this.db.exec("ALTER TABLE runs ADD COLUMN plan_fingerprint TEXT;"); } catch {}
-    try { this.db.exec("ALTER TABLE runs ADD COLUMN cell_id TEXT;"); } catch {}
-    try { this.db.exec("ALTER TABLE runs ADD COLUMN matrix_occurrence_index INTEGER;"); } catch {}
-    try { this.db.exec("ALTER TABLE runs ADD COLUMN attempt_count INTEGER NOT NULL DEFAULT 0;"); } catch {}
+    initializeReportingSchema(this.database);
   }
+
   public saveRunRecord(record: RunRecord): void {
-    const sanitizedRecord = sanitizeBenchmarkArtifactValue(record) as RunRecord;
-    const skillVersion = sanitizedRecord.skillVersion ?? sanitizedRecord.manifest?.skillVersion ?? null;
-    const commitSha = sanitizedRecord.manifest?.environment?.hostCommitSha ?? null;
-    const manifestJson = sanitizedRecord.manifest ? JSON.stringify(sanitizedRecord.manifest) : null;
-    const metricsJson = sanitizedRecord.metrics ? JSON.stringify(sanitizedRecord.metrics) : null;
-    const evaluationJson = sanitizedRecord.evaluation ? JSON.stringify(sanitizedRecord.evaluation) : null;
-    const stmt = this.db.prepare(`
-      INSERT INTO runs (
-        run_id, sweep_id, plan_fingerprint, cell_id, matrix_occurrence_index,
-        scenario_id, category, skill_id, skill_version, model_id, provider_id, execution_mode, simulated,
-        thinking_level, thinking_budget_tokens, reasoning_tokens,
-        status, termination_reason, composite_score, passed_benchmark, wall_clock_ms, total_tokens, cache_hit_ratio,
-        total_cost_usd, total_turns, error_count, attempt_count, started_at, completed_at,
-        manifest_json, metrics_json, evaluation_json, commit_sha
-      ) VALUES (
-        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-      )
-    `);
-
-    try {
-      stmt.run(
-        sanitizedRecord.runId, sanitizedRecord.sweepId ?? null, sanitizedRecord.planFingerprint ?? null, sanitizedRecord.cellId ?? null, sanitizedRecord.matrixOccurrenceIndex ?? null,
-        sanitizedRecord.scenarioId, sanitizedRecord.category, sanitizedRecord.skillId, skillVersion,
-        sanitizedRecord.modelId, sanitizedRecord.providerId, sanitizedRecord.executionMode, sanitizedRecord.simulated ? 1 : 0,
-        sanitizedRecord.thinkingLevel ?? sanitizedRecord.manifest?.modelParameters?.thinkingLevel ?? null,
-        sanitizedRecord.thinkingBudgetTokens ?? sanitizedRecord.manifest?.modelParameters?.thinkingBudgetTokens ?? null,
-        sanitizedRecord.reasoningTokens ?? null,
-        sanitizedRecord.status, sanitizedRecord.terminationReason ?? null, sanitizedRecord.compositeScore,
-        sanitizedRecord.passedBenchmark ? 1 : 0, sanitizedRecord.wallClockMs, sanitizedRecord.totalTokens,
-        sanitizedRecord.cacheHitRatio, sanitizedRecord.totalCostUSD, sanitizedRecord.totalTurns, sanitizedRecord.errorCount, sanitizedRecord.attemptCount ?? 0,
-        sanitizedRecord.startedAt, sanitizedRecord.completedAt, manifestJson, metricsJson, evaluationJson, commitSha
-      );
-      this.db.prepare("DELETE FROM run_claims WHERE run_id = ?").run(record.runId);
-    } catch (error) {
-      if (this.getRunRecord(sanitizedRecord.runId) !== undefined) throw new TerminalRunIdentityConflictError();
-      throw error;
-    }
+    this.runStore.saveRunRecord(record);
   }
+
   public saveRunRecordWithArtifact(record: RunRecord, commitArtifact: () => void): void {
-    this.db.transaction(() => {
-      this.saveRunRecord(record);
-      commitArtifact();
-    })();
+    this.runStore.saveRunRecordWithArtifact(record, commitArtifact);
   }
 
   public claimRunIdentity(runId: string, sweepId: string, cellId: string): void {
-    claimTerminalRunIdentity(this.db, runId, sweepId, cellId);
+    this.runStore.claimRunIdentity(runId, sweepId, cellId);
   }
 
   public getRunRecord(runId: string): RunRecord | undefined {
-    const row = this.db.prepare("SELECT * FROM runs WHERE run_id = ?").get(runId) as RunRow | null;
-    return row === null ? undefined : mapRowToRunRecord(row);
+    return this.queryStore.getRunRecord(runId);
   }
 
   public saveTelemetryEvents(events: ReadonlyArray<TelemetryEventRecord>): void {
-    if (events.length === 0) return;
-    const stmt = this.db.prepare(`
-      INSERT INTO telemetry_events (
-        run_id, scenario_id, skill_id, model_id, timestamp_us, event_type, sequence_number, payload_json
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-    const insertTransaction = this.db.transaction((records: ReadonlyArray<TelemetryEventRecord>) => {
-      for (const event of records) {
-        const sanitizedEvent = this.telemetrySanitizer.sanitize(event) as TelemetryEventRecord;
-        stmt.run(
-          sanitizedEvent.runId, sanitizedEvent.scenarioId, sanitizedEvent.skillId ?? null, sanitizedEvent.modelId,
-          sanitizedEvent.timestampUs, sanitizedEvent.eventType, sanitizedEvent.sequenceNumber ?? null,
-          sanitizedEvent.payload ? JSON.stringify(sanitizedEvent.payload) : null
-        );
-      }
-    });
-    insertTransaction(events);
+    this.runStore.saveTelemetryEvents(events);
   }
 
-  public queryRuns(filter?: RunQueryFilter): ReadonlyArray<RunRecord> {
-    const clauses: string[] = [];
-    const bindings: (string | number)[] = [];
+  public queryRuns(filter?: RunQueryFilter): readonly RunRecord[] {
+    return this.queryStore.queryRuns(filter);
+  }
 
-    if (filter?.scenarioId !== undefined) { clauses.push("scenario_id = ?"); bindings.push(filter.scenarioId); }
-    if (filter?.skillId !== undefined) { clauses.push("skill_id = ?"); bindings.push(filter.skillId); }
-    if (filter?.modelId !== undefined) { clauses.push("model_id = ?"); bindings.push(filter.modelId); }
-    if (filter?.providerId !== undefined) { clauses.push("provider_id = ?"); bindings.push(filter.providerId); }
-    if (filter?.category !== undefined) { clauses.push("category = ?"); bindings.push(filter.category); }
-    if (filter?.status !== undefined) { clauses.push("status = ?"); bindings.push(filter.status); }
-    if (filter?.passedBenchmark !== undefined) { clauses.push("passed_benchmark = ?"); bindings.push(filter.passedBenchmark ? 1 : 0); }
-    if (filter?.minScore !== undefined) { clauses.push("composite_score >= ?"); bindings.push(filter.minScore); }
-    if (filter?.maxScore !== undefined) { clauses.push("composite_score <= ?"); bindings.push(filter.maxScore); }
-    if (filter?.fromDate !== undefined) { clauses.push("started_at >= ?"); bindings.push(filter.fromDate); }
-    if (filter?.toDate !== undefined) { clauses.push("started_at <= ?"); bindings.push(filter.toDate); }
-
-    let sql = "SELECT * FROM runs";
-    if (clauses.length > 0) sql += ` WHERE ${clauses.join(" AND ")}`;
-    sql += " ORDER BY started_at ASC";
-
-    if (filter?.limit !== undefined) { sql += " LIMIT ?"; bindings.push(filter.limit); }
-    if (filter?.offset !== undefined) { sql += " OFFSET ?"; bindings.push(filter.offset); }
-
-    const stmt = this.db.prepare(sql);
-    const rows = stmt.all(...bindings) as RunRow[];
-    return rows.map(mapRowToRunRecord);
+  public queryEligibleRuns(filter?: RunQueryFilter): readonly EligibleRunRecord[] {
+    return this.queryStore.queryEligibleRuns(filter);
   }
 
   public updateEloScore(
-    skillId: string,
-    opponentSkillId: string,
+    candidate: EligibleRunRecord,
+    opponent: EligibleRunRecord,
     result: 1 | 0.5 | 0,
     kFactor: number = 32
   ): void {
-    const getStmt = this.db.prepare("SELECT * FROM elo_ratings WHERE skill_id = ?");
-    const existingA = getStmt.get(skillId) as EloRow | null;
-    const existingB = getStmt.get(opponentSkillId) as EloRow | null;
-
-    const ratingA = existingA ? existingA.rating : 1500;
-    const ratingB = existingB ? existingB.rating : 1500;
-    const expectedA = 1 / (1 + Math.pow(10, (ratingB - ratingA) / 400));
-    const expectedB = 1 - expectedA;
-
-    const newRatingA = ratingA + kFactor * (result - expectedA);
-    const newRatingB = ratingB + kFactor * (1 - result - expectedB);
-
-    const matchesA = (existingA?.matches_played ?? 0) + 1;
-    const winsA = (existingA?.wins ?? 0) + (result === 1 ? 1 : 0);
-    const lossesA = (existingA?.losses ?? 0) + (result === 0 ? 1 : 0);
-    const tiesA = (existingA?.ties ?? 0) + (result === 0.5 ? 1 : 0);
-
-    const matchesB = (existingB?.matches_played ?? 0) + 1;
-    const winsB = (existingB?.wins ?? 0) + (result === 0 ? 1 : 0);
-    const lossesB = (existingB?.losses ?? 0) + (result === 1 ? 1 : 0);
-    const tiesB = (existingB?.ties ?? 0) + (result === 0.5 ? 1 : 0);
-
-    const now = new Date().toISOString();
-    const upsertStmt = this.db.prepare(`
-      INSERT INTO elo_ratings (skill_id, rating, matches_played, wins, losses, ties, last_updated)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(skill_id) DO UPDATE SET
-        rating = excluded.rating, matches_played = excluded.matches_played,
-        wins = excluded.wins, losses = excluded.losses, ties = excluded.ties, last_updated = excluded.last_updated
-    `);
-
-    const updateTransaction = this.db.transaction(() => {
-      upsertStmt.run(skillId, newRatingA, matchesA, winsA, lossesA, tiesA, now);
-      upsertStmt.run(opponentSkillId, newRatingB, matchesB, winsB, lossesB, tiesB, now);
-    });
-    updateTransaction();
+    this.queryStore.updateEloScore(candidate, opponent, result, kFactor);
   }
 
-  public getEloLeaderboard(): ReadonlyArray<EloRatingRecord> {
-    const stmt = this.db.prepare("SELECT * FROM elo_ratings ORDER BY rating DESC, wins DESC");
-    const rows = stmt.all() as EloRow[];
-    return rows.map((row) => {
-      const winRate = row.matches_played > 0 ? (row.wins + 0.5 * row.ties) / row.matches_played : 0;
-      const confidenceInterval95 = computeConfidenceInterval(row.wins, row.ties, row.matches_played);
-      return {
-        skillId: row.skill_id,
-        rating: row.rating,
-        matchesPlayed: row.matches_played,
-        wins: row.wins,
-        losses: row.losses,
-        ties: row.ties,
-        winRate,
-        confidenceInterval95,
-        lastUpdated: row.last_updated,
-      };
-    });
+  public getEloLeaderboard() {
+    return this.queryStore.getEloLeaderboard();
   }
 
-  public getHistoricalTrends(skillId?: string): ReadonlyArray<HistoricalTrendPoint> {
-    const hasSkillFilter = skillId !== undefined;
-    const sql = `
-      SELECT
-        MAX(r.completed_at) AS timestamp, r.commit_sha, r.skill_version,
-        AVG(r.passed_benchmark) AS pass_rate, AVG(r.composite_score) AS average_score,
-        AVG(r.wall_clock_ms) AS mean_duration_ms, AVG(r.total_cost_usd) AS average_cost_usd,
-        COALESCE(e.rating, 1500.0) AS elo_rating, COUNT(*) AS sample_count
-      FROM runs r
-      LEFT JOIN elo_ratings e ON r.skill_id = e.skill_id
-      ${hasSkillFilter ? "WHERE r.skill_id = ?" : ""}
-      GROUP BY r.skill_id, r.commit_sha, r.skill_version, strftime('%Y-%m-%d', r.started_at)
-      ORDER BY timestamp ASC
-    `;
-    const stmt = this.db.prepare(sql);
-    const rows = (hasSkillFilter ? stmt.all(skillId) : stmt.all()) as TrendRow[];
-    return rows.map((row) => ({
-      timestamp: row.timestamp,
-      ...(row.commit_sha !== null ? { commitSha: row.commit_sha } : {}),
-      ...(row.skill_version !== null ? { skillVersion: row.skill_version } : {}),
-      passRate: row.pass_rate,
-      averageScore: row.average_score,
-      meanDurationMs: row.mean_duration_ms,
-      averageCostUSD: row.average_cost_usd,
-      eloRating: row.elo_rating,
-      sampleCount: row.sample_count,
-    }));
+  public getHistoricalTrends(skillId?: string) {
+    return this.queryStore.getHistoricalTrends(skillId);
   }
 
   public close(): void {
-    this.db.close();
+    this.database.close();
   }
 }

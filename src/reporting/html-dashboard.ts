@@ -43,7 +43,8 @@ function renderLeaderboardRows(entries: readonly LeaderboardEntry[]): string {
           : `<span class="badge badge-dim">OFF</span>`;
       const reasoningTokens = e.reasoningTokens ? e.reasoningTokens.toLocaleString() : "—";
 
-      return `<tr data-category="${escapeHtml(e.category)}" data-skill="${escapeHtml(e.skillId)}" data-model="${modelLabel.toLowerCase()}" data-tier="${escapeHtml(e.modelTier ?? "flagship")}" data-think="${escapeHtml(e.thinkingLevel ?? "none")}" data-pass="${e.passRate.toFixed(1)}"><td>#${e.rank}</td><td><strong>${modelLabel}</strong></td><td>${thinkBadge}</td><td><strong>${escapeHtml(e.skillId)}</strong></td><td><span class="badge badge-cat">${escapeHtml(e.category)}</span></td><td>${e.passRate.toFixed(1)}%${deltaHtml}</td><td>${e.averageScore.toFixed(3)}</td><td>${Math.round(e.eloRating)}</td><td>${e.meanDurationSeconds.toFixed(2)}s</td><td>$${e.averageCostUSD.toFixed(4)}</td><td>${cacheHitPct}%</td><td>${reasoningTokens}</td><td>${e.totalRuns}</td><td>${sigBadge}</td></tr>`;
+      const averageCost = e.averageCostUSD === undefined ? "UNVERIFIED" : `$${e.averageCostUSD.toFixed(4)}`;
+      return `<tr data-category="${escapeHtml(e.category)}" data-skill="${escapeHtml(e.skillId)}" data-model="${modelLabel.toLowerCase()}" data-tier="${escapeHtml(e.modelTier ?? "flagship")}" data-think="${escapeHtml(e.thinkingLevel ?? "none")}" data-pass="${e.passRate.toFixed(1)}"><td>#${e.rank}</td><td><strong>${modelLabel}</strong></td><td>${thinkBadge}</td><td><strong>${escapeHtml(e.skillId)}</strong></td><td><span class="badge badge-cat">${escapeHtml(e.category)}</span></td><td>${e.passRate.toFixed(1)}%${deltaHtml}</td><td>${e.averageScore.toFixed(3)}</td><td>${Math.round(e.eloRating)}</td><td>${e.meanDurationSeconds.toFixed(2)}s</td><td>${averageCost}</td><td>${cacheHitPct}%</td><td>${reasoningTokens}</td><td>${e.totalRuns}</td><td>${sigBadge}</td></tr>`;
     })
     .join("");
 }

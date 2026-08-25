@@ -16,7 +16,7 @@ export function renderScatterPlot(
   const points: readonly CostEfficiencyPoint[] =
     costPoints.length > 0
       ? costPoints
-      : summaries.map((s) => ({
+      : summaries.flatMap((s) => s.averageCostUSD === undefined ? [] : [{
           skillId: s.skillId,
           modelId: "all",
           averageCostUSD: s.averageCostUSD,
@@ -24,7 +24,7 @@ export function renderScatterPlot(
           passRate: s.passRate,
           tokensPerTask: 0,
           durationMs: s.meanDurationMs,
-        }));
+        }]);
 
   const maxCost = Math.max(0.001, ...points.map((p) => p.averageCostUSD)) * 1.15;
   const scaleX = (cost: number): number => 60 + (Math.max(0, cost) / maxCost) * 560;
@@ -155,4 +155,3 @@ export function renderLatencyPercentilesBarChart(p50: number, p90: number, p99: 
 
   return `<svg viewBox="0 0 650 220" width="100%" height="190" class="chart-svg" style="background:#000000;border:2px solid #ffffff;box-shadow:4px 4px 0px #ffffff"><text x="16" y="22" font-size="11" fill="#ffffff" font-family="monospace" font-weight="900">EXECUTION LATENCY PERCENTILES</text><g>${rows}</g></svg>`;
 }
-

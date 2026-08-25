@@ -153,7 +153,10 @@ function isCanonicalSkippedResult(result: MatrixCellResult): boolean {
     && result.completedAt === undefined
     && result.durationMs === 0
     && !result.executionCompleted
-    && !result.passedBenchmark
+    && result.benchmarkCohort === "operational"
+    && result.eligibilityStatus === "ineligible"
+    && result.evaluationStatus === "not_requested"
+    && result.passedBenchmark === undefined
     && result.scenarioResult === undefined
     && result.runRecord === undefined
     && result.error === undefined

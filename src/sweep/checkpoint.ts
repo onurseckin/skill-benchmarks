@@ -139,7 +139,7 @@ export class CheckpointLedger implements ICheckpointLedger {
       totalTokens: 0,
     };
 
-    const cellCost = result.scenarioResult?.totalCostUSD ?? result.runRecord?.totalCostUSD ?? 0;
+    const cellCost = result.scenarioResult?.totalCostUSD ?? result.runRecord?.operationalCost.amountUSD ?? 0;
     await this.persistState((current) => {
       const completedSet = new Set(current.completedCellIds);
       completedSet.add(cellId);

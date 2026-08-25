@@ -60,6 +60,9 @@ export function writeSweepOutcome(input: SweepOutcomeInput): void {
       simulated: cell.executionMode === "fake",
       status: record?.status ?? (result?.status === "skipped" ? "skipped" : "unstarted"),
       terminationReason: record?.terminationReason ?? result?.error ?? "unstarted",
+      benchmarkCohort: record?.benchmarkCohort ?? result?.benchmarkCohort ?? "operational",
+      eligibilityStatus: record?.eligibility.status ?? result?.eligibilityStatus ?? "ineligible",
+      evaluationStatus: record?.evaluation.status ?? result?.evaluationStatus ?? "not_requested",
       evidenceDurable: record !== undefined,
       publicStatus: result?.status ?? "pending",
     };

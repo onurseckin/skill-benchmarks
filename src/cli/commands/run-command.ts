@@ -61,8 +61,10 @@ export async function runBenchmarkCommand(args: CliParsedArgs): Promise<CliComma
   const engine = new MatrixSweepEngine();
   engine.on((event) => {
     if (event.type === "cell:complete") {
-      const passedBenchmark = event.payload?.passedBenchmark === true;
-      console.log(`  ${formatBadge(passedBenchmark ? "success" : "info", passedBenchmark ? "PASS" : "COMPLETE")} ${cyan(event.cellId ?? "")} | ${event.message}`);
+      const evaluated = event.payload?.eligibilityStatus === "eligible" && typeof event.payload.passedBenchmark === "boolean";
+      const passedBenchmark = evaluated && event.payload?.passedBenchmark === true;
+      const label = evaluated ? (passedBenchmark ? "PASS" : "EVALUATED") : "COMPLETE";
+      console.log(`  ${formatBadge(passedBenchmark ? "success" : "info", label)} ${cyan(event.cellId ?? "")} | ${event.message}`);
     } else if (event.type === "cell:error") {
       console.log(`  ${formatBadge("error", "FAIL")} ${cyan(event.cellId ?? "")} | ${event.message}`);
     }

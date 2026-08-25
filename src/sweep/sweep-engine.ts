@@ -2,17 +2,7 @@ import { join } from "node:path";
 import { mkdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { randomUUID } from "node:crypto";
-import type {
-  MatrixSweepConfig,
-  MatrixSweepSummary,
-  MatrixCellDescriptor,
-  MatrixCellResult,
-  SweepProgress,
-  SweepEvent,
-  SweepEventListener,
-  SweepExecutionStatus,
-  IMatrixSweepEngine,
-} from "./types.js";
+import type { IMatrixSweepEngine, MatrixCellDescriptor, MatrixCellResult, MatrixSweepConfig, MatrixSweepSummary, SweepEvent, SweepEventListener, SweepExecutionStatus, SweepProgress } from "./types.js";
 import { MultiProviderRateLimiter } from "./token-bucket.js";
 import { CheckpointLedger } from "./checkpoint.js";
 import { ScenarioRunnerEngine } from "../runner/runner-engine.js";
@@ -214,13 +204,16 @@ export class MatrixSweepEngine implements IMatrixSweepEngine {
     let terminalIdentityConflict = false;
     const recordCheckpointFailure = (result: MatrixCellResult): MatrixCellResult => {
       if (result.runRecord !== undefined) durableRecords.set(result.cell.cellId, result.runRecord);
-      const { runRecord, ...publicResult } = result;
+      const { runRecord, passedBenchmark, ...publicResult } = result;
+      void passedBenchmark;
       const failedResult: MatrixCellResult = {
         ...publicResult,
         ...(runRecord === undefined || runRecord.status === "completed" ? {} : { runRecord }),
         status: "failed",
         executionCompleted: false,
-        passedBenchmark: false,
+        benchmarkCohort: "operational",
+        eligibilityStatus: "ineligible",
+        evaluationStatus: "not_evaluated",
         error: "checkpoint persistence failed",
         retryable: false,
       };
@@ -258,7 +251,14 @@ export class MatrixSweepEngine implements IMatrixSweepEngine {
           type: "cell:complete",
           cellId: result.cell.cellId,
           message: `Cell ${result.cell.cellId} completed in ${result.durationMs}ms`,
-          payload: { durationMs: result.durationMs, costUSD: result.scenarioResult?.totalCostUSD ?? 0, passedBenchmark: result.passedBenchmark },
+          payload: {
+            durationMs: result.durationMs,
+            costUSD: result.scenarioResult?.totalCostUSD ?? 0,
+            benchmarkCohort: result.benchmarkCohort,
+            eligibilityStatus: result.eligibilityStatus,
+            evaluationStatus: result.evaluationStatus,
+            ...(result.passedBenchmark === undefined ? {} : { passedBenchmark: result.passedBenchmark }),
+          },
         });
       } else {
         this.failedCount += 1;
@@ -270,7 +270,11 @@ export class MatrixSweepEngine implements IMatrixSweepEngine {
     const executeCell = async (cell: MatrixCellDescriptor): Promise<MatrixCellResult> => {
       if (checkpointLedger.isCellCompleted(cell.cellId)) {
         this.skippedCount += 1;
-        const res: MatrixCellResult = { cell, status: "skipped", attemptCount: 0, durationMs: 0, executionCompleted: false, passedBenchmark: false, retryable: false };
+        const res: MatrixCellResult = {
+          cell, status: "skipped", attemptCount: 0, durationMs: 0, executionCompleted: false,
+          benchmarkCohort: "operational", eligibilityStatus: "ineligible",
+          evaluationStatus: "not_requested", retryable: false,
+        };
         results.push(res);
         this.emitEvent({ type: "cell:skip", cellId: cell.cellId, message: `Skipping ${cell.cellId}` });
         return res;

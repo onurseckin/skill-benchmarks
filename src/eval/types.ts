@@ -1,3 +1,5 @@
+import type { BenchmarkIneligibilityReason } from "../shared/benchmark-authority.js";
+
 export type DeterministicCheckType =
   | "command"
   | "file_content"
@@ -57,16 +59,27 @@ export interface GitDiffMetrics {
   readonly modifiedFiles: readonly string[];
 }
 
-export interface DeterministicSummary {
-  readonly allPassed: boolean;
-  readonly passedChecksCount: number;
-  readonly totalChecksCount: number;
-  readonly rawScore: number;
-  readonly weightedScore: number;
+interface DeterministicSummaryBase {
   readonly totalDurationMs: number;
   readonly checkResults: readonly DeterministicCheckResult[];
   readonly gitDiffMetrics?: GitDiffMetrics;
 }
+
+export interface UnevaluatedDeterministicSummary extends DeterministicSummaryBase {
+  readonly status: "not_evaluated" | "invalid";
+  readonly reasons: readonly BenchmarkIneligibilityReason[];
+}
+
+export interface EvaluatedDeterministicSummary extends DeterministicSummaryBase {
+  readonly status: "evaluated";
+  readonly passed: boolean;
+  readonly passedChecksCount: number;
+  readonly totalChecksCount: number;
+  readonly score: number;
+  readonly evidenceDigest: string;
+}
+
+export type DeterministicSummary = UnevaluatedDeterministicSummary | EvaluatedDeterministicSummary;
 
 export interface JudgeRubricDimension {
   readonly name: string;
@@ -176,25 +189,36 @@ export interface EvaluationConfig {
   readonly judgeModelId?: string;
 }
 
-export interface CompositeEvaluationSummary {
+interface CompositeEvaluationBase {
   readonly scenarioId: string;
   readonly runId: string;
   readonly skillIds: readonly string[];
   readonly modelId: string;
-  readonly passed: boolean;
-  readonly compositeScore: number;
   readonly deterministicSummary?: DeterministicSummary;
   readonly judgeEvaluation?: JudgeEvaluationResult;
+}
+
+export interface UnevaluatedCompositeSummary extends CompositeEvaluationBase {
+  readonly status: "not_evaluated" | "invalid";
+  readonly reasons: readonly BenchmarkIneligibilityReason[];
+}
+
+export interface EvaluatedCompositeSummary extends CompositeEvaluationBase {
+  readonly status: "evaluated";
+  readonly passed: boolean;
+  readonly compositeScore: number;
   readonly deterministicWeight: number;
   readonly semanticWeight: number;
   readonly passScoreThreshold: number;
+  readonly requireAllDeterministicPass: boolean;
   readonly evaluatedAt: string;
 }
+
+export type CompositeEvaluationSummary = UnevaluatedCompositeSummary | EvaluatedCompositeSummary;
 
 export interface EvaluationResult {
   readonly scenarioId: string;
   readonly runId: string;
-  readonly success: boolean;
   readonly compositeSummary: CompositeEvaluationSummary;
   readonly deterministicSummary?: DeterministicSummary;
   readonly judgeEvaluation?: JudgeEvaluationResult;

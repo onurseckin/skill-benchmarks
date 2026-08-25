@@ -113,7 +113,10 @@ export interface MatrixCellResult {
   readonly completedAt?: string;
   readonly durationMs: number;
   readonly executionCompleted: boolean;
-  readonly passedBenchmark: boolean;
+  readonly benchmarkCohort: "eligible" | "validation" | "operational";
+  readonly eligibilityStatus: "eligible" | "ineligible" | "unknown";
+  readonly evaluationStatus: "not_requested" | "not_evaluated" | "evaluated" | "invalid";
+  readonly passedBenchmark?: boolean;
   readonly scenarioResult?: ScenarioResult;
   readonly runRecord?: RunRecord;
   readonly error?: string;

@@ -1,4 +1,9 @@
 import type { ExecutionMode } from "../shared/execution-mode.js";
+import type {
+  EligibleBenchmarkAuthority,
+  NonEligibleBenchmarkAuthority,
+  VerifiedCostEvidence,
+} from "../shared/benchmark-authority.js";
 
 export type RunStatus = "completed" | "failed" | "timed_out" | "aborted";
 
@@ -31,6 +36,7 @@ export interface RunManifest {
   readonly providerId: string;
   readonly executionMode: ExecutionMode;
   readonly simulated: boolean;
+  readonly dryRun?: boolean;
   readonly modelParameters: ModelParameters;
   readonly environment: HostEnvironment;
   readonly startedAt: string;
@@ -97,45 +103,6 @@ export interface GitDiffMetrics {
   readonly rawDiff?: string;
 }
 
-export interface DeterministicCheckResult {
-  readonly name?: string;
-  readonly description: string;
-  readonly passed: boolean;
-  readonly exitCode?: number;
-  readonly durationMs: number;
-  readonly stdout?: string;
-  readonly stderr?: string;
-}
-
-export interface DeterministicEvaluation {
-  readonly passed: boolean;
-  readonly score: number;
-  readonly checks: ReadonlyArray<DeterministicCheckResult>;
-  readonly gitDiffMetrics?: GitDiffMetrics;
-}
-
-export interface JudgeDimensionScore {
-  readonly name: string;
-  readonly score: number;
-  readonly justification: string;
-}
-
-export interface JudgeEvaluation {
-  readonly judgeModelId: string;
-  readonly overallScore: number;
-  readonly dimensions: ReadonlyArray<JudgeDimensionScore>;
-  readonly summary: string;
-}
-
-export interface RunEvaluationSummary {
-  readonly runId: string;
-  readonly scenarioId: string;
-  readonly deterministic: DeterministicEvaluation;
-  readonly judge?: JudgeEvaluation;
-  readonly compositeScore: number;
-  readonly passedBenchmark: boolean;
-}
-
 export interface TelemetryEventRecord {
   readonly runId: string;
   readonly scenarioId: string;
@@ -147,7 +114,7 @@ export interface TelemetryEventRecord {
   readonly payload?: Readonly<Record<string, unknown>>;
 }
 
-export interface RunRecord {
+export interface RunRecordBase {
   readonly sweepId?: string;
   readonly planFingerprint?: string;
   readonly cellId?: string;
@@ -161,17 +128,15 @@ export interface RunRecord {
   readonly providerId: string;
   readonly executionMode: ExecutionMode;
   readonly simulated: boolean;
+  readonly dryRun: boolean;
   readonly thinkingLevel?: "none" | "low" | "medium" | "high" | "max";
   readonly thinkingBudgetTokens?: number;
   readonly reasoningTokens?: number;
   readonly status: RunStatus;
   readonly terminationReason?: string;
-  readonly compositeScore: number;
-  readonly passedBenchmark: boolean;
   readonly wallClockMs: number;
   readonly totalTokens: number;
   readonly cacheHitRatio: number;
-  readonly totalCostUSD: number;
   readonly totalTurns: number;
   readonly errorCount: number;
   readonly attemptCount?: number;
@@ -179,8 +144,15 @@ export interface RunRecord {
   readonly completedAt: string;
   readonly manifest?: RunManifest;
   readonly metrics?: RunMetricsSummary;
-  readonly evaluation?: RunEvaluationSummary;
 }
+
+export type EligibleRunRecord = RunRecordBase & EligibleBenchmarkAuthority;
+export type NonEligibleRunRecord = RunRecordBase & NonEligibleBenchmarkAuthority;
+export type RunRecord = EligibleRunRecord | NonEligibleRunRecord;
+export type CostVerifiedEligibleRunRecord = EligibleRunRecord & {
+  readonly operationalCost: VerifiedCostEvidence;
+  readonly actualCostUSD: number;
+};
 
 export interface StatisticalMetrics {
   readonly mean: number;
@@ -201,7 +173,7 @@ export interface SkillBenchmarkSummary {
   readonly passRate: number;
   readonly averageScore: number;
   readonly meanDurationMs: number;
-  readonly averageCostUSD: number;
+  readonly averageCostUSD?: number;
   readonly averageCacheHitRatio: number;
   readonly eloRating: number;
   readonly scoreStats?: StatisticalMetrics;
@@ -224,7 +196,7 @@ export interface LeaderboardEntry {
   readonly eloRating: number;
   readonly averageScore: number;
   readonly meanDurationSeconds: number;
-  readonly averageCostUSD: number;
+  readonly averageCostUSD?: number;
   readonly cacheHitRatio: number;
   readonly isStatisticallySignificant: boolean;
   readonly totalRuns: number;
@@ -255,6 +227,7 @@ export interface RunQueryFilter {
   readonly providerId?: string;
   readonly category?: string;
   readonly status?: RunStatus;
+  readonly eligibilityStatus?: "eligible" | "ineligible" | "unknown";
   readonly passedBenchmark?: boolean;
   readonly minScore?: number;
   readonly maxScore?: number;
@@ -283,8 +256,8 @@ export interface HistoricalTrendPoint {
   readonly passRate: number;
   readonly averageScore: number;
   readonly meanDurationMs: number;
-  readonly averageCostUSD: number;
-  readonly eloRating: number;
+  readonly averageCostUSD?: number;
+  readonly eloRating?: number;
   readonly sampleCount: number;
 }
 

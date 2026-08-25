@@ -88,56 +88,57 @@ export async function runReportCommand(args: CliParsedArgs): Promise<CliCommandR
   console.log(formatSectionHeader(`Generating Benchmark Report [format: ${format}] from ${dbPath}`));
   const db = new TelemetryDatabase(dbPath, { readonly: true });
   try {
-  const runs = db.queryRuns();
-  const aggregates = aggregateAllSkills(runs, options.controlSkillId);
-  const leaderboard = buildLeaderboardEntries(aggregates);
-  const categoryBoards = buildCategoryLeaderboards(leaderboard);
-  const costPoints = options.includeCostEfficiency ? extractCostEfficiencyPointsFromRuns(runs) : [];
+    const runs = db.queryEligibleRuns();
+    const aggregates = aggregateAllSkills(runs, options.controlSkillId);
+    const leaderboard = buildLeaderboardEntries(runs, options.controlSkillId);
+    const categoryBoards = buildCategoryLeaderboards(leaderboard);
+    const costPoints = options.includeCostEfficiency ? extractCostEfficiencyPointsFromRuns(runs) : [];
 
-  if (format === "markdown") {
-    const md = generateMarkdownLeaderboard(leaderboard, categoryBoards, {
-      controlSkillId: options.controlSkillId,
-      totalRuns: runs.length,
-    });
-    const dest = options.outputPath ?? resolve(process.cwd(), "benchmark-report.md");
-    writeFileSync(dest, md, "utf8");
-    console.log(`  ${formatBadge("success", "EXPORT")} Report written to ${cyan(dest)}`);
-  } else if (format === "html") {
-    const html = generateHtmlDashboard(aggregates, leaderboard, costPoints, {
-      title: options.title ?? "Agent Skill Benchmark Dashboard",
-      totalRuns: runs.length,
-    });
-    const dest = options.outputPath ?? resolve(process.cwd(), "benchmark-dashboard.html");
-    writeFileSync(dest, html, "utf8");
-    console.log(`  ${formatBadge("success", "EXPORT")} Dashboard written to ${cyan(dest)}`);
-  } else if (format === "json") {
-    const data = { leaderboard, categoryLeaderboards: categoryBoards, runCount: runs.length };
-    const dest = options.outputPath;
-    if (dest) {
-      writeFileSync(dest, JSON.stringify(data, null, 2), "utf8");
-      console.log(`  ${formatBadge("success", "EXPORT")} JSON written to ${cyan(dest)}`);
+    if (format === "markdown") {
+      const md = generateMarkdownLeaderboard(leaderboard, categoryBoards, {
+        controlSkillId: options.controlSkillId,
+        totalRuns: runs.length,
+      });
+      const dest = options.outputPath ?? resolve(process.cwd(), "benchmark-report.md");
+      writeFileSync(dest, md, "utf8");
+      console.log(`  ${formatBadge("success", "EXPORT")} Report written to ${cyan(dest)}`);
+    } else if (format === "html") {
+      const html = generateHtmlDashboard(aggregates, leaderboard, costPoints, {
+        title: options.title ?? "Agent Skill Benchmark Dashboard",
+        totalRuns: runs.length,
+      });
+      const dest = options.outputPath ?? resolve(process.cwd(), "benchmark-dashboard.html");
+      writeFileSync(dest, html, "utf8");
+      console.log(`  ${formatBadge("success", "EXPORT")} Dashboard written to ${cyan(dest)}`);
+    } else if (format === "json") {
+      const data = { leaderboard, categoryLeaderboards: categoryBoards, runCount: runs.length };
+      const dest = options.outputPath;
+      if (dest) {
+        writeFileSync(dest, JSON.stringify(data, null, 2), "utf8");
+        console.log(`  ${formatBadge("success", "EXPORT")} JSON written to ${cyan(dest)}`);
+      } else {
+        console.log(JSON.stringify(data, null, 2));
+      }
     } else {
-      console.log(JSON.stringify(data, null, 2));
+      console.log(`\n  Total Benchmark Runs: ${runs.length}`);
+      console.log(`  Evaluated Skills: ${leaderboard.length}\n`);
+      for (const entry of leaderboard.slice(0, 10)) {
+        const cost = entry.averageCostUSD === undefined ? "UNVERIFIED" : `$${entry.averageCostUSD.toFixed(4)}`;
+        console.log(`  #${entry.rank} ${bold(entry.skillId.padEnd(25))} PassRate: ${entry.passRate.toFixed(1)}% | Score: ${entry.averageScore.toFixed(1)} | Cost: ${cost}`);
+      }
     }
-  } else {
-    console.log(`\n  Total Benchmark Runs: ${runs.length}`);
-    console.log(`  Evaluated Skills: ${leaderboard.length}\n`);
-    for (const entry of leaderboard.slice(0, 10)) {
-      console.log(`  #${entry.rank} ${bold(entry.skillId.padEnd(25))} PassRate: ${entry.passRate.toFixed(1)}% | Score: ${entry.averageScore.toFixed(1)} | Cost: $${entry.averageCostUSD.toFixed(4)}`);
-    }
-  }
 
-  if (options.exportCard) {
-    const targetItem = aggregates[0] ?? runs[0];
-    if (targetItem) {
-      const ext = options.exportCard === "svg" ? "svg" : "html";
-      const dest = options.cardOutputPath ?? resolve(process.cwd(), `report-card.${ext}`);
-      exportReportCard(targetItem, options.exportCard, dest);
-      console.log(`  ${formatBadge("success", "CARD")} Report card exported to ${cyan(dest)}`);
+    if (options.exportCard) {
+      const targetItem = runs[0];
+      if (targetItem) {
+        const ext = options.exportCard === "svg" ? "svg" : "html";
+        const dest = options.cardOutputPath ?? resolve(process.cwd(), `report-card.${ext}`);
+        exportReportCard(targetItem, options.exportCard, dest);
+        console.log(`  ${formatBadge("success", "CARD")} Report card exported to ${cyan(dest)}`);
+      }
     }
-  }
 
-  return { success: true, exitCode: 0, durationMs: Date.now() - startTime };
+    return { success: true, exitCode: 0, durationMs: Date.now() - startTime };
   } finally {
     db.close();
   }

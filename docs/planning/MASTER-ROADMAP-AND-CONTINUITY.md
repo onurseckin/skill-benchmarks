@@ -291,9 +291,9 @@ The roadmap to full-scale autonomous live execution proceeds in four determinist
 - **Goal**: Execute full-scale live benchmark sweeps with frontier LLM API keys and establish continuous automated leaderboard tracking.
 - **Key Milestones**:
   1. *Frontier Model Matrix Sweeps*: Execute sweeps across Anthropic Claude (3.5 Sonnet, 3.7 Sonnet), OpenAI (GPT-4o, GPT-4.5), and Google Gemini (1.5 Pro, 2.0 Flash) using `skill-benchmarks sweep --matrix`.
-  2. *Continuous Leaderboard Deployment*: Automate the generation and publishing of `data/leaderboard.md` and `data/dashboard.html` on every benchmark execution.
+  2. *Continuous Leaderboard Deployment*: Publish operator-requested leaderboard and dashboard exports only from eligible benchmark evidence.
   3. *GitHub Actions CI Bot*: Deploy `.github/workflows/benchmarks.yml` with `src/ci/pr-commenter.ts` to comment delta-Elo scores on incoming PRs.
-- **Verification Gate**: Production run completion with populated SQLite database (`data/benchmark-results.db`), verified leaderboards, and zero regression alerts.
+- **Verification Gate**: Production run completion with an output-root SQLite database, eligible evidence-backed leaderboards, and zero regression alerts.
 
 ---
 

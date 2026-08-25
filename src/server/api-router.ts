@@ -1,12 +1,15 @@
 import type { TelemetryDatabase } from "../reporting/db.js";
 import type {
   LeaderboardEntry,
+  EligibleRunRecord,
   RunQueryFilter,
   RunRecord,
   RunStatus,
   SkillBenchmarkSummary,
   TelemetryEventRecord,
 } from "../reporting/types.js";
+import { aggregateAllSkills, buildLeaderboardEntries as createLeaderboardEntries } from "../reporting/aggregator.js";
+import { isEligibleRunRecord } from "../shared/benchmark-authority.js";
 import { generateHtmlDashboard } from "../reporting/html-dashboard.js";
 import { generateWebReplayHtml } from "../replay/web-player.js";
 import { ReplayEngine } from "../replay/replay-engine.js";
@@ -182,7 +185,7 @@ export class ApiRouter {
 
     this.get("/api/leaderboard", (ctx) => {
       const eloRatings = ctx.db.getEloLeaderboard();
-      const runs = ctx.db.queryRuns();
+      const runs = ctx.db.queryEligibleRuns();
       const entries = this.buildLeaderboardEntries(runs, eloRatings);
       const cat = ctx.query.get("category");
       const filtered = cat && cat !== "all" ? entries.filter((e) => e.category === cat) : entries;
@@ -196,13 +199,14 @@ export class ApiRouter {
 
     this.get("/api/summary", (ctx) => {
       const runs = ctx.db.queryRuns();
+      const eligibleRuns = ctx.db.queryEligibleRuns();
       const completed = runs.filter((r) => r.status === "completed").length;
       const failed = runs.filter((r) => r.status === "failed" || r.status === "timed_out").length;
       return jsonResponse({
         totalRuns: runs.length,
         completedRuns: completed,
         failedRuns: failed,
-        topSkills: this.buildSkillSummaries(runs).slice(0, 10),
+        topSkills: this.buildSkillSummaries(eligibleRuns).slice(0, 10),
         recentRuns: runs.slice(-10).reverse(),
       });
     });
@@ -231,7 +235,7 @@ export class ApiRouter {
     });
 
     this.get("/", (ctx) => {
-      const runs = ctx.db.queryRuns();
+      const runs = ctx.db.queryEligibleRuns();
       const entries = this.buildLeaderboardEntries(runs, ctx.db.getEloLeaderboard());
       const summaries = this.buildSkillSummaries(runs);
       const html = generateHtmlDashboard(summaries, entries, [], {
@@ -269,6 +273,7 @@ export class ApiRouter {
   }
 
   private buildReplaySessionFromRun(id: string, run?: RunRecord): ReplaySession {
+    const eligibleRun = run !== undefined && isEligibleRunRecord(run) ? run : undefined;
     const engine = new ReplayEngine({
       sessionId: `replay-${id}`,
       runId: id,
@@ -277,10 +282,10 @@ export class ApiRouter {
       modelId: run?.modelId ?? "unknown",
       providerId: run?.providerId ?? "unknown",
       status: run?.status ?? "completed",
-      score: run?.compositeScore ?? 0,
+      ...(eligibleRun === undefined ? {} : { score: eligibleRun.compositeScore }),
       totalTurns: run?.totalTurns ?? 1,
       totalTokens: run?.totalTokens ?? 0,
-      totalCostUSD: run?.totalCostUSD ?? 0,
+      ...(eligibleRun?.actualCostUSD === undefined ? {} : { totalCostUSD: eligibleRun.actualCostUSD }),
       durationMs: run?.wallClockMs ?? 0,
     });
     engine.recordEvent({ type: "run:start", timestamp: run?.startedAt ?? new Date().toISOString() });
@@ -301,50 +306,14 @@ export class ApiRouter {
     return engine.getSession();
   }
 
-  private buildSkillSummaries(runs: readonly RunRecord[]): readonly SkillBenchmarkSummary[] {
-    const bySkill = new Map<string, RunRecord[]>();
-    for (const r of runs) {
-      const list = bySkill.get(r.skillId) ?? [];
-      list.push(r);
-      bySkill.set(r.skillId, list);
-    }
-    const summaries: SkillBenchmarkSummary[] = [];
-    for (const [skillId, skillRuns] of bySkill.entries()) {
-      const total = skillRuns.length;
-      const passed = skillRuns.filter((r) => r.passedBenchmark).length;
-      summaries.push({
-        skillId,
-        category: skillRuns[0]?.category ?? "general",
-        totalRuns: total,
-        passRate: total > 0 ? (passed / total) * 100 : 0,
-        averageScore: skillRuns.reduce((s, r) => s + r.compositeScore, 0) / (total || 1),
-        meanDurationMs: skillRuns.reduce((s, r) => s + r.wallClockMs, 0) / (total || 1),
-        averageCostUSD: skillRuns.reduce((s, r) => s + r.totalCostUSD, 0) / (total || 1),
-        averageCacheHitRatio: skillRuns.reduce((s, r) => s + r.cacheHitRatio, 0) / (total || 1),
-        eloRating: 1500,
-      });
-    }
-    return summaries.sort((a, b) => b.passRate - a.passRate);
+  private buildSkillSummaries(runs: readonly EligibleRunRecord[]): readonly SkillBenchmarkSummary[] {
+    return aggregateAllSkills(runs);
   }
 
   private buildLeaderboardEntries(
-    runs: readonly RunRecord[],
+    runs: readonly EligibleRunRecord[],
     eloRatings: readonly { skillId: string; rating: number }[]
   ): readonly LeaderboardEntry[] {
-    const summaries = this.buildSkillSummaries(runs);
-    const eloMap = new Map(eloRatings.map((e) => [e.skillId, e.rating]));
-    return summaries.map((s, idx) => ({
-      rank: idx + 1,
-      skillId: s.skillId,
-      category: s.category,
-      passRate: s.passRate,
-      eloRating: eloMap.get(s.skillId) ?? s.eloRating,
-      averageScore: s.averageScore,
-      meanDurationSeconds: s.meanDurationMs / 1000,
-      averageCostUSD: s.averageCostUSD,
-      cacheHitRatio: s.averageCacheHitRatio,
-      isStatisticallySignificant: s.totalRuns >= 5,
-      totalRuns: s.totalRuns,
-    }));
+    return createLeaderboardEntries(runs, undefined, eloRatings);
   }
 }

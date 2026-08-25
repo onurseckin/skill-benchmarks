@@ -2,8 +2,8 @@ import type {
   CategoryLeaderboard,
   CostEfficiencyPoint,
   EloRatingRecord,
+  EligibleRunRecord,
   LeaderboardEntry,
-  RunRecord,
   SkillBenchmarkSummary,
   StatisticalMetrics,
 } from "./types.js";
@@ -133,28 +133,13 @@ export function computeTwoProportionZTest(
 }
 
 export function aggregateSkillRuns(
-  runs: readonly RunRecord[],
+  runs: readonly EligibleRunRecord[],
   controlSkillId?: string,
-  controlRuns?: readonly RunRecord[]
+  controlRuns?: readonly EligibleRunRecord[]
 ): SkillBenchmarkSummary {
   const first = runs[0];
   if (!first || runs.length === 0) {
-    return {
-      skillId: controlSkillId ?? "",
-      category: "general",
-      totalRuns: 0,
-      passRate: 0,
-      averageScore: 0,
-      meanDurationMs: 0,
-      averageCostUSD: 0,
-      averageCacheHitRatio: 0,
-      eloRating: 1500,
-      scoreStats: computeStatisticalMetrics([]),
-      durationStats: computeStatisticalMetrics([]),
-      costStats: computeStatisticalMetrics([]),
-      passRateImprovementOverControl: undefined,
-      isStatisticallySignificant: false,
-    };
+    throw new TypeError("Skill aggregation requires eligible benchmark evidence");
   }
 
   const skillId = first.skillId;
@@ -164,12 +149,12 @@ export function aggregateSkillRuns(
   const passRate = (passedRuns / totalRuns) * 100;
   const scores = runs.map((r) => r.compositeScore);
   const durations = runs.map((r) => r.wallClockMs);
-  const costs = runs.map((r) => r.totalCostUSD);
+  const costs = runs.flatMap((run) => run.actualCostUSD === undefined ? [] : [run.actualCostUSD]);
   const cacheHitRatios = runs.map((r) => r.cacheHitRatio);
 
   let scoreStats = computeStatisticalMetrics(scores);
   let durationStats = computeStatisticalMetrics(durations);
-  let costStats = computeStatisticalMetrics(costs);
+  let costStats = costs.length === 0 ? undefined : computeStatisticalMetrics(costs);
   const averageCacheHitRatio = cacheHitRatios.length > 0 ? cacheHitRatios.reduce((a, b) => a + b, 0) / cacheHitRatios.length : 0;
 
   let passRateImprovementOverControl: number | undefined;
@@ -183,11 +168,12 @@ export function aggregateSkillRuns(
     const zTest = computeTwoProportionZTest(passedRuns, totalRuns, controlPassed, controlTotal);
     const scoreTest = computeWelchTTest(scores, controlRuns.map((r) => r.compositeScore));
     const durationTest = computeWelchTTest(durations, controlRuns.map((r) => r.wallClockMs));
-    const costTest = computeWelchTTest(costs, controlRuns.map((r) => r.totalCostUSD));
+    const controlCosts = controlRuns.flatMap((run) => run.actualCostUSD === undefined ? [] : [run.actualCostUSD]);
+    const costTest = computeWelchTTest(costs, controlCosts);
 
     scoreStats = { ...scoreStats, pValueAgainstControl: scoreTest.pValue, isStatisticallySignificant: scoreTest.pValue < 0.05 };
     durationStats = { ...durationStats, pValueAgainstControl: durationTest.pValue, isStatisticallySignificant: durationTest.pValue < 0.05 };
-    costStats = { ...costStats, pValueAgainstControl: costTest.pValue, isStatisticallySignificant: costTest.pValue < 0.05 };
+    if (costStats !== undefined) costStats = { ...costStats, pValueAgainstControl: costTest.pValue, isStatisticallySignificant: costTest.pValue < 0.05 };
     isStatisticallySignificant = zTest.pValue < 0.05 || scoreTest.pValue < 0.05;
   } else if (controlSkillId && skillId === controlSkillId) {
     passRateImprovementOverControl = 0;
@@ -201,7 +187,7 @@ export function aggregateSkillRuns(
     passRate,
     averageScore: scoreStats.mean,
     meanDurationMs: durationStats.mean,
-    averageCostUSD: costStats.mean,
+    ...(costStats === undefined ? {} : { averageCostUSD: costStats.mean }),
     averageCacheHitRatio,
     eloRating: 1500,
     scoreStats,
@@ -213,10 +199,10 @@ export function aggregateSkillRuns(
 }
 
 export function aggregateAllSkills(
-  runs: readonly RunRecord[],
+  runs: readonly EligibleRunRecord[],
   controlSkillId?: string
 ): ReadonlyArray<SkillBenchmarkSummary> {
-  const runsBySkill = new Map<string, RunRecord[]>();
+  const runsBySkill = new Map<string, EligibleRunRecord[]>();
   for (const run of runs) {
     const list = runsBySkill.get(run.skillId);
     if (list) list.push(run);
@@ -232,9 +218,11 @@ export function aggregateAllSkills(
 }
 
 export function buildLeaderboardEntries(
-  summaries: readonly SkillBenchmarkSummary[],
-  eloRecords?: readonly EloRatingRecord[]
+  runs: readonly EligibleRunRecord[],
+  controlSkillId?: string,
+  eloRecords?: readonly Pick<EloRatingRecord, "skillId" | "rating">[]
 ): ReadonlyArray<LeaderboardEntry> {
+  const summaries = aggregateAllSkills(runs, controlSkillId);
   const eloMap = new Map<string, number>();
   if (eloRecords) {
     for (const rec of eloRecords) eloMap.set(rec.skillId, rec.rating);
@@ -248,7 +236,7 @@ export function buildLeaderboardEntries(
     eloRating: eloMap.get(s.skillId) ?? s.eloRating,
     averageScore: s.averageScore,
     meanDurationSeconds: s.meanDurationMs / 1000,
-    averageCostUSD: s.averageCostUSD,
+    ...(s.averageCostUSD === undefined ? {} : { averageCostUSD: s.averageCostUSD }),
     cacheHitRatio: s.averageCacheHitRatio,
     isStatisticallySignificant: s.isStatisticallySignificant ?? false,
     totalRuns: s.totalRuns,
@@ -287,25 +275,12 @@ export function buildCategoryLeaderboards(
   return result.sort((a, b) => a.category.localeCompare(b.category));
 }
 
-export function extractCostEfficiencyPoints(
-  summaries: readonly SkillBenchmarkSummary[]
-): ReadonlyArray<CostEfficiencyPoint> {
-  return summaries.map((summary) => ({
-    skillId: summary.skillId,
-    modelId: "all",
-    averageCostUSD: summary.averageCostUSD,
-    compositeScore: summary.averageScore,
-    passRate: summary.passRate,
-    tokensPerTask: 0,
-    durationMs: summary.meanDurationMs,
-  }));
-}
-
 export function extractCostEfficiencyPointsFromRuns(
-  runs: readonly RunRecord[]
+  runs: readonly EligibleRunRecord[]
 ): ReadonlyArray<CostEfficiencyPoint> {
-  const groups = new Map<string, RunRecord[]>();
-  for (const run of runs) {
+  const verifiedRuns = runs.filter(hasVerifiedActualCost);
+  const groups = new Map<string, VerifiedActualCostRun[]>();
+  for (const run of verifiedRuns) {
     const key = `${run.skillId}:::${run.modelId}`;
     const list = groups.get(key);
     if (list) list.push(run);
@@ -320,7 +295,7 @@ export function extractCostEfficiencyPointsFromRuns(
     result.push({
       skillId: first.skillId,
       modelId: first.modelId,
-      averageCostUSD: groupRuns.reduce((sum, r) => sum + r.totalCostUSD, 0) / totalRuns,
+      averageCostUSD: groupRuns.reduce((sum, run) => sum + run.actualCostUSD, 0) / totalRuns,
       compositeScore: groupRuns.reduce((sum, r) => sum + r.compositeScore, 0) / totalRuns,
       passRate: (passed / totalRuns) * 100,
       tokensPerTask: groupRuns.reduce((sum, r) => sum + r.totalTokens, 0) / totalRuns,
@@ -328,4 +303,10 @@ export function extractCostEfficiencyPointsFromRuns(
     });
   }
   return result.sort((a, b) => a.skillId !== b.skillId ? a.skillId.localeCompare(b.skillId) : a.modelId.localeCompare(b.modelId));
+}
+
+type VerifiedActualCostRun = EligibleRunRecord & { readonly actualCostUSD: number };
+
+function hasVerifiedActualCost(run: EligibleRunRecord): run is VerifiedActualCostRun {
+  return run.operationalCost.status === "verified" && run.actualCostUSD !== undefined;
 }

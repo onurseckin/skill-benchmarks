@@ -4,6 +4,7 @@ import type { RunArtifactLayout } from "../infrastructure/workspace/types.js";
 import type { RunRecord, RunStatus } from "../reporting/types.js";
 import type { ScenarioResult, RunTerminationReason } from "../runner/types.js";
 import type { ExecutionMode } from "../shared/execution-mode.js";
+import { classifyBenchmarkAuthority } from "../shared/benchmark-authority.js";
 import {
   commitAtomicEvidenceJson,
   EvidenceCommitError,
@@ -25,6 +26,7 @@ export interface RunEvidenceContext {
   readonly providerId: string;
   readonly executionMode: ExecutionMode;
   readonly simulated: boolean;
+  readonly dryRun: boolean;
   readonly startedAt: string;
 }
 
@@ -126,8 +128,7 @@ export function createTerminalRunRecord(
   const totalTokens = result?.totalTokens.totalTokens ?? 0;
   const cacheReadTokens = result?.totalTokens.cacheReadInputTokens ?? 0;
   const toolErrorCount = result === undefined ? 0 : countToolErrors(result);
-  const evaluationEvidenceExists = false;
-  const passedBenchmark = terminal.status === "completed" && toolErrorCount === 0 && evaluationEvidenceExists;
+  const authority = createTerminalAuthority(context, terminal, result);
   return {
     sweepId: context.sweepId,
     planFingerprint: context.planFingerprint,
@@ -141,14 +142,13 @@ export function createTerminalRunRecord(
     providerId: context.providerId,
     executionMode: context.executionMode,
     simulated: context.simulated,
+    dryRun: context.dryRun,
     status: terminal.status,
     terminationReason: terminal.terminationReason,
-    compositeScore: passedBenchmark ? 100 : 0,
-    passedBenchmark,
+    ...authority,
     wallClockMs: durationMs,
     totalTokens,
     cacheHitRatio: totalTokens > 0 ? cacheReadTokens / totalTokens : 0,
-    totalCostUSD: result?.totalCostUSD ?? 0,
     totalTurns: result?.turns ?? 0,
     errorCount: toolErrorCount,
     attemptCount,
@@ -177,12 +177,12 @@ function createRunResultValue(
   artifactKind: "result" | "terminal-failure"
 ): Readonly<Record<string, unknown>> {
   return {
-    schemaVersion: "1.0.0",
+    schemaVersion: "2.0.0",
     artifactKind,
     ...context,
     ...terminal,
     attemptCount,
-    passedBenchmark: false,
+    ...createTerminalAuthority(context, terminal, result),
     timestamp: terminal.completedAt,
     ...(result === undefined ? {} : {
       scenarioStartedAt: result.startedAt,
@@ -197,8 +197,41 @@ function createRunResultValue(
       cacheReadInputTokens: 0,
       totalTokens: 0,
     },
-    totalCostUSD: result?.totalCostUSD ?? 0,
     totalTurns: result?.turns ?? 0,
     toolErrorCount: result === undefined ? 0 : countToolErrors(result),
   };
+}
+
+function createTerminalAuthority(
+  context: RunEvidenceContext,
+  terminal: TerminalRunEvidence,
+  result: ScenarioResult | undefined
+) {
+  const evidence = {
+    status: "unavailable" as const,
+    requiredChecksDeclared: 0,
+    requiredChecksExecuted: 0,
+    requiredChecksPassed: 0,
+    artifactIntegrity: "unverified" as const,
+  };
+  return classifyBenchmarkAuthority({
+    executionMode: context.executionMode,
+    simulated: context.simulated,
+    dryRun: context.dryRun,
+    lifecycleStatus: terminal.status,
+    terminationReason: terminal.terminationReason,
+    expectedIdentity: {
+      runId: context.runId,
+      scenarioId: context.scenarioId,
+      skillId: context.skillId,
+      modelId: context.modelId,
+      providerId: context.providerId,
+      workspaceFingerprint: "",
+    },
+    evidence,
+    evaluation: { status: "not_evaluated", reasons: ["evaluation_missing"] },
+    operationalCost: context.executionMode === "fake" || context.simulated || context.dryRun
+      ? { status: "simulated_zero", amountUSD: 0 }
+      : { status: "unverified", amountUSD: result?.totalCostUSD ?? 0 },
+  });
 }

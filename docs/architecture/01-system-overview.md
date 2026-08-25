@@ -58,7 +58,7 @@ The **Skill-Benchmarks** framework is an enterprise-grade, deterministic benchma
                                              ▼
 +---------------------------------------------------------------------------------------------------+
 |                                     REPORTING & VISUALIZATION                                     |
-|   Leaderboard Generator (data/leaderboard.md)  │  Interactive Dashboard (data/dashboard.html)     |
+|   On-Demand Leaderboard Generator              │  On-Demand Interactive Dashboard                 |
 |   Pareto Frontier Engine (Cost vs. Elo vs. Latency)                                               |
 +---------------------------------------------------------------------------------------------------+
 ```

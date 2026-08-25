@@ -1,5 +1,5 @@
 import { writeFileSync } from "node:fs";
-import type { RunRecord, SkillBenchmarkSummary } from "./types.js";
+import type { EligibleRunRecord } from "./types.js";
 
 export interface BadgeOptions {
   readonly label: string;
@@ -38,33 +38,16 @@ export function generateBenchmarkBadgeSvg(options: BadgeOptions): string {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${totalWidth}" height="20" viewBox="0 0 ${totalWidth} 20"><rect width="${labelWidth}" height="20" fill="#555555"/><rect x="${labelWidth}" width="${valueWidth}" height="20" fill="#222222"/><text x="${labelWidth / 2}" y="14" fill="#ffffff" font-family="sans-serif" font-size="10" font-weight="700" text-anchor="middle">${label}</text><text x="${labelWidth + valueWidth / 2}" y="14" fill="#ffffff" font-family="sans-serif" font-size="10" font-weight="700" text-anchor="middle">${value}</text></svg>`;
 }
 
-function isRunRecord(item: RunRecord | SkillBenchmarkSummary): item is RunRecord {
-  return "runId" in item && "compositeScore" in item;
-}
-
 export function generateReportCardHtml(
-  item: RunRecord | SkillBenchmarkSummary,
+  item: EligibleRunRecord,
   options: ReportCardOptions = {}
 ): string {
-  const isRun = isRunRecord(item);
-  const title = escapeXml(options.title ?? (isRun ? `Benchmark Run: ${item.runId}` : `Skill Summary: ${item.skillId}`));
-  const score = isRun ? item.compositeScore.toFixed(3) : item.averageScore.toFixed(3);
-  const passRate = isRun ? (item.passedBenchmark ? "100.0%" : "0.0%") : `${item.passRate.toFixed(1)}%`;
-  const elo = isRun ? "N/A" : Math.round(item.eloRating).toString();
-  const cost = isRun ? `$${item.totalCostUSD.toFixed(4)}` : `$${item.averageCostUSD.toFixed(4)}`;
-  const duration = isRun ? `${(item.wallClockMs / 1000).toFixed(2)}s` : `${(item.meanDurationMs / 1000).toFixed(2)}s`;
-  const badgeSvg = generateBenchmarkBadgeSvg({ label: "SKILL-BENCHMARK", value: isRun ? `${score} (${passRate})` : `${passRate} PASS` });
-
-  let checksHtml = "";
-  if (isRun && item.evaluation?.deterministic?.checks && item.evaluation.deterministic.checks.length > 0) {
-    const rows = item.evaluation.deterministic.checks
-      .map(
-        (c: { readonly description: string; readonly passed: boolean; readonly durationMs: number }) =>
-          `<tr style="border-bottom:1px solid #222222"><td style="padding:8px 12px;font-family:monospace">${escapeXml(c.description)}</td><td style="padding:8px 12px;font-weight:800;color:${c.passed ? "#ffffff" : "#888888"}">${c.passed ? "PASSED" : "FAILED"}</td><td style="padding:8px 12px;color:#888888;font-family:monospace">${c.durationMs}ms</td></tr>`
-      )
-      .join("");
-    checksHtml = `<section style="margin-top:20px;border:2px solid #ffffff;box-shadow:4px 4px 0px #ffffff;padding:16px"><h2 style="font-size:13px;font-weight:900;text-transform:uppercase;margin-bottom:12px;color:#ffffff">DETERMINISTIC VERIFICATION CHECKS</h2><table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr style="background:#111111"><th style="padding:8px 12px;text-align:left">CHECK DESCRIPTION</th><th style="padding:8px 12px;text-align:left">VERDICT</th><th style="padding:8px 12px;text-align:left">DURATION</th></tr></thead><tbody>${rows}</tbody></table></section>`;
-  }
+  const title = escapeXml(options.title ?? `Benchmark Run: ${item.runId}`);
+  const score = item.compositeScore.toFixed(3);
+  const passRate = item.passedBenchmark ? "100.0%" : "0.0%";
+  const cost = item.actualCostUSD === undefined ? "UNVERIFIED" : `$${item.actualCostUSD.toFixed(4)}`;
+  const duration = `${(item.wallClockMs / 1000).toFixed(2)}s`;
+  const badgeSvg = generateBenchmarkBadgeSvg({ label: "SKILL-BENCHMARK", value: `${score} (${passRate})` });
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -87,33 +70,30 @@ export function generateReportCardHtml(
     <header class="header-box">
       <div>
         <h1 style="font-size:18px;font-weight:900;margin:0 0 6px;text-transform:uppercase">⚡ ${title}</h1>
-        <div style="font-size:11px;color:#888888">${isRun ? `Scenario: ${escapeXml(item.scenarioId)} &bull; Skill: ${escapeXml(item.skillId)} &bull; Model: ${escapeXml(item.modelId)}` : `Category: ${escapeXml(item.category)} &bull; Total Runs: ${item.totalRuns}`}</div>
+        <div style="font-size:11px;color:#888888">Scenario: ${escapeXml(item.scenarioId)} &bull; Skill: ${escapeXml(item.skillId)} &bull; Model: ${escapeXml(item.modelId)}</div>
       </div>
       <div>${badgeSvg}</div>
     </header>
     <section class="kpi-grid">
       <div class="kpi-cell"><div class="kpi-label">SCORE</div><div class="kpi-val">${score}</div></div>
       <div class="kpi-cell"><div class="kpi-label">PASS RATE</div><div class="kpi-val">${passRate}</div></div>
-      <div class="kpi-cell"><div class="kpi-label">ELO RATING</div><div class="kpi-val">${elo}</div></div>
       <div class="kpi-cell"><div class="kpi-label">DURATION</div><div class="kpi-val">${duration}</div></div>
       <div class="kpi-cell"><div class="kpi-label">COST (USD)</div><div class="kpi-val">${cost}</div></div>
     </section>
-    ${checksHtml}
   </main>
 </body>
 </html>`;
 }
 
 export function exportReportCard(
-  item: RunRecord | SkillBenchmarkSummary,
+  item: EligibleRunRecord,
   format: "svg" | "html",
   outputPath: string
 ): void {
   if (format === "svg") {
-    const isRun = isRunRecord(item);
-    const score = isRun ? item.compositeScore.toFixed(3) : item.averageScore.toFixed(3);
+    const score = item.compositeScore.toFixed(3);
     const svg = generateBenchmarkBadgeSvg({
-      label: isRun ? item.skillId : item.skillId,
+      label: item.skillId,
       value: score,
     });
     writeFileSync(outputPath, svg, "utf8");

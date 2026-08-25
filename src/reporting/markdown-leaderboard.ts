@@ -38,7 +38,8 @@ export function formatDuration(seconds: number): string {
   return `${minutes}m ${remainingSecs.toFixed(1)}s`;
 }
 
-export function formatCost(cost: number): string {
+export function formatCost(cost: number | undefined): string {
+  if (cost === undefined) return "UNVERIFIED";
   if (cost === 0) {
     return "$0.000";
   }
@@ -46,6 +47,11 @@ export function formatCost(cost: number): string {
     return `$${cost.toFixed(4)}`;
   }
   return `$${cost.toFixed(3)}`;
+}
+
+function formatCostDifference(cost: number | undefined): string {
+  if (cost === undefined) return "UNVERIFIED";
+  return `${cost >= 0 ? "+" : ""}${formatCost(cost)}`;
 }
 
 export function formatCacheHitRatio(ratio: number): string {
@@ -266,7 +272,9 @@ export function generateComparisonTable(
   const eloDiff = skillA.eloRating - skillB.eloRating;
   const scoreDiff = skillA.averageScore - skillB.averageScore;
   const durationDiff = skillA.meanDurationSeconds - skillB.meanDurationSeconds;
-  const costDiff = skillA.averageCostUSD - skillB.averageCostUSD;
+  const costDiff = skillA.averageCostUSD === undefined || skillB.averageCostUSD === undefined
+    ? undefined
+    : skillA.averageCostUSD - skillB.averageCostUSD;
   const rawCacheA = skillA.cacheHitRatio <= 1 ? skillA.cacheHitRatio * 100 : skillA.cacheHitRatio;
   const rawCacheB = skillB.cacheHitRatio <= 1 ? skillB.cacheHitRatio * 100 : skillB.cacheHitRatio;
   const cacheDiff = rawCacheA - rawCacheB;
@@ -278,7 +286,7 @@ export function generateComparisonTable(
     ["Elo Rating", `${Math.round(skillA.eloRating)}`, `${Math.round(skillB.eloRating)}`, `${eloDiff >= 0 ? "+" : ""}${Math.round(eloDiff)}`],
     ["Average Score", formatScore(skillA.averageScore), formatScore(skillB.averageScore), `${scoreDiff >= 0 ? "+" : ""}${scoreDiff.toFixed(1)}`],
     ["Mean Duration", formatDuration(skillA.meanDurationSeconds), formatDuration(skillB.meanDurationSeconds), `${durationDiff >= 0 ? "+" : ""}${durationDiff.toFixed(1)}s`],
-    ["Average Cost", formatCost(skillA.averageCostUSD), formatCost(skillB.averageCostUSD), `${costDiff >= 0 ? "+" : ""}${formatCost(costDiff)}`],
+    ["Average Cost", formatCost(skillA.averageCostUSD), formatCost(skillB.averageCostUSD), formatCostDifference(costDiff)],
     ["Cache Hit Ratio", formatCacheHitRatio(skillA.cacheHitRatio), formatCacheHitRatio(skillB.cacheHitRatio), `${cacheDiff >= 0 ? "+" : ""}${cacheDiff.toFixed(1)}%`],
     ["Total Runs", `${skillA.totalRuns}`, `${skillB.totalRuns}`, `${skillA.totalRuns - skillB.totalRuns >= 0 ? "+" : ""}${skillA.totalRuns - skillB.totalRuns}`],
   ];

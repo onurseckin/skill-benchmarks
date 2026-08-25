@@ -1,4 +1,4 @@
-import type { RunRecord, SkillBenchmarkSummary } from "../reporting/types.js";
+import type { CostVerifiedEligibleRunRecord, SkillBenchmarkSummary } from "../reporting/types.js";
 import type {
   EloDriftThresholds,
   MetricDelta,
@@ -164,8 +164,8 @@ export class RegressionDetector {
   public compareSkill(
     skillId: string,
     category: string,
-    baselineRuns: readonly RunRecord[],
-    candidateRuns: readonly RunRecord[],
+    baselineRuns: readonly CostVerifiedEligibleRunRecord[],
+    candidateRuns: readonly CostVerifiedEligibleRunRecord[],
     baselineSummary?: SkillBenchmarkSummary,
     candidateSummary?: SkillBenchmarkSummary
   ): SkillRegressionDelta {
@@ -184,8 +184,8 @@ export class RegressionDetector {
 
     const baselineDurationMs = computeMean(baselineRuns.map((r) => r.wallClockMs));
     const candidateDurationMs = computeMean(candidateRuns.map((r) => r.wallClockMs));
-    const baselineCostUSD = computeMean(baselineRuns.map((r) => r.totalCostUSD));
-    const candidateCostUSD = computeMean(candidateRuns.map((r) => r.totalCostUSD));
+    const baselineCostUSD = computeMean(baselineRuns.map((r) => r.actualCostUSD));
+    const candidateCostUSD = computeMean(candidateRuns.map((r) => r.actualCostUSD));
     const baselineTokensMean = computeMean(baselineRuns.map((r) => r.totalTokens));
     const candidateTokensMean = computeMean(candidateRuns.map((r) => r.totalTokens));
     const baselineCacheHitRatio = computeMean(baselineRuns.map((r) => r.cacheHitRatio));
@@ -252,8 +252,8 @@ export class RegressionDetector {
 
   public compareScenario(
     scenarioId: string,
-    baselineRuns: readonly RunRecord[],
-    candidateRuns: readonly RunRecord[]
+    baselineRuns: readonly CostVerifiedEligibleRunRecord[],
+    candidateRuns: readonly CostVerifiedEligibleRunRecord[]
   ): ScenarioRegressionDelta {
     const baseScores = baselineRuns.map((r) => r.compositeScore);
     const candScores = candidateRuns.map((r) => r.compositeScore);

@@ -1,5 +1,5 @@
 import type {
-  RunRecord,
+  CostVerifiedEligibleRunRecord,
   StatisticalMetrics,
   SkillBenchmarkSummary,
   LeaderboardEntry,
@@ -200,8 +200,8 @@ export interface GitHubCommentClientConfig {
 }
 
 export interface RegressionComparisonInput {
-  readonly baselineRuns: readonly RunRecord[];
-  readonly candidateRuns: readonly RunRecord[];
+  readonly baselineRuns: readonly CostVerifiedEligibleRunRecord[];
+  readonly candidateRuns: readonly CostVerifiedEligibleRunRecord[];
   readonly baselineSummaries?: readonly SkillBenchmarkSummary[];
   readonly candidateSummaries?: readonly SkillBenchmarkSummary[];
   readonly baselineLeaderboard?: readonly LeaderboardEntry[];

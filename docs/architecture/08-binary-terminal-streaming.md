@@ -70,7 +70,7 @@ The **PTY Multiplexer** ([`src/tunnel/pty-multiplexer.ts`](file:///Users/onursec
 |                         ▼                                                     |
 |  WEBSOCKET TUNNEL (src/tunnel/stream-tunnel.ts : Port 4001)                   |
 |   ├── Client 1: CLI TUI Player (bin/skill-benchmarks view <run-id>)           |
-|   ├── Client 2: Interactive Web Dashboard (data/dashboard.html)              |
+|   ├── Client 2: Interactive Web Dashboard export                             |
 |   └── Client 3: CI/CD Live Stream Ingestor                                    |
 +-------------------------------------------------------------------------------+
 ```

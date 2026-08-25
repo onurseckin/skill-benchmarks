@@ -218,11 +218,6 @@ export class ArenaRunner {
     const postRatingA = Math.round(preRatingA + kFactor * (scoreA - expectedA) * confidence);
     const postRatingB = Math.round(preRatingB + kFactor * (scoreB - expectedB) * confidence);
 
-    if (config.telemetryDb && !config.dryRun) {
-      const outcomeScore: 1 | 0.5 | 0 = winner === "model_a" ? 1 : winner === "model_b" ? 0 : 0.5;
-      config.telemetryDb.updateEloScore(config.modelA, config.modelB, outcomeScore, kFactor);
-    }
-
     return {
       matchId, scenarioId: config.scenarioId, skillId, modelA: config.modelA, modelB: config.modelB,
       resultA: trialA.result, resultB: trialB.result, winner, scoreA, scoreB,
