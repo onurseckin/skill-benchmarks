@@ -71,3 +71,9 @@ export {
   type ScenarioQueryFilter,
 } from "./scenario-loader.js";
 
+export {
+  ArenaRunner,
+  type ArenaBattleMatchConfig,
+  type ArenaBattleResult,
+} from "./arena-runner.js";
+

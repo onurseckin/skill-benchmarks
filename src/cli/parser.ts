@@ -1,14 +1,7 @@
 import type {
-  CliCommandName,
-  CliOutputFormat,
-  BenchmarkRunOptions,
-  TournamentOptions,
-  ReportOptions,
-  SyncOptions,
-  ListOptions,
-  ReplayCliOptions,
-  FuzzCliOptions,
-  CliParsedArgs,
+  CliCommandName, CliOutputFormat, BenchmarkRunOptions,
+  TournamentOptions, ReportOptions, SyncOptions, ListOptions,
+  ReplayCliOptions, FuzzCliOptions, ArenaCliOptions, CliParsedArgs,
 } from "./types.js";
 
 type FlagValueKind = "string" | "boolean" | "number" | "array";
@@ -42,8 +35,11 @@ const SPECS: readonly (readonly [string, FlagValueKind, readonly string[]])[] = 
   ["reasoning", "string", ["reasoning", "reasoning-effort", "reasoningEffort"]],
   ["thinkingBudget", "number", ["thinking-budget", "thinkingBudget", "budget-tokens", "budgetTokens"]],
   ["matrixThinking", "array", ["matrix-thinking", "matrixThinking", "thinking-matrix", "thinkingMatrix"]],
+  ["arena", "array", ["arena", "arena-models", "arenaModels"]],
   ["dryRun", "boolean", ["dry-run", "dryRun"]],
   ["mock", "boolean", ["mock"]],
+  ["exportCard", "string", ["export-card", "exportCard", "card", "report-card", "reportCard"]],
+  ["cardOutputPath", "string", ["card-output", "cardOutputPath", "card-out", "cardOut"]],
 ];
 
 const FLAG_MAP = new Map<string, FlagSpec>();
@@ -53,7 +49,7 @@ for (const [canonical, kind, aliases] of SPECS) {
 }
 
 const KNOWN_COMMANDS = new Set<CliCommandName>([
-  "run", "bench", "tournament", "report", "sync", "list", "replay", "fuzz", "help", "version",
+  "run", "bench", "arena", "tournament", "report", "sync", "list", "replay", "fuzz", "help", "version",
 ]);
 
 function toBool(v: unknown): boolean {
@@ -151,6 +147,7 @@ export function parseCliArgs(argv: readonly string[]): CliParsedArgs {
     reasoning: toStr(flags["reasoning"]) as BenchmarkRunOptions["reasoning"],
     thinkingBudget: toNum(flags["thinkingBudget"]),
     matrixThinking: toArr(flags["matrixThinking"]) as BenchmarkRunOptions["matrixThinking"],
+    arena: toArr(flags["arena"]).length > 0 ? toArr(flags["arena"]) : undefined,
     dryRun: toBool(flags["dryRun"]),
     live: toBool(flags["live"]),
     mock: toBool(flags["mock"]),
@@ -159,6 +156,27 @@ export function parseCliArgs(argv: readonly string[]): CliParsedArgs {
     dbPath: toStr(flags["dbPath"]), outputFormat: toStr(flags["format"]) as CliOutputFormat | undefined,
     outputPath: toStr(flags["outputPath"]), verbose: toBool(flags["verbose"]),
     judgeModelId: toStr(flags["judgeModelId"]), skipJudge: toBool(flags["skipJudge"]), cleanSandbox: toBool(flags["cleanSandbox"]),
+    exportCard: toStr(flags["exportCard"]) as "svg" | "html" | undefined,
+    cardOutputPath: toStr(flags["cardOutputPath"]),
+  };
+
+  const arenaArr = toArr(flags["arena"]);
+  const arenaModels = arenaArr.length > 0 ? arenaArr : toArr(flags["model"]);
+  const arenaOptions: ArenaCliOptions = {
+    scenarioIds: toArr(flags["scenario"]).concat(positionals),
+    skillId: toStr(flags["skill"]),
+    modelA: arenaModels[0],
+    modelB: arenaModels[1],
+    arenaModels,
+    judgeModelId: toStr(flags["judgeModelId"]),
+    judgeProviderId: toStr(flags["judgeProviderId"]),
+    kFactor: toNum(flags["kFactor"]),
+    dryRun: toBool(flags["dryRun"]),
+    live: toBool(flags["live"]),
+    verbose: toBool(flags["verbose"]),
+    outputFormat: toStr(flags["format"]) as CliOutputFormat | undefined,
+    outputPath: toStr(flags["outputPath"]),
+    dbPath: toStr(flags["dbPath"]),
   };
 
   const tournamentOptions: TournamentOptions = {
@@ -176,6 +194,8 @@ export function parseCliArgs(argv: readonly string[]): CliParsedArgs {
     skillId: toStr(flags["skill"]), modelId: toStr(flags["model"]),
     controlSkillId: toStr(flags["controlSkillId"]), title: toStr(flags["title"]),
     includeTrends: toBool(flags["includeTrends"]), includeCostEfficiency: toBool(flags["includeCostEfficiency"]),
+    exportCard: toStr(flags["exportCard"]) as "svg" | "html" | undefined,
+    cardOutputPath: toStr(flags["cardOutputPath"]),
   };
 
   const syncOptions: SyncOptions = {
@@ -207,6 +227,7 @@ export function parseCliArgs(argv: readonly string[]): CliParsedArgs {
   return {
     command, rawArgs: argv, flags: flags as Readonly<Record<string, string | boolean | number | readonly string[]>>, positionals,
     benchmarkOptions: command === "run" || command === "bench" ? benchmarkOptions : undefined,
+    arenaOptions: command === "arena" || arenaArr.length >= 2 ? arenaOptions : undefined,
     tournamentOptions: command === "tournament" ? tournamentOptions : undefined,
     reportOptions: command === "report" ? reportOptions : undefined,
     syncOptions: command === "sync" ? syncOptions : undefined,
@@ -227,6 +248,7 @@ function formatCmd(usage: string, desc: string, opts: readonly (readonly [string
 const RUN_OPTS: readonly (readonly [string, string])[] = [
   ["-s, --scenario <ids>", "Scenario IDs"], ["-k, --skill <ids>", "Skill IDs to evaluate"],
   ["-m, --model <ids>", "Model IDs to benchmark"], ["-p, --provider <id>", "Model provider ID"],
+  ["--arena <m1,m2>", "Run head-to-head battle between two models"],
   ["-c, --category <name>", "Scenario category filter"], ["-t, --tag <tags>", "Scenario tags filter"],
   ["-j, --concurrency <n>", "Parallel concurrency (default: 4)"], ["-r, --repeats <n>", "Repetitions (default: 1)"],
   ["--temperature <n>", "LLM temperature"], ["--timeout <sec>", "Scenario timeout in seconds"],
@@ -235,6 +257,18 @@ const RUN_OPTS: readonly (readonly [string, string])[] = [
   ["--clean-sandbox", "Clean sandboxes after completion"], ["--db <path>", "SQLite database path"],
   ["-f, --format <format>", "Output format: console, json, markdown, html"], ["-o, --output <path>", "Output file path"],
   ["-v, --verbose", "Enable verbose logs"], ["-h, --help", "Show help for run command"],
+];
+
+const ARENA_OPTS: readonly (readonly [string, string])[] = [
+  ["-s, --scenario <ids>", "Scenario IDs for head-to-head match"],
+  ["--arena <m1,m2>", "Two competing model IDs (e.g. claude-3-7-sonnet,o3-mini)"],
+  ["-k, --skill <id>", "Target skill ID to evaluate"],
+  ["--judge-model <id>", "Judge model ID (default: claude-3-7-sonnet)"],
+  ["--k-factor <n>", "Bradley-Terry Elo K-factor (default: 32)"],
+  ["--dry-run", "Simulate arena battle without token consumption"],
+  ["--db <path>", "SQLite database path for Elo leaderboard persistence"],
+  ["-v, --verbose", "Enable verbose telemetry"],
+  ["-h, --help", "Show help for arena command"],
 ];
 
 const TOURNAMENT_OPTS: readonly (readonly [string, string])[] = [
@@ -283,7 +317,13 @@ export function getHelpText(command?: CliCommandName): string {
   if (command === "run" || command === "bench") {
     return formatCmd(
       "skill-bench run [options] [scenario-ids...]", "Execute benchmark evaluation runs across scenarios, skills, and models.",
-      RUN_OPTS, ["skill-bench run -s git-workflow -k git-master -m gpt-4o", "skill-bench run -c coding -m gpt-4o -j 8"]
+      RUN_OPTS, ["skill-bench run -s git-workflow -k git-master -m gpt-4o", "skill-bench run --arena claude-3-7-sonnet,o3-mini -s git-worktrees"]
+    );
+  }
+  if (command === "arena") {
+    return formatCmd(
+      "skill-bench arena [options] [scenario-ids...]", "Run parallel head-to-head model arena battle match with Bradley-Terry Elo updates.",
+      ARENA_OPTS, ["skill-bench arena -s git-worktrees --arena claude-3-7-sonnet,o3-mini", "skill-bench arena -s fullstack-refactor --dry-run"]
     );
   }
   if (command === "tournament") {
@@ -329,6 +369,7 @@ export function getHelpText(command?: CliCommandName): string {
     "Commands:",
     "  run          Execute benchmark scenarios against skills and models",
     "  bench        Alias for run",
+    "  arena        Run head-to-head model arena battle match",
     "  tournament   Run pairwise Elo tournament between skills",
     "  report       Generate benchmark reports (console, json, markdown, html)",
     "  sync         Sync skills and scenarios from catalog repositories",

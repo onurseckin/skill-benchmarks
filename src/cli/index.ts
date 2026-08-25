@@ -48,6 +48,7 @@ import { parseCliArgs, getHelpText, getVersionText } from "./parser.js";
 
 import {
   runBenchmarkCommand,
+  runArenaCommand,
   runTournamentCommand,
   runReportCommand,
   runSyncCommand,
@@ -104,6 +105,7 @@ export {
   getHelpText,
   getVersionText,
   runBenchmarkCommand,
+  runArenaCommand,
   runTournamentCommand,
   runReportCommand,
   runSyncCommand,
@@ -138,6 +140,9 @@ export async function runCli(argv?: readonly string[]): Promise<number> {
       case "run":
       case "bench":
         result = await runBenchmarkCommand(parsed);
+        break;
+      case "arena":
+        result = await runArenaCommand(parsed);
         break;
       case "tournament":
         result = await runTournamentCommand(parsed);

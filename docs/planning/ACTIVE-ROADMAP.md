@@ -54,8 +54,10 @@ This document outlines the strategic product vision, future capability expansion
   28. `pci-compliance` (`pci-compliance`)
   29. `agent-browser` (`agent-browser`)
 
-### 2. High-Density Neo-Brutalist Dashboard & Telemetry HUD (`src/dashboard-ui/`, `src/reporting/`)
+### 2. High-Density Neo-Brutalist Dashboard, Report Card Exporter & REPL HUD (`src/dashboard-ui/`, `src/reporting/`, `src/tui/`)
 - ✅ **Side-by-Side Trajectory Diff Viewer**: Side-by-side before/after column layout and unified diff view toggle for inspectable workspace mutations.
+- ✅ **Standalone Shareable Report Card & Badge Exporter**: Authored `src/reporting/report-card.ts` with `--export-card <svg|html>` CLI flag for generating embeddable SVG badges and self-contained HTML report cards for GitHub READMEs.
+- ✅ **Interactive Terminal REPL HUD & ASCII Charts**: Authored `src/tui/hud.ts` and `src/tui/ascii-charts.ts` featuring ASCII Pareto frontiers, token spend sparklines, latency distribution percentiles, and instant keybinding shortcuts.
 - ✅ **Interactive SVG Chart Suite**: Token Velocity (tokens/sec curve), Latency Distribution Percentiles (P50, P90, P99, Max), and Cost-Pass Pareto Frontier.
 - ✅ **Real-Time WebSocket & SSE Stream Client**: Resilient WebSocket connection to `ws://localhost:4000/tunnel` with auto-reconnection and live throughput meters (`evt/s`).
 - ✅ **Terminal TUI Scrubber Upgrades**: Side-by-side terminal column diffs and instantaneous token generation velocity telemetry.

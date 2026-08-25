@@ -1,6 +1,7 @@
 export type CliCommandName =
   | "run"
   | "bench"
+  | "arena"
   | "tournament"
   | "report"
   | "sync"
@@ -28,6 +29,7 @@ export interface BenchmarkRunOptions {
   readonly reasoning?: "low" | "medium" | "high";
   readonly thinkingBudget?: number;
   readonly matrixThinking?: readonly ("none" | "low" | "medium" | "high" | "max")[];
+  readonly arena?: readonly string[];
   readonly dryRun?: boolean;
   readonly live?: boolean;
   readonly mock?: boolean;
@@ -41,6 +43,8 @@ export interface BenchmarkRunOptions {
   readonly judgeModelId?: string;
   readonly skipJudge?: boolean;
   readonly cleanSandbox?: boolean;
+  readonly exportCard?: "svg" | "html";
+  readonly cardOutputPath?: string;
 }
 
 export interface TournamentOptions {
@@ -69,6 +73,8 @@ export interface ReportOptions {
   readonly title?: string;
   readonly includeTrends?: boolean;
   readonly includeCostEfficiency?: boolean;
+  readonly exportCard?: "svg" | "html";
+  readonly cardOutputPath?: string;
 }
 
 export interface SyncOptions {
@@ -115,12 +121,30 @@ export interface FuzzCliOptions {
   readonly verbose?: boolean;
 }
 
+export interface ArenaCliOptions {
+  readonly scenarioIds?: readonly string[];
+  readonly skillId?: string;
+  readonly modelA?: string;
+  readonly modelB?: string;
+  readonly arenaModels?: readonly string[];
+  readonly judgeModelId?: string;
+  readonly judgeProviderId?: string;
+  readonly kFactor?: number;
+  readonly dryRun?: boolean;
+  readonly live?: boolean;
+  readonly verbose?: boolean;
+  readonly outputFormat?: CliOutputFormat;
+  readonly outputPath?: string;
+  readonly dbPath?: string;
+}
+
 export interface CliParsedArgs {
   readonly command: CliCommandName;
   readonly rawArgs: readonly string[];
   readonly flags: Readonly<Record<string, string | boolean | number | readonly string[]>>;
   readonly positionals: readonly string[];
   readonly benchmarkOptions?: BenchmarkRunOptions;
+  readonly arenaOptions?: ArenaCliOptions;
   readonly tournamentOptions?: TournamentOptions;
   readonly reportOptions?: ReportOptions;
   readonly syncOptions?: SyncOptions;

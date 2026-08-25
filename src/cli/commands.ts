@@ -1,36 +1,22 @@
 import { writeFileSync, readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import type {
-  CliParsedArgs,
-  CliCommandResult,
-  BenchmarkRunOptions,
-  TournamentOptions,
-  ReportOptions,
-  SyncOptions,
-  ListOptions,
-  ReplayCliOptions,
-  FuzzCliOptions,
+  CliParsedArgs, CliCommandResult, BenchmarkRunOptions,
+  TournamentOptions, ReportOptions, SyncOptions, ListOptions,
+  ReplayCliOptions, FuzzCliOptions,
 } from "./types.js";
-import {
-  bold,
-  green,
-  cyan,
-  yellow,
-  formatSectionHeader,
-  formatBadge,
-} from "./formatter.js";
+import { bold, green, cyan, yellow, formatSectionHeader, formatBadge } from "./formatter.js";
 import { getHelpText, getVersionText } from "./parser.js";
 import { ScenarioLoader } from "../runner/scenario-loader.js";
 import { SkillRegistry } from "../skills/registry.js";
 import { TelemetryDatabase } from "../reporting/db.js";
 import { generateMarkdownLeaderboard } from "../reporting/markdown-leaderboard.js";
 import { generateHtmlDashboard } from "../reporting/html-dashboard.js";
+import { exportReportCard } from "../reporting/index.js";
 import { generateStandaloneSpaHtml } from "../dashboard-ui/index.js";
 import {
-  aggregateAllSkills,
-  buildLeaderboardEntries,
-  buildCategoryLeaderboards,
-  extractCostEfficiencyPointsFromRuns,
+  aggregateAllSkills, buildLeaderboardEntries,
+  buildCategoryLeaderboards, extractCostEfficiencyPointsFromRuns,
 } from "../reporting/aggregator.js";
 import { MatrixSweepEngine } from "../sweep/index.js";
 import { ReplayEngine } from "../replay/replay-engine.js";
@@ -43,10 +29,16 @@ import { ScenarioSynthesizer } from "../generator/index.js";
 import type { ScenarioDefinition } from "../runner/types.js";
 import type { ChaosPerturbationMatrix } from "../chaos/index.js";
 import { getOrCreateModelDefinition } from "../models/index.js";
+import { runArenaCommand } from "./arena-command.js";
+
+export { runArenaCommand };
 
 export async function runBenchmarkCommand(args: CliParsedArgs): Promise<CliCommandResult> {
   const startTime = Date.now();
   const options = args.benchmarkOptions !== undefined ? args.benchmarkOptions : ({} as BenchmarkRunOptions);
+  if (options.arena && options.arena.length >= 2) {
+    return runArenaCommand(args);
+  }
   const scenarioLoader = new ScenarioLoader();
   let scenarioIds = options.scenarioIds.length > 0 ? [...options.scenarioIds] : [];
   if (scenarioIds.length === 0) {
@@ -163,6 +155,16 @@ export async function runReportCommand(args: CliParsedArgs): Promise<CliCommandR
     console.log(`  Evaluated Skills: ${leaderboard.length}\n`);
     for (const entry of leaderboard.slice(0, 10)) {
       console.log(`  #${entry.rank} ${bold(entry.skillId.padEnd(25))} PassRate: ${(entry.passRate * 100).toFixed(1)}% | Score: ${entry.averageScore.toFixed(1)} | Cost: $${entry.averageCostUSD.toFixed(4)}`);
+    }
+  }
+
+  if (options.exportCard) {
+    const targetItem = aggregates[0] ?? runs[0];
+    if (targetItem) {
+      const ext = options.exportCard === "svg" ? "svg" : "html";
+      const dest = options.cardOutputPath ?? resolve(process.cwd(), `report-card.${ext}`);
+      exportReportCard(targetItem, options.exportCard, dest);
+      console.log(`  ${formatBadge("success", "CARD")} Report card exported to ${cyan(dest)}`);
     }
   }
 

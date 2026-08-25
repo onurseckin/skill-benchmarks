@@ -17,6 +17,7 @@ export * from "./skills/index.js";
 export * from "./models/index.js";
 export * from "./dialog/index.js";
 export * from "./reporting/index.js";
+export * from "./tui/index.js";
 export { computeWelchTTest } from "./ci/index.js";
 export { generateHtmlDashboard } from "./reporting/html-dashboard.js";
 export const VISUAL_THEME_SPEC = "monochrome-neobrutalist";
