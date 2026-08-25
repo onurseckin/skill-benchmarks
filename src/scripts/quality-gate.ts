@@ -133,6 +133,7 @@ function runQualityAudit(): void {
   const archTelemetry = join(rootDir, "docs/architecture/06-telemetry-and-reporting.md");
   const archChaos = join(rootDir, "docs/architecture/07-fuzzing-and-chaos.md");
   const archStreaming = join(rootDir, "docs/architecture/08-binary-terminal-streaming.md");
+  const masterRoadmap = join(rootDir, "docs/planning/MASTER-ROADMAP-AND-CONTINUITY.md");
 
   const requiredDeliverables = [
     rootReadme,
@@ -140,6 +141,7 @@ function runQualityAudit(): void {
     dataLeaderboard,
     docsLeaderboard,
     dataDashboard,
+    masterRoadmap,
     usageReadme,
     usageInstall,
     usageConfig,
