@@ -1,242 +1,76 @@
-# CLI Command Manual
+# CLI Command Reference
 
-[Previous: Configuration](../getting-started/configuration.md) | [Table of Contents](../README.md) | [Next: Interactive Shell](interactive-shell.md)
+[Configuration](../getting-started/configuration.md) | [Single trial](../running-benchmarks/single-trial.md)
 
-This document provides a comprehensive command-line reference for the Agent Skill Benchmarks CLI (`bun run src/cli/index.ts`).
-
----
-
-## 1. Global Command Overview
-
-The CLI provides entry points for running single trials, orchestrating matrix sweeps, managing skill registries, replaying execution traces, generating reports, and stress testing scenarios with fuzzing.
+Use the package entry point:
 
 ```bash
-bun run src/cli/index.ts <command> [options]
+bun run cli -- <command> [options]
 ```
 
-### Supported Commands
+`bun run bin/skill-benchmarks <command> [options]` is equivalent. Do not invoke `src/cli/index.ts` directly.
 
-| Command | Aliases | Description |
-| :--- | :--- | :--- |
-| `run` | `bench` | Execute a benchmark trial or full parameter sweep |
-| `arena` | — | Execute head-to-head model matches with blind judge & Elo updates |
-| `tournament` | — | Run an Elo-rated tournament across skill pairs |
-| `report` | — | Generate aggregated leaderboards, HTML dashboards, and SVG badges |
-| `sync` | — | Download, index, and validate skills from the catalog |
-| `list` | — | List available scenarios, skills, models, or categories |
-| `replay` | — | Replay recorded trajectory frames in TUI or export to Web/HTML |
-| `fuzz` | — | Execute adversarial scenario mutations and boundary tests |
-| `help` | `-h`, `--help` | Display CLI help and usage instructions |
-| `version` | `--version` | Display the current platform version |
+## `run`
 
----
-
-## 2. Command Reference
-
-### `arena`
-Execute head-to-head model matches on a single benchmark scenario with double-blind judging and live Elo rating updates.
+`run` and its alias `bench` execute one or more benchmark cells. A cell is the combination of a scenario, skill, model, and repetition. With no mode selection, it uses the deterministic fake provider.
 
 ```bash
-bun run src/cli/index.ts arena --model claude-3-7-sonnet,o3-mini --scenario git-worktrees
+bun run cli -- run \
+  --mock \
+  --scenario git-worktrees \
+  --skill using-git-worktrees \
+  --model claude-3-7-sonnet \
+  --output-dir .benchmarks
 ```
 
-#### Options & Flags
+| Option | Meaning |
+| --- | --- |
+| `-s`, `--scenario <ids>` | Scenario ID or comma-separated IDs |
+| `-k`, `--skill <ids>` | Skill ID or comma-separated IDs |
+| `-m`, `--model <ids>` | Model ID or comma-separated IDs |
+| `-p`, `--provider <id>` | Explicit provider for the requested model |
+| `-j`, `--concurrency <n>` | Maximum simultaneous cells |
+| `-r`, `--repetitions <n>` | Repetitions per matrix cell |
+| `--mock` | Explicit deterministic fake mode |
+| `--live` | Explicit provider-backed mode; a provider key is required |
+| `--output-dir <path>` | Runtime root; default `.benchmarks/` |
+| `--db <path>` | SQLite index; default `<output-root>/db/benchmarks.sqlite` |
+| `--dry-run` | Creates simulated execution evidence without live provider work |
+| `--timeout <seconds>` | Wall-clock limit for a cell |
+| `--max-turns <n>` | Maximum interaction turns |
+| `--max-cost <usd>` | Cost limit for a cell |
 
-| Flag | Short Alias | Type | Default | Description |
-| :--- | :--- | :--- | :--- | :--- |
-| `--model` | `-m` | `string[]` | `["claude-3-7-sonnet", "o3-mini"]` | The two models competing in the arena |
-| `--scenario` | `-s` | `string` | `git-worktrees` | Benchmark scenario to execute |
-| `--judge-model` | — | `string` | `claude-3-7-sonnet` | Model to serve as the blind pairwise judge |
-| `--k-factor` | — | `number` | `32` | Bradley-Terry Elo K-factor |
-| `--db-path` | `--db` | `string` | `./benchmarks.db` | Target SQLite telemetry database path |
+`SKILL_BENCHMARKS_USE_MOCK=true` selects fake mode and `SKILL_BENCHMARKS_USE_MOCK=false` selects live mode. `SKILL_BENCHMARKS_OUTPUT_DIR` supplies the runtime root when `--output-dir` is absent. The only accepted mock environment values are `true` and `false`.
 
----
+## `report`
 
-### `run` / `bench`
-Execute a single benchmark trial or multi-dimensional matrix sweep across scenarios, skills, and models.
+`report` reads an existing SQLite database and prints or writes a summary. Supply `--db` for the database produced by `run`, and direct files to the existing output root's `exports/` directory.
 
 ```bash
-bun run src/cli/index.ts run [options]
+bun run cli -- report \
+  --db .benchmarks/db/benchmarks.sqlite \
+  --format markdown \
+  --output .benchmarks/exports/leaderboard.md
 ```
 
-#### Options & Flags
+| Option | Meaning |
+| --- | --- |
+| `--db <path>` | SQLite database to read |
+| `--format <console|json|markdown|html>` | Report rendering format |
+| `--output <path>` | Destination for markdown, HTML, or JSON output |
 
-| Flag | Short Alias | Type | Default | Description |
-| :--- | :--- | :--- | :--- | :--- |
-| `--scenario` | `-s` | `string[]` | `["git-worktrees"]` | Comma-separated scenario IDs or repeated flags |
-| `--skill` | `-k` | `string[]` | `["using-git-worktrees"]` | Comma-separated skill IDs or repeated flags |
-| `--model` | `-m` | `string[]` | `["claude-3-7-sonnet"]` | Comma-separated model IDs to benchmark |
-| `--provider` | `-p` | `string` | Inferred from model | Force specific provider (`anthropic`, `openai`, `deepseek`, `gemini`, `groq`, `ollama`) |
-| `--concurrency`| `-j` | `number` | `2` | Maximum concurrent trial workers |
-| `--repetitions`| `-r` | `number` | `1` | Number of repeated runs per cell for variance estimation |
-| `--temperature`| — | `number` | `0.0` | Sampling temperature for model inference |
-| `--timeout` | — | `number` | `300` | Timeout in seconds per trial |
-| `--max-turns` | — | `number` | `15` | Maximum agent turns before trial cutoff |
-| `--max-cost` | — | `number` | `1.00` | Maximum cost ceiling in USD per trial |
-| `--db-path` | `--db` | `string` | `./benchmarks.db` | Target SQLite telemetry database path |
-| `--clean-sandbox` | — | `boolean` | `true` | Teardown sandbox directories after execution |
-| `--skip-judge` | — | `boolean` | `false` | Skip subjective LLM judge evaluation |
-| `--verbose` | `-v` | `boolean` | `false` | Enable verbose real-time event logging |
+## Supporting commands
 
-#### Examples
+The package also exposes `arena`, `tournament`, `sync`, `list`, `replay`, and `fuzz`. Their behavior and output contracts are not part of the fake-first benchmark workflow. Use the built-in command help for their currently implemented options:
 
 ```bash
-# Run a single trial on git-worktrees with Claude 3.7 Sonnet
-bun run src/cli/index.ts run -s git-worktrees -k using-git-worktrees -m claude-3-7-sonnet
-
-# Run a 2x2 matrix sweep with 4 concurrent workers
-bun run src/cli/index.ts run \
-  -s git-worktrees,memory-leak \
-  -k using-git-worktrees,systematic-debugging \
-  -m claude-3-7-sonnet,gpt-4o \
-  -j 4 --db-path data/benchmark-results.db
+bun run cli -- help <command>
 ```
 
----
+## Runtime output
 
-### `tournament`
-Execute pairwise Elo tournament matches between agent skills across benchmark scenarios.
+`run` creates its output under `.benchmarks/` by default. The runtime root contains `db/`, `runs/`, `sweeps/`, and `exports/`. Each run has `manifest.json` and `result.json`, and each sweep has `sweeps/<sweep-id>/checkpoint.json`. Runtime output is ignored by Git; checked-in `data/` files are demonstrations, not generated benchmark results.
 
-```bash
-bun run src/cli/index.ts tournament [options]
-```
+## Result terminology
 
-#### Options & Flags
-
-| Flag | Short Alias | Type | Default | Description |
-| :--- | :--- | :--- | :--- | :--- |
-| `--scenario` | `-s` | `string[]` | `["git-worktrees"]` | Scenarios to evaluate in tournament |
-| `--skill` | `-k` | `string[]` | `["using-git-worktrees", "generic-agent"]` | Skill IDs competing in the tournament |
-| `--k-factor` | — | `number` | `32` | Elo K-factor determining rating volatility |
-| `--initial-rating` | — | `number` | `1500` | Default initial Elo rating for new skills |
-| `--max-matches` | — | `number` | `20` | Total match pairings to simulate |
-| `--db-path` | `--db` | `string` | `./benchmarks.db` | Telemetry database containing run history |
-
----
-
-### `report`
-Generate benchmark summary reports, markdown leaderboards, standalone SVG badges, or HTML report cards.
-
-```bash
-bun run src/cli/index.ts report [options]
-```
-
-#### Options & Flags
-
-| Flag | Short Alias | Type | Default | Description |
-| :--- | :--- | :--- | :--- | :--- |
-| `--format` | `-f` | `string` | `console` | Report format: `console`, `markdown`, `html`, `json` |
-| `--output` | `-o` | `string` | Inferred from format | Output file destination path |
-| `--export-card` | `--card` | `string` | — | Export standalone card format: `svg` or `html` |
-| `--card-output` | — | `string` | `report-card.<ext>` | Destination path for exported card |
-| `--db-path` | `--db` | `string` | `./benchmarks.db` | Source telemetry SQLite database |
-| `--control-skill` | — | `string` | `generic-agent` | Baseline skill ID used for delta comparisons |
-| `--title` | — | `string` | `"Agent Skill Benchmark Dashboard"` | Dashboard display title |
-| `--include-cost` | — | `boolean` | `true` | Include cost-efficiency analysis |
-| `--include-trends` | — | `boolean` | `true` | Include historical trend metrics |
-
-#### Examples
-
-```bash
-# Export Markdown Leaderboard
-bun run src/cli/index.ts report -f markdown -o docs/LEADERBOARD.md --db data/benchmark-results.db
-
-# Export Standalone HTML Dashboard
-bun run src/cli/index.ts report -f html -o data/dashboard.html --db data/benchmark-results.db
-```
-
----
-
-### `sync`
-Synchronize, download, parse, and register agent skills from the local catalog or remote repositories.
-
-```bash
-bun run src/cli/index.ts sync [options]
-```
-
-#### Options & Flags
-
-| Flag | Short Alias | Type | Default | Description |
-| :--- | :--- | :--- | :--- | :--- |
-| `--catalog` | — | `string` | `./catalog` | Source catalog path (JSON or Markdown) |
-| `--target-dir` | — | `string` | `./skills` | Directory where downloaded skills are stored |
-| `--force` | — | `boolean` | `false` | Force redownload and re-indexing of existing skills |
-| `--verify-only` | — | `boolean` | `false` | Validate skill manifests without downloading |
-
----
-
-### `list`
-Inspect available benchmark entities across the repository.
-
-```bash
-bun run src/cli/index.ts list [options]
-```
-
-#### Options & Flags
-
-| Flag | Short Alias | Type | Default | Description |
-| :--- | :--- | :--- | :--- | :--- |
-| `--target` | — | `string` | `all` | Filter target: `all`, `scenarios`, `skills`, `models` |
-| `--category` | `-c` | `string` | — | Filter scenarios or skills by category |
-
----
-
-### `replay`
-Replay recorded trajectory events in the terminal scrubber, export to Web replay HTML, or dump JSON event streams.
-
-```bash
-bun run src/cli/index.ts replay [options] [target-file]
-```
-
-#### Options & Flags
-
-| Flag | Short Alias | Type | Default | Description |
-| :--- | :--- | :--- | :--- | :--- |
-| `--format` | `-f` | `string` | `tui` | Player format: `tui`, `html`, `json` |
-| `--speed` | — | `number` | `1.0` | Playback speed multiplier (0.1x to 20x) |
-| `--live` | — | `boolean` | `false` | Start playback automatically |
-| `--output` | `-o` | `string` | `replay.html` | Destination path when exporting to HTML/JSON |
-| `--web` | — | `boolean` | `false` | Shorthand for `--format html` |
-
----
-
-### `fuzz`
-Run adversarial fuzz mutations against benchmark scenarios to test agent boundary handling and safety constraints.
-
-```bash
-bun run src/cli/index.ts fuzz [options]
-```
-
-#### Options & Flags
-
-| Flag | Short Alias | Type | Default | Description |
-| :--- | :--- | :--- | :--- | :--- |
-| `--scenario` | `-s` | `string[]` | `["git-worktrees"]` | Scenarios to mutate and test |
-| `--strategy` | — | `string[]` | `["instruction_obfuscation", "tool_fault_injection"]` | Fuzz strategies |
-| `--severity` | — | `string[]` | `["medium", "high"]` | Mutation severity levels |
-| `--mutations` | — | `number` | `4` | Number of mutated variants per scenario |
-| `--seed` | — | `number` | `42` | Pseudorandom seed for deterministic mutation |
-
----
-
-## 3. Standardized Exit Codes
-
-The CLI returns deterministic process exit codes for integration into CI/CD pipelines:
-
-| Exit Code | Classification | Meaning |
-| :--- | :--- | :--- |
-| `0` | `SUCCESS` | Command completed successfully with all checks passing |
-| `1` | `EXECUTION_FAILURE` | Benchmark trial failed or deterministic checks failed |
-| `2` | `INVALID_ARGUMENTS` | Invalid command syntax, unrecognized flags, or missing options |
-| `3` | `BUDGET_OR_TIMEOUT` | Spending ceiling exceeded or trial timed out |
-| `4` | `SANDBOX_ERROR` | Docker container failure, permission error, or I/O failure |
-
----
-
-## Next Steps
-
-Explore the interactive terminal shell and live status controls:
-
-- [Previous: Configuration](../getting-started/configuration.md)
-- [Next: Interactive Shell & Terminal Controls](interactive-shell.md)
-
+`COMPLETE` means the execution reached a terminal successful execution state. `PASS` means a benchmark pass with evaluation evidence. Fake and dry-run records are simulated and have zero synthetic provider cost; without evaluation evidence they are not benchmark passes.

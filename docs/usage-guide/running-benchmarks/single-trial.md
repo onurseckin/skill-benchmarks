@@ -1,144 +1,62 @@
-# Single Trial Execution
+# Running a Single Benchmark
 
-[Previous: Interactive Shell](../cli-reference/interactive-shell.md) | [Table of Contents](../README.md) | [Next: Matrix Sweeps](matrix-sweeps.md)
+[Configuration](../getting-started/configuration.md) | [CLI reference](../cli-reference/commands.md) | [Matrix sweeps](matrix-sweeps.md)
 
-This guide walks through executing and analyzing individual benchmark trials to evaluate an agent's performance on a specific scenario with a designated skill and model.
+A benchmark cell combines a scenario, a skill, and a model. The `run` command accepts one value for each, or lists that expand into a matrix. The command is fake-first: without a live selection it runs the deterministic fake provider and does not contact a provider API.
 
----
-
-## 1. Anatomy of a Benchmark Trial
-
-A single trial represents one end-to-end evaluation run combining three primary variables:
-- **Scenario ($S$)**: A task definition with workspace fixtures, instructions, limits, and validation checks
-- **Skill ($K$)**: An agent capability manifest containing instructions, guidelines, and tool rules
-- **Model ($M$)**: The LLM powering the agent's reasoning loop
-
-```mermaid
-sequenceDiagram
-    autonumber
-    participant CLI as Benchmark Runner
-    participant SB as Isolated Sandbox
-    participant LLM as Model Provider
-    participant EV as Deterministic Checks
-    participant JD as LLM Judge
-    participant DB as SQLite DB
-
-    CLI->>SB: 1. Setup workspace & extract fixtures
-    CLI->>SB: 2. Initialize Git repo & commit baseline
-    loop Agent Execution Loop (up to Max Turns)
-        CLI->>LLM: 3. Send system prompt + skill + turn history
-        LLM-->>CLI: 4. Return reasoning + tool calls
-        CLI->>SB: 5. Execute tool in sandbox (bash, fs, git)
-        SB-->>CLI: 6. Return stdout, stderr, exit code
-        CLI->>DB: 7. Record turn telemetry & resource sample
-    end
-    CLI->>EV: 8. Execute deterministic checks
-    EV-->>CLI: 9. Compute deterministic score (0.0 - 1.0)
-    CLI->>JD: 10. Run blind rubric evaluation
-    JD-->>CLI: 11. Return judge score & rationale
-    CLI->>DB: 12. Persist trial record & trajectory log
-```
-
----
-
-## 2. Executing a Single Trial
-
-To run a single trial from the command line:
+## Run the local deterministic trajectory
 
 ```bash
-bun run src/cli/index.ts run \
+bun run cli -- run \
+  --mock \
   --scenario git-worktrees \
   --skill using-git-worktrees \
   --model claude-3-7-sonnet \
-  --verbose
+  --output-dir .benchmarks
 ```
 
-### Specifying Options
+The CLI reports `COMPLETE` when the execution finishes. It reports `PASS` only when benchmark evaluation evidence exists and all required execution conditions succeed. A fake run normally completes with zero provider cost and an unevaluated benchmark result; it must not be read as a model-quality score.
+
+## Select a live provider intentionally
+
+Live execution must be selected with `--live` or `SKILL_BENCHMARKS_USE_MOCK=false`. The selected provider credential is required before provider construction.
 
 ```bash
-# Set custom turn count and cost limits
-bun run src/cli/index.ts run \
-  --scenario memory-leak \
-  --skill systematic-debugging \
-  --model gpt-4o \
-  --max-turns 10 \
-  --max-cost 0.50 \
-  --timeout 180 \
-  --db-path data/trials.db
+GEMINI_API_KEY="replace-with-a-real-key" bun run cli -- run \
+  --live \
+  --provider gemini \
+  --scenario git-worktrees \
+  --skill using-git-worktrees \
+  --model gemini-2-0-flash \
+  --output-dir .benchmarks
 ```
 
----
+Do not combine `--live` with `--mock`.
 
-## 3. Interpreting Trial Output
+## Inspect the run bundle
 
-Upon trial completion, the CLI prints a structured execution summary:
+The default output root is `.benchmarks/`. Every cell receives a distinct run directory:
 
 ```text
-================================================================================
-Trial Completed: git-worktrees [using-git-worktrees : claude-3-7-sonnet]
-================================================================================
-
-Overall Verdict:        PASS
-Composite Score:        0.94 / 1.00
-Execution Time:         24.8s
-Turns Consumed:         5 / 15
-Cost Incurred:          $0.0542 USD
-Prompt Tokens:          14,280
-Completion Tokens:      1,420
-
-Deterministic Evaluation Breakdown:
-  [PASS] check-worktree-manager-exists    (weight: 0.20) -> Score: 1.00
-  [PASS] check-worktree-methods           (weight: 0.30) -> Score: 1.00
-  [PASS] check-worktree-prune-regex       (weight: 0.30) -> Score: 1.00
-  [PASS] check-git-diff-clean             (weight: 0.20) -> Score: 0.70
-
-LLM Judge Rubric Evaluation:
-  Judge Model: claude-3-7-sonnet
-  Rubric: "Worktree Safety and Isolation" -> Score: 0.95
-  Rationale: "Agent properly wrapped all git worktree operations in safe abstractions, verified error handling for dirty working trees, and executed commands in isolated paths."
-
-Trajectory Log:
-  Saved to: data/trajectories/git-worktrees_using-git-worktrees_claude-3-7-sonnet.jsonl
+.benchmarks/runs/<run-id>/
+├── manifest.json
+├── result.json
+└── workspace/
 ```
 
----
+`manifest.json` identifies the effective provider, model, scenario, execution mode, and simulated status before provider work begins. `result.json` records the terminal status, termination reason, and available aggregate runtime values. The fake workspace is below the run directory; tool calls do not fall back to the repository checkout.
 
-## 4. Debugging Failed Trials
+The SQLite index is `.benchmarks/db/benchmarks.sqlite`, and the current sweep's resumable checkpoint is `.benchmarks/sweeps/<sweep-id>/checkpoint.json`. For a custom output root, replace `.benchmarks` in those paths with the value passed to `--output-dir`.
 
-When a trial fails or produces unexpected results:
+## Export a report
 
-### Step 1: Replay the Trajectory
-Launch the interactive TUI scrubber to step through the agent's exact tool calls:
+After a run, use the generated SQLite index and choose an explicit path below `exports/`:
 
 ```bash
-bun run src/cli/index.ts replay data/trajectories/git-worktrees_using-git-worktrees_claude-3-7-sonnet.jsonl
+bun run cli -- report \
+  --db .benchmarks/db/benchmarks.sqlite \
+  --format markdown \
+  --output .benchmarks/exports/single-trial.md
 ```
 
-### Step 2: Inspect the Git Diff
-Examine what files the agent modified during the run:
-
-```bash
-# In the TUI player, press '4' to view the Git diff tab
-# Or inspect the recorded diff in the JSON trajectory file
-```
-
-### Step 3: Run Without Sandbox Cleanup
-Pass `--no-clean-sandbox` to leave the workspace directory on disk for manual investigation:
-
-```bash
-bun run src/cli/index.ts run \
-  -s git-worktrees \
-  -k using-git-worktrees \
-  -m claude-3-7-sonnet \
-  --no-clean-sandbox
-```
-
----
-
-## Next Steps
-
-Scale from single trials to multi-dimensional matrix sweeps:
-
-- [Previous: Interactive Shell](../cli-reference/interactive-shell.md)
-- [Next: High-Throughput Matrix Sweeps](matrix-sweeps.md)
-
+The report summarizes stored run records. It does not turn an unevaluated fake execution into a benchmark pass.
