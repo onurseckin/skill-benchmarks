@@ -225,6 +225,11 @@ export class TelemetryDatabase {
     })();
   }
 
+  public getRunRecord(runId: string): RunRecord | undefined {
+    const row = this.db.prepare("SELECT * FROM runs WHERE run_id = ?").get(runId) as RunRow | null;
+    return row === null ? undefined : mapRowToRunRecord(row);
+  }
+
   public saveTelemetryEvents(events: ReadonlyArray<TelemetryEventRecord>): void {
     if (events.length === 0) return;
     const stmt = this.db.prepare(`

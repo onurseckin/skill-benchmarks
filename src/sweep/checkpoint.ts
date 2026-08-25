@@ -1,5 +1,5 @@
-import { existsSync, readFileSync, writeFileSync, renameSync, unlinkSync, mkdirSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { existsSync, lstatSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import * as os from "node:os";
 import type {
   CheckpointConfig,
@@ -12,6 +12,7 @@ import type {
 import type { TokenUsage } from "../runner/types.js";
 import { sanitizeBenchmarkArtifactValue } from "../shared/artifact-sanitization.js";
 import { incompatibleSweepPlanMessage } from "./sweep-plan.js";
+import { removeCheckpointTemporaryFiles, writeCheckpointSnapshot } from "./checkpoint-storage.js";
 
 const DEFAULT_METADATA_VERSION = "2.0.0";
 
@@ -77,57 +78,31 @@ export class CheckpointLedger implements ICheckpointLedger {
     };
   }
 
-  private ensureDirectoryExists(targetPath: string): void {
-    const parentDir = dirname(targetPath);
-    if (!existsSync(parentDir)) {
-      mkdirSync(parentDir, { recursive: true });
-    }
-  }
-
-  private rotateBackups(): void {
-    if (this.maxBackups <= 0 || !existsSync(this.filePath)) {
-      return;
-    }
-
-    for (let i = this.maxBackups - 1; i >= 1; i--) {
-      const srcBackup = `${this.filePath}.bak.${i}`;
-      const dstBackup = `${this.filePath}.bak.${i + 1}`;
-      if (existsSync(srcBackup)) {
-        try {
-          renameSync(srcBackup, dstBackup);
-        } catch {
-        }
-      }
-    }
-
-    const firstBackup = `${this.filePath}.bak.1`;
-    try {
-      if (existsSync(this.filePath)) {
-        const content = readFileSync(this.filePath, "utf8");
-        writeFileSync(firstBackup, content, "utf8");
-      }
-    } catch {
-    }
-  }
-
   async load(): Promise<CheckpointState | null> {
+    removeCheckpointTemporaryFiles(this.filePath);
     const candidates = [this.filePath];
     for (let i = 1; i <= this.maxBackups; i++) candidates.push(`${this.filePath}.bak.${i}`);
     for (const candidate of candidates) {
       if (!existsSync(candidate)) continue;
       try {
+        const stats = lstatSync(candidate);
+        if (!stats.isFile() || stats.isSymbolicLink()) throw new TypeError("Checkpoint evidence is unsafe");
         const parsed = JSON.parse(readFileSync(candidate, "utf8")) as CheckpointState;
         this.assertCompatibleCheckpoint(parsed);
         this.state = parsed;
         return parsed;
       } catch (error) {
-        if (error instanceof TypeError && error.message === incompatibleSweepPlanMessage) throw error;
+        if (error instanceof TypeError) throw error;
       }
     }
     return null;
   }
 
   async save(state: CheckpointState): Promise<void> {
+    await this.persistState(() => state);
+  }
+
+  private async persistState(createState: (current: CheckpointState) => CheckpointState): Promise<void> {
     let releaseLock: () => void = () => {};
     const previousLock = this.writeLock;
     this.writeLock = new Promise<void>((resolve) => {
@@ -137,6 +112,7 @@ export class CheckpointLedger implements ICheckpointLedger {
     await previousLock;
 
     try {
+      const state = createState(this.state);
       const updatedState: CheckpointState = {
         ...state,
         metadata: {
@@ -144,18 +120,9 @@ export class CheckpointLedger implements ICheckpointLedger {
           updatedAt: new Date().toISOString(),
         },
       };
-      this.state = updatedState;
-
-      this.ensureDirectoryExists(this.filePath);
-      this.rotateBackups();
-
-      const tmpPath = `${this.filePath}.tmp.${Date.now()}.${Math.random().toString(36).slice(2, 8)}`;
       const serialized = JSON.stringify(sanitizeBenchmarkArtifactValue(updatedState), null, 2);
-
-      writeFileSync(tmpPath, serialized, "utf8");
-      renameSync(tmpPath, this.filePath);
-    } catch (err) {
-      throw err;
+      writeCheckpointSnapshot(this.filePath, serialized, this.maxBackups);
+      this.state = updatedState;
     } finally {
       releaseLock();
     }
@@ -163,10 +130,6 @@ export class CheckpointLedger implements ICheckpointLedger {
 
   async recordCellSuccess(result: MatrixCellResult): Promise<void> {
     const cellId = result.cell.cellId;
-    const completedSet = new Set(this.state.completedCellIds);
-    completedSet.add(cellId);
-
-    const prevTokens = this.state.totalTokens;
     const cellTokens = result.scenarioResult?.totalTokens ?? {
       inputTokens: 0,
       outputTokens: 0,
@@ -175,69 +138,54 @@ export class CheckpointLedger implements ICheckpointLedger {
       totalTokens: 0,
     };
 
-    const newTokens: TokenUsage = {
-      inputTokens: prevTokens.inputTokens + cellTokens.inputTokens,
-      outputTokens: prevTokens.outputTokens + cellTokens.outputTokens,
-      cacheCreationInputTokens: prevTokens.cacheCreationInputTokens + cellTokens.cacheCreationInputTokens,
-      cacheReadInputTokens: prevTokens.cacheReadInputTokens + cellTokens.cacheReadInputTokens,
-      totalTokens: prevTokens.totalTokens + cellTokens.totalTokens,
-    };
-
     const cellCost = result.scenarioResult?.totalCostUSD ?? result.runRecord?.totalCostUSD ?? 0;
-    const newResults = {
-      ...this.state.completedResults,
-      [cellId]: result,
-    };
-
-    const updatedState: CheckpointState = {
-      ...this.state,
-      completedCellIds: Array.from(completedSet),
-      completedResults: newResults,
-      totalTokens: newTokens,
-      totalCostUSD: this.state.totalCostUSD + cellCost,
-      wallClockDurationMs: this.state.wallClockDurationMs + result.durationMs,
-    };
-
-    await this.save(updatedState);
+    await this.persistState((current) => {
+      const completedSet = new Set(current.completedCellIds);
+      completedSet.add(cellId);
+      const prevTokens = current.totalTokens;
+      const newTokens: TokenUsage = {
+        inputTokens: prevTokens.inputTokens + cellTokens.inputTokens,
+        outputTokens: prevTokens.outputTokens + cellTokens.outputTokens,
+        cacheCreationInputTokens: prevTokens.cacheCreationInputTokens + cellTokens.cacheCreationInputTokens,
+        cacheReadInputTokens: prevTokens.cacheReadInputTokens + cellTokens.cacheReadInputTokens,
+        totalTokens: prevTokens.totalTokens + cellTokens.totalTokens,
+      };
+      return {
+        ...current,
+        completedCellIds: Array.from(completedSet),
+        completedResults: { ...current.completedResults, [cellId]: result },
+        totalTokens: newTokens,
+        totalCostUSD: current.totalCostUSD + cellCost,
+        wallClockDurationMs: current.wallClockDurationMs + result.durationMs,
+      };
+    });
   }
 
   async recordCellFailure(result: MatrixCellResult): Promise<void> {
     const cellId = result.cell.cellId;
-    const failedSet = new Set(this.state.failedCellIds);
-    failedSet.add(cellId);
-
-    const newResults = {
-      ...this.state.completedResults,
-      [cellId]: result,
-    };
-
-    const updatedState: CheckpointState = {
-      ...this.state,
-      failedCellIds: Array.from(failedSet),
-      completedResults: newResults,
-      wallClockDurationMs: this.state.wallClockDurationMs + result.durationMs,
-    };
-
-    await this.save(updatedState);
+    await this.persistState((current) => {
+      const failedSet = new Set(current.failedCellIds);
+      failedSet.add(cellId);
+      return {
+        ...current,
+        failedCellIds: Array.from(failedSet),
+        completedResults: { ...current.completedResults, [cellId]: result },
+        wallClockDurationMs: current.wallClockDurationMs + result.durationMs,
+      };
+    });
   }
 
   async recordCellSkipped(result: MatrixCellResult): Promise<void> {
     const cellId = result.cell.cellId;
-    const skippedSet = new Set(this.state.skippedCellIds);
-    skippedSet.add(cellId);
-
-    const newResults = {
-      ...this.state.completedResults,
-      [cellId]: result,
-    };
-
-    const updatedState: CheckpointState = {
-      ...this.state,
-      skippedCellIds: Array.from(skippedSet),
-      completedResults: newResults,
-    };
-
-    await this.save(updatedState);
+    await this.persistState((current) => {
+      const skippedSet = new Set(current.skippedCellIds);
+      skippedSet.add(cellId);
+      return {
+        ...current,
+        skippedCellIds: Array.from(skippedSet),
+        completedResults: { ...current.completedResults, [cellId]: result },
+      };
+    });
   }
 
   isCellCompleted(cellId: string): boolean {

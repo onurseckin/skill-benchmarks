@@ -46,6 +46,9 @@ export async function executeSweepCell(input: CellExecutionInput): Promise<Matri
     startedAt,
   } as const;
   const artifactLayout = createCellArtifactLayout(cell);
+  if (telemetryDb.getRunRecord(cell.runId) !== undefined) {
+    return createTerminalIdentityConflict(cell, startedAt, startedMs);
+  }
   let scenarioResult: ScenarioResult | undefined;
   let evidenceCategory = "unknown";
   let attemptCount = 0;
@@ -152,6 +155,25 @@ export async function executeSweepCell(input: CellExecutionInput): Promise<Matri
     terminationReason,
     startedMs,
   });
+}
+
+function createTerminalIdentityConflict(
+  cell: MatrixCellDescriptor,
+  startedAt: string,
+  startedMs: number
+): MatrixCellResult {
+  return {
+    cell,
+    status: "failed",
+    attemptCount: 0,
+    startedAt,
+    completedAt: new Date().toISOString(),
+    durationMs: Date.now() - startedMs,
+    executionCompleted: false,
+    passedBenchmark: false,
+    error: "terminal run identity already exists",
+    retryable: false,
+  };
 }
 
 interface PersistTerminalCellInput {

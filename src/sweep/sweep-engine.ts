@@ -23,6 +23,7 @@ import { executeSweepCell } from "./cell-execution.js";
 import { acquireSweepLease, sweepLeaseFileName } from "./sweep-lease.js";
 import { bindSweepPlan, createSweepPlanFingerprint } from "./sweep-plan.js";
 import { validateMatrixSweepConfig } from "./sweep-config-validation.js";
+import { reconcileCheckpointTerminalEvidence } from "./terminal-reconciliation.js";
 export class MatrixSweepEngine implements IMatrixSweepEngine {
   public sweepId: string;
   private readonly constructorSweepId?: string;
@@ -157,6 +158,19 @@ export class MatrixSweepEngine implements IMatrixSweepEngine {
     return cells;
   }
   async run(config: MatrixSweepConfig): Promise<MatrixSweepSummary> {
+    try {
+      return await this.executeRun(config);
+    } catch (error) {
+      if (this.status !== "aborted") this.status = "failed";
+      this.emitEvent({
+        type: this.status === "aborted" ? "sweep:abort" : "sweep:error",
+        message: `Sweep ${this.sweepId} ${this.status}`,
+        payload: { terminalStatus: this.status },
+      });
+      throw error;
+    }
+  }
+  private async executeRun(config: MatrixSweepConfig): Promise<MatrixSweepSummary> {
     validateMatrixSweepConfig(config);
     this.applyConfiguredSweepIdentity(config.sweepId);
     const startedAt = new Date().toISOString();
@@ -198,10 +212,18 @@ export class MatrixSweepEngine implements IMatrixSweepEngine {
       totalPlannedCells: this.totalCells,
       planFingerprint,
     }, config.checkpoint);
-    if (config.checkpoint?.autoResume) await checkpointLedger.load();
-    await mkdir(join(config.runtimeConfig.outputRoot, "db"), { recursive: true });
-    const telemetryDb = new TelemetryDatabase(telemetryDbPath);
+    let telemetryDb: TelemetryDatabase;
     try {
+      await mkdir(join(config.runtimeConfig.outputRoot, "db"), { recursive: true });
+      telemetryDb = new TelemetryDatabase(telemetryDbPath);
+    } catch {
+      throw new TypeError("Benchmark database preflight failed");
+    }
+    try {
+    if (config.checkpoint?.autoResume) {
+      await checkpointLedger.load();
+      reconcileCheckpointTerminalEvidence(allPlannedCells, checkpointLedger.getState(), telemetryDb);
+    }
     this.emitEvent({
       type: "sweep:start",
       message: `Starting matrix sweep ${this.sweepId} with ${this.totalCells} cells`,
@@ -212,11 +234,34 @@ export class MatrixSweepEngine implements IMatrixSweepEngine {
     const cellQueue = [...allPlannedCells];
     const modelInFlight = new Map<string, number>();
     const providerInFlight = new Map<string, number>();
+    let checkpointPersistenceFailed = false;
+    const recordCheckpointFailure = (result: MatrixCellResult): MatrixCellResult => {
+      const failedResult: MatrixCellResult = {
+        ...result,
+        status: "failed",
+        executionCompleted: false,
+        passedBenchmark: false,
+        error: "checkpoint persistence failed",
+        retryable: false,
+      };
+      results.push(failedResult);
+      this.failedCount += 1;
+      this.emitEvent({ type: "cell:error", cellId: result.cell.cellId, message: `Cell ${result.cell.cellId} checkpoint persistence failed` });
+      return failedResult;
+    };
     const recordCellResult = async (result: MatrixCellResult): Promise<MatrixCellResult> => {
-      results.push(result);
       this.totalCellDurationMs += result.durationMs;
+      if (checkpointPersistenceFailed) return recordCheckpointFailure(result);
+      try {
+        if (result.executionCompleted) await checkpointLedger.recordCellSuccess(result);
+        else await checkpointLedger.recordCellFailure(result);
+      } catch {
+        checkpointPersistenceFailed = true;
+        if (!this.abortController.signal.aborted) this.abortController.abort(new Error("checkpoint persistence failed"));
+        return recordCheckpointFailure(result);
+      }
+      results.push(result);
       if (result.executionCompleted) {
-        await checkpointLedger.recordCellSuccess(result);
         this.completedCount += 1;
         this.totalTokensConsumed += result.scenarioResult?.totalTokens.totalTokens ?? 0;
         this.totalCostUSD += result.scenarioResult?.totalCostUSD ?? 0;
@@ -227,7 +272,6 @@ export class MatrixSweepEngine implements IMatrixSweepEngine {
           payload: { durationMs: result.durationMs, costUSD: result.scenarioResult?.totalCostUSD ?? 0, passedBenchmark: result.passedBenchmark },
         });
       } else {
-        await checkpointLedger.recordCellFailure(result);
         this.failedCount += 1;
         this.emitEvent({ type: "cell:error", cellId: result.cell.cellId, message: `Cell ${result.cell.cellId} ${result.error ?? "execution failed"}` });
         if (config.stopOnFirstFailure && !this.abortController.signal.aborted) await this.abort("Stopped on first failure");
@@ -296,7 +340,7 @@ export class MatrixSweepEngine implements IMatrixSweepEngine {
     }
     const completedAt = new Date().toISOString();
     const totalDurationMs = Date.now() - this.startTimeMs;
-    this.status = this.abortController.signal.aborted ? "aborted" : this.failedCount > 0 ? "failed" : "completed";
+    this.status = checkpointPersistenceFailed ? "failed" : this.abortController.signal.aborted ? "aborted" : this.failedCount > 0 ? "failed" : "completed";
     const summary: MatrixSweepSummary = {
       sweepId: this.sweepId,
       status: this.status,
@@ -313,9 +357,9 @@ export class MatrixSweepEngine implements IMatrixSweepEngine {
       completedAt,
     };
     this.emitEvent({
-      type: "sweep:complete",
-      message: `Sweep ${this.sweepId} completed: ${this.completedCount} executed, ${this.failedCount} failed in ${totalDurationMs}ms`,
-      payload: { totalCostUSD: summary.totalCostUSD, totalDurationMs },
+      type: this.status === "completed" ? "sweep:complete" : this.status === "aborted" ? "sweep:abort" : "sweep:error",
+      message: `Sweep ${this.sweepId} ${this.status}: ${this.completedCount} executed, ${this.failedCount} failed in ${totalDurationMs}ms`,
+      payload: { totalCostUSD: summary.totalCostUSD, totalDurationMs, terminalStatus: this.status },
     });
       return summary;
     } finally {

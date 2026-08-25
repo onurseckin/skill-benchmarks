@@ -141,6 +141,7 @@ export type SweepEventType =
   | "sweep:pause"
   | "sweep:resume"
   | "sweep:complete"
+  | "sweep:error"
   | "sweep:abort"
   | "cell:queued"
   | "cell:start"

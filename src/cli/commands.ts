@@ -100,9 +100,9 @@ export async function runBenchmarkCommand(args: CliParsedArgs): Promise<CliComma
   };
   const summary = await engine.run(sweepConfig);
 
-  const totalRuns = summary.completedCount + summary.failedCount;
-  console.log(formatSectionHeader(`Sweep Complete: ${summary.completedCount}/${totalRuns} completed in ${(summary.totalDurationMs / 1000).toFixed(1)}s`));
-  return { success: summary.failedCount === 0, exitCode: summary.failedCount === 0 ? 0 : 1, durationMs: Date.now() - startTime, data: summary };
+  const terminalLabel = summary.status === "completed" ? "Complete" : summary.status === "aborted" ? "Aborted" : "Failed";
+  console.log(formatSectionHeader(`Sweep ${terminalLabel}: ${summary.completedCount}/${summary.completedCount + summary.failedCount} completed in ${(summary.totalDurationMs / 1000).toFixed(1)}s`));
+  return { success: summary.status === "completed" && summary.failedCount === 0, exitCode: summary.status === "completed" && summary.failedCount === 0 ? 0 : 1, durationMs: Date.now() - startTime, data: summary };
 }
 
 export async function runTournamentCommand(args: CliParsedArgs): Promise<CliCommandResult> {

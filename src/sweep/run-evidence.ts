@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { existsSync, linkSync, lstatSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, linkSync, lstatSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { link, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import type { RunArtifactLayout } from "../infrastructure/workspace/types.js";
@@ -77,6 +77,19 @@ export function discardCommittedRunResult(layout: RunArtifactLayout): void {
   const stats = lstatSync(layout.resultPath);
   if (!stats.isFile() || stats.isSymbolicLink()) throw new EvidenceCommitError(true);
   unlinkSync(layout.resultPath);
+}
+
+export function removeStaleRunEvidenceTemporaryFiles(layout: RunArtifactLayout): void {
+  if (!existsSync(layout.runDirectory)) return;
+  const targets = ["manifest.json", "result.json", "terminal-failure.json"];
+  const patterns = targets.map((target) => new RegExp(`^\\.${target.replace(".", "\\.")}\\.[0-9a-f-]{36}\\.tmp$`));
+  for (const entry of readdirSync(layout.runDirectory)) {
+    if (!patterns.some((pattern) => pattern.test(entry))) continue;
+    const path = join(layout.runDirectory, entry);
+    const stats = lstatSync(path);
+    if (!stats.isFile() || stats.isSymbolicLink()) throw new TypeError("Terminal evidence temporary artifact is unsafe");
+    unlinkSync(path);
+  }
 }
 
 export function mapTerminalStatus(reason: RunTerminationReason): RunStatus {
