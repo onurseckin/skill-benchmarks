@@ -101,6 +101,54 @@ function scanFileForViolations(filePath: string): readonly Violation[] {
   return violations;
 }
 
+interface PaletteEntry {
+  readonly color: string;
+  readonly lines: readonly number[];
+}
+
+export function normalizeHex(raw: string): string | null {
+  const body = raw.slice(1).toLowerCase();
+  if (body.length === 3 || body.length === 4) {
+    return `${body[0]}${body[0]}${body[1]}${body[1]}${body[2]}${body[2]}`;
+  }
+  if (body.length === 6 || body.length === 8) {
+    return body.slice(0, 6);
+  }
+  return null;
+}
+
+export function auditDashboardPalette(html: string): readonly PaletteEntry[] {
+  const offenders = new Map<string, number[]>();
+  const lines = html.split("\n");
+
+  for (const [lineNumber, rawLine] of lines.entries()) {
+    const matches = rawLine.match(/#[0-9a-fA-F]+\b/g);
+    if (matches === null) {
+      continue;
+    }
+    for (const match of matches) {
+      const body = normalizeHex(match);
+      if (body === null) {
+        continue;
+      }
+      if (body.slice(0, 2) === body.slice(2, 4) && body.slice(2, 4) === body.slice(4, 6)) {
+        continue;
+      }
+      const key = `#${body}`;
+      const existing = offenders.get(key);
+      if (existing === undefined) {
+        offenders.set(key, [lineNumber + 1]);
+      } else {
+        existing.push(lineNumber + 1);
+      }
+    }
+  }
+
+  return [...offenders.entries()]
+    .map(([color, lineList]) => ({ color, lines: lineList }))
+    .sort((left, right) => right.lines.length - left.lines.length);
+}
+
 function runQualityAudit(): void {
   try {
     execSync("bun x tsc --noEmit", { stdio: "pipe" });
@@ -175,8 +223,19 @@ function runQualityAudit(): void {
   }
 
   const dashContent = readFileSync(dataDashboard, "utf8");
-  if (!dashContent.includes("JetBrains Mono") || !dashContent.includes("#000000")) {
-    process.stderr.write(`Dashboard HTML missing neo-brutalist styling: ${dataDashboard}\n`);
+  if (!dashContent.includes("JetBrains Mono")) {
+    process.stderr.write(`Dashboard HTML missing JetBrains Mono typeface: ${dataDashboard}\n`);
+    process.exit(1);
+  }
+  const chromatic = auditDashboardPalette(dashContent);
+  if (chromatic.length > 0) {
+    const total = chromatic.reduce((sum, entry) => sum + entry.lines.length, 0);
+    process.stderr.write(`\nDashboard palette is not monochrome: ${total} non-greyscale occurrence(s) in ${dataDashboard}\n`);
+    for (const entry of chromatic) {
+      const shown = entry.lines.slice(0, 12).join(", ");
+      const suffix = entry.lines.length > 12 ? ", ..." : "";
+      process.stderr.write(`- ${entry.color} x${entry.lines.length} (lines ${shown}${suffix})\n`);
+    }
     process.exit(1);
   }
 
@@ -202,9 +261,11 @@ function runQualityAudit(): void {
   }
 
   const allViolations: Violation[] = [];
+  let scannedFileCount = 0;
 
   try {
     const sourceFiles = collectSourceFiles(srcDir);
+    scannedFileCount = sourceFiles.length;
     for (const file of sourceFiles) {
       const fileViolations = scanFileForViolations(file);
       allViolations.push(...fileViolations);
@@ -223,9 +284,11 @@ function runQualityAudit(): void {
   }
 
   process.stdout.write(
-    `\n✅ Quality Gate Passed: All source files verified (0 comments, <= 400 lines).\n${rootDir}/screenshots/dashboard-preview-desktop.png\n${rootDir}/screenshots/dashboard-preview-tablet.png\n${rootDir}/screenshots/dashboard-preview-mobile.png\n${rootDir}/visual-report.json\n\n`
+    `\n✅ Quality Gate Passed: ${scannedFileCount} source file(s) verified (0 comments, <= ${MAXIMUM_ALLOWED_LINES} lines); all required deliverables present; dashboard palette verified monochrome.\nStatic checks only — this gate performs no viewport rendering and produces no visual evidence.\n\n`
   );
   process.exit(0);
 }
 
-runQualityAudit();
+if (import.meta.main) {
+  runQualityAudit();
+}
