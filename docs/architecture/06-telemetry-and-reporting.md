@@ -97,4 +97,13 @@ The telemetry pipeline renders three primary deliverables:
 
 ---
 
+## 4. Telemetry Module Reference
+
+- [`src/reporting/db.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/reporting/db.ts): SQLite database connection manager and schema DDL.
+- [`src/reporting/aggregator.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/reporting/aggregator.ts): Statistical aggregation and Pareto front algorithms.
+- [`src/reporting/markdown-leaderboard.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/reporting/markdown-leaderboard.ts): Markdown leaderboard generator.
+- [`src/reporting/html-dashboard.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/reporting/html-dashboard.ts): Interactive Neo-Brutalist dashboard generator.
+
+---
+
 [← Previous: 05. Dual-Layer Evaluation](05-dual-layer-evaluation.md) | [Architecture Index](README.md) | [Next: 07. Scenario Fuzzing & Chaos →](07-fuzzing-and-chaos.md)

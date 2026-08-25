@@ -106,4 +106,13 @@ Skill-Benchmarks resolves non-transitive pairwise judge outcomes into calibrated
 
 ---
 
+## 5. Evaluation Module Reference
+
+- [`src/eval/deterministic.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/eval/deterministic.ts): AST parsing, syntax tree inspection, and test execution runner.
+- [`src/eval/llm-judge.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/eval/llm-judge.ts): Blind pairwise judge debate coordinator.
+- [`src/eval/pairwise-elo.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/eval/pairwise-elo.ts): Iterative Bradley-Terry Elo estimation solver.
+- [`src/arena/consensus-scorer.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/arena/consensus-scorer.ts): Multi-judge consensus aggregation.
+
+---
+
 [← Previous: 04. Runner & Interceptor](04-runner-and-interceptor.md) | [Architecture Index](README.md) | [Next: 06. Telemetry & Reporting →](06-telemetry-and-reporting.md)
