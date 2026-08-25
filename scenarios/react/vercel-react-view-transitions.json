@@ -1,0 +1,86 @@
+{
+  "id": "vercel-react-view-transitions",
+  "name": "React View Transitions, Route Morphing, and Concurrent Suspense Boundaries",
+  "category": "react",
+  "difficulty": "hard",
+  "targetSkill": "vercel-react-view-transitions",
+  "baselineModel": "claude-3-7-sonnet-20250219",
+  "description": "Next.js/React View Transitions benchmark scenario evaluating an agent's capability to integrate seamless DOM element morphing with the View Transitions API, handle React Suspense transitions with useTransition(), isolate transition boundaries, and maintain accessibility for reduced motion users.",
+  "instructions": "You are tasked with implementing the React View Transitions harness in `src/components/view-transition-provider.ts` and `src/components/morphing-card.ts`.\n\n### Task Objectives:\n1. **View Transition Hook & Orchestrator (`ViewTransitionManager`)**:\n   - Wrap React state updates with `document.startViewTransition()` when supported by the browser engine.\n   - Fallback smoothly to direct synchronous state execution in environments without native View Transition support.\n   - Support transition lifecycle hooks: `onBeforeTransition`, `onAfterTransition`.\n\n2. **Shared Element Tag Binding (`MorphingCardHelper`)**:\n   - Generate unique, collision-free `view-transition-name` identifiers for morphing elements.\n   - Clean up transition tags post-animation to avoid DOM naming collisions.\n   - Respect `@media (prefers-reduced-motion: reduce)` user accessibility settings.\n\n3. **Type Safety & Quality Standards**:\n   - Pure TypeScript, immutable readonly data structures, 0 any, 0 comments.",
+  "workspace": {
+    "fixtures": {
+      "src/types/transitions.ts": "export interface TransitionOptions {\n  readonly name?: string;\n  readonly skipIfReducedMotion?: boolean;\n  readonly onBefore?: () => void | Promise<void>;\n  readonly onAfter?: () => void | Promise<void>;\n}\n\nexport interface SharedElementDescriptor {\n  readonly id: string;\n  readonly transitionTag: string;\n  readonly boundingBox?: { readonly top: number; readonly left: number; readonly width: number; readonly height: number };\n}\n\nexport interface TransitionState {\n  readonly isPending: boolean;\n  readonly activeTransitionName?: string;\n  readonly isNativeSupported: boolean;\n}\n",
+      "src/components/view-transition-provider.ts": "import type { TransitionOptions, TransitionState } from \"../types/transitions.js\";\n\nexport class ViewTransitionManager {\n  private isPending = false;\n  private activeName?: string;\n\n  public getState(): TransitionState {\n    return {\n      isPending: this.isPending,\n      activeTransitionName: this.activeName,\n      isNativeSupported: typeof document !== \"undefined\" && \"startViewTransition\" in document,\n    };\n  }\n\n  public async executeTransition(updateFn: () => void | Promise<void>, options?: TransitionOptions): Promise<void> {\n    throw new Error(\"executeTransition not implemented\");\n  }\n}\n",
+      "src/components/morphing-card.ts": "import type { SharedElementDescriptor } from \"../types/transitions.js\";\n\nexport class MorphingCardHelper {\n  public static createTransitionStyle(elementId: string): { readonly \"view-transition-name\": string } {\n    throw new Error(\"createTransitionStyle not implemented\");\n  }\n\n  public static cleanupTransitionTag(element: HTMLElement): void {\n    throw new Error(\"cleanupTransitionTag not implemented\");\n  }\n}\n",
+      "package.json": "{\n  \"name\": \"vercel-react-view-transitions-fixture\",\n  \"version\": \"1.0.0\",\n  \"type\": \"module\",\n  \"scripts\": {\n    \"build\": \"tsc --noEmit\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^22.13.0\",\n    \"typescript\": \"^5.7.3\"\n  }\n}\n",
+      "tsconfig.json": "{\n  \"compilerOptions\": {\n    \"target\": \"ES2022\",\n    \"module\": \"NodeNext\",\n    \"moduleResolution\": \"NodeNext\",\n    \"strict\": true,\n    \"esModuleInterop\": true,\n    \"skipLibCheck\": true,\n    \"forceConsistentCasingInFileNames\": true,\n    \"declaration\": true\n  },\n  \"include\": [\"src/**/*\"]\n}\n"
+    },
+    "initialGitCommit": "Initial commit for vercel-react-view-transitions benchmark fixture"
+  },
+  "limits": {
+    "maxTurns": 15,
+    "maxCostUSD": 1.0,
+    "maxWallClockTimeMs": 300000
+  },
+  "evaluation": {
+    "deterministicChecks": [
+      {
+        "id": "check-transition-manager-methods",
+        "name": "Verify ViewTransitionManager transition execution",
+        "type": "file_content",
+        "filePath": "src/components/view-transition-provider.ts",
+        "fileContentPattern": "executeTransition|getState",
+        "weight": 0.25
+      },
+      {
+        "id": "check-morphing-card-helper-methods",
+        "name": "Verify MorphingCardHelper style and cleanup helpers",
+        "type": "file_content",
+        "filePath": "src/components/morphing-card.ts",
+        "fileContentPattern": "createTransitionStyle|cleanupTransitionTag",
+        "weight": 0.25
+      },
+      {
+        "id": "check-transition-options-types",
+        "name": "Verify TransitionOptions interface",
+        "type": "file_content",
+        "filePath": "src/types/transitions.ts",
+        "fileContentPattern": "TransitionOptions|SharedElementDescriptor",
+        "weight": 0.25
+      },
+      {
+        "id": "check-view-transition-name-support",
+        "name": "Verify view-transition-name css property in types",
+        "type": "file_content",
+        "filePath": "src/components/morphing-card.ts",
+        "fileContentPattern": "view-transition-name",
+        "weight": 0.25
+      }
+    ],
+    "judgeRubrics": [
+      {
+        "name": "React View Transition & Shared Element Architecture",
+        "category": "react",
+        "weight": 0.6,
+        "description": "Evaluates the agent's capability to integrate document.startViewTransition with React state updates, manage dynamic view-transition-name styles, and handle reduced motion fallbacks.",
+        "criteria": {
+          "1": "Throws uncaught errors in non-browser environments, ignores reduced motion, or causes transition name collisions.",
+          "3": "Implements basic view transition wrapper, but fails to handle async state updates or proper cleanup.",
+          "5": "Exemplary React View Transitions architecture: seamless startViewTransition integration, collision-free shared element tags, robust reduced motion fallbacks, and complete type safety."
+        }
+      },
+      {
+        "name": "TypeScript Modularity & Hygiene",
+        "category": "general",
+        "weight": 0.4,
+        "description": "Evaluates TypeScript interface design, async error boundaries, and zero-any compliance.",
+        "criteria": {
+          "1": "Broken types or frequent use of any.",
+          "3": "Standard types with basic error handling.",
+          "5": "Strictly typed, clean architecture with 0 any annotations."
+        }
+      }
+    ],
+    "passThreshold": 80
+  }
+}

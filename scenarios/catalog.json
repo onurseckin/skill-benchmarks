@@ -1,7 +1,7 @@
 {
   "version": "1.1.0",
   "generatedAt": "2026-08-25T02:00:37.682Z",
-  "totalScenarios": 19,
+  "totalScenarios": 29,
   "categories": [
     "coding",
     "frontend",
@@ -210,6 +210,69 @@
       "targetSkill": "convex-performance-audit",
       "path": "scenarios/optimization/convex-performance-audit.json",
       "description": "Reactive database optimization scenario evaluating an agent's capability to audit Convex queries, identify unindexed table scans, optimize reactive subscription bandwidth, construct compound indices with .withIndex(), eliminate N+1 relational query anti-patterns, and measure database read/write document counts."
+    },
+    {
+      "id": "vercel-react-view-transitions",
+      "name": "React View Transitions, Route Morphing, and Concurrent Suspense Boundaries",
+      "category": "react",
+      "difficulty": "hard",
+      "targetSkill": "vercel-react-view-transitions",
+      "path": "scenarios/react/vercel-react-view-transitions.json",
+      "description": "Next.js/React View Transitions benchmark scenario evaluating an agent's capability to integrate seamless DOM element morphing with the View Transitions API, handle React Suspense transitions with useTransition(), isolate transition boundaries, and maintain accessibility for reduced motion users."
+    },
+    {
+      "id": "request-refactor-plan",
+      "name": "Safe Multi-Stage Code Refactoring Planner and Invariant Checker",
+      "category": "coding",
+      "difficulty": "hard",
+      "targetSkill": "request-refactor-plan",
+      "path": "scenarios/coding/request-refactor-plan.json",
+      "description": "Code refactoring benchmark scenario evaluating an agent's capability to analyze complex legacy codebases, synthesize structured step-by-step refactoring plans with explicit rollback strategies, verify code invariants across refactoring stages, and compute risk scores."
+    },
+    {
+      "id": "firebase-security-rules-auditor",
+      "name": "Firebase Firestore and Storage Security Rules Static Vulnerability Auditor",
+      "category": "security",
+      "difficulty": "hard",
+      "targetSkill": "firebase-security-rules-auditor",
+      "path": "scenarios/security/firebase-security-rules-auditor.json",
+      "description": "Cloud security benchmark scenario evaluating an agent's capability to parse Firebase Security Rules (Firestore & Storage), detect insecure wildcard permissions (allow read, write: if true;), diagnose unauthorized cross-tenant data access, verify request.auth.uid validation, and synthesize hardened security rules."
+    },
+    {
+      "id": "skill-vetter",
+      "name": "AI Agent Skill Sandbox Isolation, Static Permission Analysis, and AST Vetter",
+      "category": "security",
+      "difficulty": "hard",
+      "targetSkill": "skill-vetter",
+      "path": "scenarios/security/skill-vetter.json",
+      "description": "AI agent security benchmark scenario evaluating an agent's capability to statically vet third-party agent skills, detect prompt injection payloads in tool descriptions, flag unauthorized filesystem/network permission escalations, and enforce Docker container isolation boundaries."
+    },
+    {
+      "id": "security-review",
+      "name": "Automated OWASP Top-10 Vulnerability and Static Code Security Reviewer",
+      "category": "security",
+      "difficulty": "hard",
+      "targetSkill": "security-review",
+      "path": "scenarios/security/security-review.json",
+      "description": "Application security benchmark scenario evaluating an agent's capability to audit fullstack codebases against OWASP Top 10 vulnerabilities: SQL injection, SSRF, broken authentication, IDOR, XML External Entity (XXE), and insecure deserialization, outputting structured SARIF reports."
+    },
+    {
+      "id": "pci-compliance",
+      "name": "Payment Card Industry Data Security Standard (PCI-DSS 4.0) Compliance Engine",
+      "category": "security",
+      "difficulty": "hard",
+      "targetSkill": "pci-compliance",
+      "path": "scenarios/security/pci-compliance.json",
+      "description": "Fintech security and compliance benchmark scenario evaluating an agent's capability to audit payment processing code, detect Primary Account Number (PAN) and CVV/CVC storage violations, enforce TLS 1.3 encryption-in-transit, ensure PAN tokenization with AES-256-GCM, and mask card numbers according to PCI-DSS 4.0 Requirement 3.4."
+    },
+    {
+      "id": "agent-browser",
+      "name": "Autonomous Browser Agent Runtime, Accessibility Tree Traversal, and Action Grounding",
+      "category": "frontend",
+      "difficulty": "hard",
+      "targetSkill": "agent-browser",
+      "path": "scenarios/frontend/agent-browser.json",
+      "description": "Autonomous browser agent benchmark scenario evaluating an agent's capability to ground natural language instructions into interactive browser actions, parse Accessibility (AX) trees into compact token-efficient representations, compute interactive bounding boxes, and handle multi-step web navigation workflows."
     }
   ],
   "canonicalSkills": [

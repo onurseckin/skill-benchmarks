@@ -1,0 +1,86 @@
+{
+  "id": "pci-compliance",
+  "name": "Payment Card Industry Data Security Standard (PCI-DSS 4.0) Compliance Engine",
+  "category": "security",
+  "difficulty": "hard",
+  "targetSkill": "pci-compliance",
+  "baselineModel": "claude-3-7-sonnet-20250219",
+  "description": "Fintech security and compliance benchmark scenario evaluating an agent's capability to audit payment processing code, detect Primary Account Number (PAN) and CVV/CVC storage violations, enforce TLS 1.3 encryption-in-transit, ensure PAN tokenization with AES-256-GCM, and mask card numbers according to PCI-DSS 4.0 Requirement 3.4.",
+  "instructions": "You are tasked with implementing the PCI-DSS 4.0 compliance engine in `src/pci/card-sanitizer.ts` and `src/pci/tokenization.ts`.\n\n### Task Objectives:\n1. **PAN Masking & Luhn Validation (`PaymentCardSanitizer`)**:\n   - Implement the Luhn checksum algorithm (`isValidLuhn`) to detect valid card PAN structures.\n   - Mask PAN according to PCI-DSS 4.0 Requirement 3.4: render only the first 6 (BIN) and last 4 digits (e.g. `411111******1111`), masking all middle digits.\n   - Explicitly detect and block any storage or logging of sensitive authentication data (SAD: CVV, CVC, CID, PIN blocks).\n\n2. **PAN Tokenization Gateway Client (`TokenizationClient`)**:\n   - Provide AES-256-GCM encryption for in-flight card tokenization exchanges.\n   - Return opaque PCI-compliant tokens (`tok_live_...`).\n\n3. **Type Safety & Repository Standards**:\n   - Pure TypeScript, 0 comments, 0 any, <= 400 lines.",
+  "workspace": {
+    "fixtures": {
+      "src/pci/types.ts": "export interface RawCardInput {\n  readonly cardNumber: string;\n  readonly expMonth: number;\n  readonly expYear: number;\n  readonly cvc: string;\n  readonly cardholderName?: string;\n}\n\nexport interface SanitizedCardData {\n  readonly maskedPan: string;\n  readonly bin: string;\n  readonly last4: string;\n  readonly expMonth: number;\n  readonly expYear: number;\n  readonly isValidLuhn: boolean;\n}\n\nexport interface PaymentTokenRecord {\n  readonly token: string;\n  readonly maskedPan: string;\n  readonly brand: \"visa\" | \"mastercard\" | \"amex\" | \"discover\" | \"unknown\";\n  readonly createdAt: number;\n  readonly expiresAt: number;\n}\n\nexport interface PciViolation {\n  readonly ruleId: \"PCI_REQ_3_2_SAD\" | \"PCI_REQ_3_4_PAN_MASK\" | \"PCI_REQ_4_1_ENCRYPT\";\n  readonly message: string;\n  readonly rawSnippet?: string;\n}\n",
+      "src/pci/card-sanitizer.ts": "import type { RawCardInput, SanitizedCardData, PciViolation } from \"./types.js\";\n\nexport class PaymentCardSanitizer {\n  public sanitizeCardInput(input: RawCardInput): { sanitized: SanitizedCardData; violations: readonly PciViolation[] } {\n    throw new Error(\"sanitizeCardInput not implemented\");\n  }\n\n  public maskPan(rawPan: string): string {\n    throw new Error(\"maskPan not implemented\");\n  }\n\n  public isValidLuhn(cardNumber: string): boolean {\n    throw new Error(\"isValidLuhn not implemented\");\n  }\n}\n",
+      "src/pci/tokenization.ts": "import type { RawCardInput, PaymentTokenRecord } from \"./types.js\";\n\nexport class TokenizationClient {\n  public async tokenizeCard(card: RawCardInput): Promise<PaymentTokenRecord> {\n    throw new Error(\"tokenizeCard not implemented\");\n  }\n}\n",
+      "package.json": "{\n  \"name\": \"pci-compliance-fixture\",\n  \"version\": \"1.0.0\",\n  \"type\": \"module\",\n  \"scripts\": {\n    \"build\": \"tsc --noEmit\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^22.13.0\",\n    \"typescript\": \"^5.7.3\"\n  }\n}\n",
+      "tsconfig.json": "{\n  \"compilerOptions\": {\n    \"target\": \"ES2022\",\n    \"module\": \"NodeNext\",\n    \"moduleResolution\": \"NodeNext\",\n    \"strict\": true,\n    \"esModuleInterop\": true,\n    \"skipLibCheck\": true,\n    \"forceConsistentCasingInFileNames\": true,\n    \"declaration\": true\n  },\n  \"include\": [\"src/**/*\"]\n}\n"
+    },
+    "initialGitCommit": "Initial commit for pci-compliance benchmark fixture"
+  },
+  "limits": {
+    "maxTurns": 15,
+    "maxCostUSD": 1.0,
+    "maxWallClockTimeMs": 300000
+  },
+  "evaluation": {
+    "deterministicChecks": [
+      {
+        "id": "check-card-sanitizer-methods",
+        "name": "Verify PaymentCardSanitizer methods",
+        "type": "file_content",
+        "filePath": "src/pci/card-sanitizer.ts",
+        "fileContentPattern": "sanitizeCardInput|maskPan|isValidLuhn",
+        "weight": 0.25
+      },
+      {
+        "id": "check-tokenization-client-methods",
+        "name": "Verify TokenizationClient tokenizeCard method",
+        "type": "file_content",
+        "filePath": "src/pci/tokenization.ts",
+        "fileContentPattern": "tokenizeCard",
+        "weight": 0.25
+      },
+      {
+        "id": "check-pci-violation-rules",
+        "name": "Verify PciViolation rule codes",
+        "type": "file_content",
+        "filePath": "src/pci/types.ts",
+        "fileContentPattern": "PCI_REQ_3_2_SAD|PCI_REQ_3_4_PAN_MASK",
+        "weight": 0.25
+      },
+      {
+        "id": "check-sanitized-card-types",
+        "name": "Verify SanitizedCardData interface",
+        "type": "file_content",
+        "filePath": "src/pci/types.ts",
+        "fileContentPattern": "SanitizedCardData|PaymentTokenRecord",
+        "weight": 0.25
+      }
+    ],
+    "judgeRubrics": [
+      {
+        "name": "PCI-DSS 4.0 Compliance & PAN Masking Rigor",
+        "category": "security",
+        "weight": 0.6,
+        "description": "Evaluates the agent's capability to enforce PCI-DSS 4.0 compliance: Luhn algorithm validation, strict BIN/last-4 PAN masking, blocking sensitive authentication data (CVV/PIN) storage, and secure tokenization.",
+        "criteria": {
+          "1": "Allows unmasked PAN or CVV storage, implements incorrect Luhn checksum, or leaks PAN in logs.",
+          "3": "Implements basic Luhn check and masking, but fails on variable card lengths (e.g. Amex 15-digit) or lacks strict SAD storage violation flags.",
+          "5": "Exemplary PCI-DSS compliance architecture: exact Luhn validation, robust first-6/last-4 masking across card brands, SAD non-persistence enforcement, and secure tokenization."
+        }
+      },
+      {
+        "name": "TypeScript Hygiene & Architecture",
+        "category": "general",
+        "weight": 0.4,
+        "description": "Evaluates TypeScript interface clarity, immutability, and zero-any cleanliness.",
+        "criteria": {
+          "1": "Broken types or frequent use of any.",
+          "3": "Standard types with basic error handling.",
+          "5": "Strictly typed, clean architecture with 0 any annotations."
+        }
+      }
+    ],
+    "passThreshold": 80
+  }
+}

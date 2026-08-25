@@ -1,0 +1,86 @@
+{
+  "id": "firebase-security-rules-auditor",
+  "name": "Firebase Firestore and Storage Security Rules Static Vulnerability Auditor",
+  "category": "security",
+  "difficulty": "hard",
+  "targetSkill": "firebase-security-rules-auditor",
+  "baselineModel": "claude-3-7-sonnet-20250219",
+  "description": "Cloud security benchmark scenario evaluating an agent's capability to parse Firebase Security Rules (Firestore & Storage), detect insecure wildcard permissions (allow read, write: if true;), diagnose unauthorized cross-tenant data access, verify request.auth.uid validation, and synthesize hardened security rules.",
+  "instructions": "You are tasked with implementing the Firebase Security Rules auditor in `src/security/rules-auditor.ts` and `src/security/rules-parser.ts`.\n\n### Task Objectives:\n1. **Rules Parsing & Match Block Extraction (`FirebaseRulesParser`)**:\n   - Ingest raw Firestore/Storage `.rules` files.\n   - Parse hierarchical `match /databases/{database}/documents` paths and nested collection scopes.\n   - Extract permission expressions for `read` (get, list) and `write` (create, update, delete).\n\n2. **Security Vulnerability Scanner (`FirebaseRulesAuditor`)**:\n   - Flag `allow read, write: if true;` or `allow write: if request.auth != null;` on public or user-scoped documents without ownership checking.\n   - Flag missing `request.resource.data` schema validation on document creation/updates.\n   - Flag insecure wildcard paths like `match /{document=**}` with permissive grants.\n   - Synthesize a hardened remediation rule snippet.\n\n3. **Type Safety & Repository Standards**:\n   - Pure TypeScript, 0 comments, 0 any, <= 400 lines.",
+  "workspace": {
+    "fixtures": {
+      "src/security/types.ts": "export type VulnerabilitySeverity = \"critical\" | \"high\" | \"medium\" | \"low\";\n\nexport interface RuleFinding {\n  readonly rulePath: string;\n  readonly operation: \"read\" | \"write\" | \"create\" | \"update\" | \"delete\" | \"list\" | \"get\";\n  readonly severity: VulnerabilitySeverity;\n  readonly issueType: \"unauthenticated_access\" | \"missing_owner_check\" | \"insecure_wildcard\" | \"missing_schema_validation\";\n  readonly description: string;\n  readonly rawExpression: string;\n  readonly remediationSuggestion: string;\n}\n\nexport interface SecurityAuditSummary {\n  readonly totalRulesAudited: number;\n  readonly totalFindings: number;\n  readonly criticalCount: number;\n  readonly highCount: number;\n  readonly findings: readonly RuleFinding[];\n  readonly securityScore: number;\n}\n",
+      "src/security/rules-parser.ts": "export class FirebaseRulesParser {\n  public parseRules(rawContent: string): { paths: readonly string[]; rawLines: readonly string[] } {\n    throw new Error(\"parseRules not implemented\");\n  }\n}\n",
+      "src/security/rules-auditor.ts": "import type { RuleFinding, SecurityAuditSummary } from \"./types.js\";\n\nexport class FirebaseRulesAuditor {\n  public auditRules(rulesContent: string): SecurityAuditSummary {\n    throw new Error(\"auditRules not implemented\");\n  }\n\n  public checkPathVulnerabilities(path: string, expression: string): readonly RuleFinding[] {\n    throw new Error(\"checkPathVulnerabilities not implemented\");\n  }\n}\n",
+      "package.json": "{\n  \"name\": \"firebase-security-rules-auditor-fixture\",\n  \"version\": \"1.0.0\",\n  \"type\": \"module\",\n  \"scripts\": {\n    \"build\": \"tsc --noEmit\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^22.13.0\",\n    \"typescript\": \"^5.7.3\"\n  }\n}\n",
+      "tsconfig.json": "{\n  \"compilerOptions\": {\n    \"target\": \"ES2022\",\n    \"module\": \"NodeNext\",\n    \"moduleResolution\": \"NodeNext\",\n    \"strict\": true,\n    \"esModuleInterop\": true,\n    \"skipLibCheck\": true,\n    \"forceConsistentCasingInFileNames\": true,\n    \"declaration\": true\n  },\n  \"include\": [\"src/**/*\"]\n}\n"
+    },
+    "initialGitCommit": "Initial commit for firebase-security-rules-auditor benchmark fixture"
+  },
+  "limits": {
+    "maxTurns": 15,
+    "maxCostUSD": 1.0,
+    "maxWallClockTimeMs": 300000
+  },
+  "evaluation": {
+    "deterministicChecks": [
+      {
+        "id": "check-rules-auditor-methods",
+        "name": "Verify FirebaseRulesAuditor audit and path check methods",
+        "type": "file_content",
+        "filePath": "src/security/rules-auditor.ts",
+        "fileContentPattern": "auditRules|checkPathVulnerabilities",
+        "weight": 0.25
+      },
+      {
+        "id": "check-rules-parser-methods",
+        "name": "Verify FirebaseRulesParser parseRules method",
+        "type": "file_content",
+        "filePath": "src/security/rules-parser.ts",
+        "fileContentPattern": "parseRules",
+        "weight": 0.25
+      },
+      {
+        "id": "check-rule-finding-types",
+        "name": "Verify RuleFinding schema",
+        "type": "file_content",
+        "filePath": "src/security/types.ts",
+        "fileContentPattern": "unauthenticated_access|missing_owner_check",
+        "weight": 0.25
+      },
+      {
+        "id": "check-security-audit-summary-types",
+        "name": "Verify SecurityAuditSummary interface",
+        "type": "file_content",
+        "filePath": "src/security/types.ts",
+        "fileContentPattern": "SecurityAuditSummary|securityScore",
+        "weight": 0.25
+      }
+    ],
+    "judgeRubrics": [
+      {
+        "name": "Firebase Security Rules Vulnerability Analysis Precision",
+        "category": "security",
+        "weight": 0.6,
+        "description": "Evaluates the agent's capability to parse Firebase security rules, identify insecure wildcard grants, detect missing authentication/ownership validations, and synthesize secure rule remediations.",
+        "criteria": {
+          "1": "Fails to identify obvious open permissions (allow read, write: if true), produces false positives, or creates broken remediation rules.",
+          "3": "Detects standard open read/write rules, but misses subtle cross-tenant data leakages or missing document schema checks.",
+          "5": "Exemplary cloud security audit engine: precise AST rule parsing, deep categorization of auth and ownership vulnerabilities, and high-quality hardened rule synthesis."
+        }
+      },
+      {
+        "name": "TypeScript Hygiene & Architecture",
+        "category": "general",
+        "weight": 0.4,
+        "description": "Evaluates TypeScript interface clarity, immutability, and zero-any cleanliness.",
+        "criteria": {
+          "1": "Broken types or frequent use of any.",
+          "3": "Standard types with basic error handling.",
+          "5": "Strictly typed, clean architecture with 0 any annotations."
+        }
+      }
+    ],
+    "passThreshold": 80
+  }
+}

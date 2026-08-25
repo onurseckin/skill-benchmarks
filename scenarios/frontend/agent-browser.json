@@ -1,0 +1,86 @@
+{
+  "id": "agent-browser",
+  "name": "Autonomous Browser Agent Runtime, Accessibility Tree Traversal, and Action Grounding",
+  "category": "frontend",
+  "difficulty": "hard",
+  "targetSkill": "agent-browser",
+  "baselineModel": "claude-3-7-sonnet-20250219",
+  "description": "Autonomous browser agent benchmark scenario evaluating an agent's capability to ground natural language instructions into interactive browser actions, parse Accessibility (AX) trees into compact token-efficient representations, compute interactive bounding boxes, and handle multi-step web navigation workflows.",
+  "instructions": "You are tasked with implementing the browser agent harness in `src/browser/ax-tree-parser.ts` and `src/browser/action-grounder.ts`.\n\n### Task Objectives:\n1. **Accessibility Tree Compressor (`AxTreeParser`)**:\n   - Ingest raw CDP / Chrome DevTools Accessibility tree snapshots.\n   - Filter non-interactive decorative nodes while preserving semantic roles (`button`, `link`, `textbox`, `checkbox`, `combobox`).\n   - Assign numbered numeric labels `[1]`, `[2]` for interactive candidates, outputting a compact token-efficient representation for LLM context windows.\n\n2. **Action Grounding Engine (`ActionGrounder`)**:\n   - Map predicted actions (`click(3)`, `type(1, 'query')`, `scroll('down')`) back to original DOM element selectors and coordinate bounding boxes.\n   - Detect ambiguous or non-visible element targets and return structured recovery suggestions.\n\n3. **Type Safety & Repository Standards**:\n   - Pure TypeScript, 0 comments, 0 any, <= 400 lines.",
+  "workspace": {
+    "fixtures": {
+      "src/browser/types.ts": "export interface AxNode {\n  readonly nodeId: string;\n  readonly role: string;\n  readonly name?: string;\n  readonly value?: string;\n  readonly description?: string;\n  readonly disabled?: boolean;\n  readonly focused?: boolean;\n  readonly bounds?: { readonly x: number; readonly y: number; readonly width: number; readonly height: number };\n  readonly children?: readonly AxNode[];\n}\n\nexport interface GroundedAction {\n  readonly targetId: string;\n  readonly actionType: \"click\" | \"type\" | \"hover\" | \"press_key\" | \"scroll\" | \"select\";\n  readonly textPayload?: string;\n  readonly coordinates?: { readonly x: number; readonly y: number };\n}\n\nexport interface CompressedAxRepresentation {\n  readonly compressedText: string;\n  readonly candidateCount: number;\n  readonly nodeMap: Readonly<Record<number, AxNode>>;\n}\n",
+      "src/browser/ax-tree-parser.ts": "import type { AxNode, CompressedAxRepresentation } from \"./types.js\";\n\nexport class AxTreeParser {\n  public compressTree(root: AxNode): CompressedAxRepresentation {\n    throw new Error(\"compressTree not implemented\");\n  }\n\n  public isInteractive(node: AxNode): boolean {\n    throw new Error(\"isInteractive not implemented\");\n  }\n}\n",
+      "src/browser/action-grounder.ts": "import type { GroundedAction, CompressedAxRepresentation } from \"./types.js\";\n\nexport class ActionGrounder {\n  public groundAction(candidateIndex: number, actionType: GroundedAction[\"actionType\"], payload: string | undefined, axData: CompressedAxRepresentation): GroundedAction {\n    throw new Error(\"groundAction not implemented\");\n  }\n}\n",
+      "package.json": "{\n  \"name\": \"agent-browser-fixture\",\n  \"version\": \"1.0.0\",\n  \"type\": \"module\",\n  \"scripts\": {\n    \"build\": \"tsc --noEmit\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^22.13.0\",\n    \"typescript\": \"^5.7.3\"\n  }\n}\n",
+      "tsconfig.json": "{\n  \"compilerOptions\": {\n    \"target\": \"ES2022\",\n    \"module\": \"NodeNext\",\n    \"moduleResolution\": \"NodeNext\",\n    \"strict\": true,\n    \"esModuleInterop\": true,\n    \"skipLibCheck\": true,\n    \"forceConsistentCasingInFileNames\": true,\n    \"declaration\": true\n  },\n  \"include\": [\"src/**/*\"]\n}\n"
+    },
+    "initialGitCommit": "Initial commit for agent-browser benchmark fixture"
+  },
+  "limits": {
+    "maxTurns": 15,
+    "maxCostUSD": 1.0,
+    "maxWallClockTimeMs": 300000
+  },
+  "evaluation": {
+    "deterministicChecks": [
+      {
+        "id": "check-ax-tree-parser-methods",
+        "name": "Verify AxTreeParser compression and interactivity check",
+        "type": "file_content",
+        "filePath": "src/browser/ax-tree-parser.ts",
+        "fileContentPattern": "compressTree|isInteractive",
+        "weight": 0.25
+      },
+      {
+        "id": "check-action-grounder-methods",
+        "name": "Verify ActionGrounder groundAction method",
+        "type": "file_content",
+        "filePath": "src/browser/action-grounder.ts",
+        "fileContentPattern": "groundAction",
+        "weight": 0.25
+      },
+      {
+        "id": "check-ax-node-types",
+        "name": "Verify AxNode interface",
+        "type": "file_content",
+        "filePath": "src/browser/types.ts",
+        "fileContentPattern": "AxNode|CompressedAxRepresentation",
+        "weight": 0.25
+      },
+      {
+        "id": "check-grounded-action-types",
+        "name": "Verify GroundedAction action types",
+        "type": "file_content",
+        "filePath": "src/browser/types.ts",
+        "fileContentPattern": "\"click\"\\s*\\|\\s*\"type\"\\s*\\|\\s*\"hover\"",
+        "weight": 0.25
+      }
+    ],
+    "judgeRubrics": [
+      {
+        "name": "Browser Agent AX Tree Grounding & Context Efficiency",
+        "category": "frontend",
+        "weight": 0.6,
+        "description": "Evaluates the agent's capability to compress accessibility trees into token-efficient representations with numbered candidate elements and ground high-level actions into accurate element coordinates.",
+        "criteria": {
+          "1": "Outputs bloated uncompressed DOM trees, misses interactive elements, or grounds actions to incorrect coordinates.",
+          "3": "Compresses simple accessibility trees, but misses complex ARIA roles or fails on nested shadow DOM elements.",
+          "5": "Exemplary browser agent runtime: highly compact token-efficient AX tree serialization, accurate coordinate bounding box calculation, and robust multi-step action grounding."
+        }
+      },
+      {
+        "name": "TypeScript Hygiene & Architecture",
+        "category": "general",
+        "weight": 0.4,
+        "description": "Evaluates TypeScript interface clarity, immutability, and zero-any cleanliness.",
+        "criteria": {
+          "1": "Broken types or frequent use of any.",
+          "3": "Standard types with basic error handling.",
+          "5": "Strictly typed, clean architecture with 0 any annotations."
+        }
+      }
+    ],
+    "passThreshold": 80
+  }
+}

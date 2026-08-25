@@ -1,0 +1,86 @@
+{
+  "id": "security-review",
+  "name": "Automated OWASP Top-10 Vulnerability and Static Code Security Reviewer",
+  "category": "security",
+  "difficulty": "hard",
+  "targetSkill": "security-review",
+  "baselineModel": "claude-3-7-sonnet-20250219",
+  "description": "Application security benchmark scenario evaluating an agent's capability to audit fullstack codebases against OWASP Top 10 vulnerabilities: SQL injection, SSRF, broken authentication, IDOR, XML External Entity (XXE), and insecure deserialization, outputting structured SARIF reports.",
+  "instructions": "You are tasked with implementing the OWASP security review harness in `src/security/owasp-scanner.ts` and `src/security/sarif-formatter.ts`.\n\n### Task Objectives:\n1. **OWASP Top-10 Vulnerability Scanner (`OwaspSecurityScanner`)**:\n   - Detect SQL Injection (unparameterized query concatenations in raw SQL).\n   - Detect Server-Side Request Forgery (SSRF) with unvalidated user URLs in fetch/axios.\n   - Detect Broken Authentication (e.g. JWT with algorithm: 'none', hardcoded secret keys).\n   - Detect Insecure Direct Object References (IDOR) with missing user/tenant ID checks in query clauses.\n\n2. **SARIF v2.1.0 Exporter (`SarifReportFormatter`)**:\n   - Synthesize a valid SARIF JSON document matching the OASIS SARIF v2.1.0 specification.\n   - Populate runs, tool drivers, rules with CWE IDs, and physical location file offsets.\n\n3. **Type Safety & Repository Invariants**:\n   - Pure TypeScript, 0 comments, 0 any, <= 400 lines.",
+  "workspace": {
+    "fixtures": {
+      "src/security/types.ts": "export type OwaspCategory = \n  | \"A01_Broken_Access_Control\"\n  | \"A02_Cryptographic_Failures\"\n  | \"A03_Injection\"\n  | \"A04_Insecure_Design\"\n  | \"A05_Security_Misconfiguration\"\n  | \"A06_Vulnerable_Components\"\n  | \"A07_Auth_Failures\"\n  | \"A08_Integrity_Failures\"\n  | \"A09_Logging_Failures\"\n  | \"A10_SSRF\";\n\nexport interface SecurityVulnerability {\n  readonly id: string;\n  readonly ruleId: string;\n  readonly category: OwaspCategory;\n  readonly cweId: string;\n  readonly severity: \"error\" | \"warning\" | \"note\";\n  readonly message: string;\n  readonly filePath: string;\n  readonly startLine: number;\n  readonly endLine: number;\n  readonly snippet: string;\n  readonly remediationSuggestion: string;\n}\n\nexport interface SarifLog {\n  readonly version: \"2.1.0\";\n  readonly $schema: string;\n  readonly runs: readonly unknown[];\n}\n",
+      "src/security/owasp-scanner.ts": "import type { SecurityVulnerability, OwaspCategory } from \"./types.js\";\n\nexport class OwaspSecurityScanner {\n  public scanSourceCode(filePath: string, code: string): readonly SecurityVulnerability[] {\n    throw new Error(\"scanSourceCode not implemented\");\n  }\n\n  public detectSqlInjection(code: string, filePath: string): readonly SecurityVulnerability[] {\n    throw new Error(\"detectSqlInjection not implemented\");\n  }\n\n  public detectSsrf(code: string, filePath: string): readonly SecurityVulnerability[] {\n    throw new Error(\"detectSsrf not implemented\");\n  }\n}\n",
+      "src/security/sarif-formatter.ts": "import type { SecurityVulnerability, SarifLog } from \"./types.js\";\n\nexport class SarifReportFormatter {\n  public static generateSarif(vulnerabilities: readonly SecurityVulnerability[]): SarifLog {\n    throw new Error(\"generateSarif not implemented\");\n  }\n}\n",
+      "package.json": "{\n  \"name\": \"security-review-fixture\",\n  \"version\": \"1.0.0\",\n  \"type\": \"module\",\n  \"scripts\": {\n    \"build\": \"tsc --noEmit\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^22.13.0\",\n    \"typescript\": \"^5.7.3\"\n  }\n}\n",
+      "tsconfig.json": "{\n  \"compilerOptions\": {\n    \"target\": \"ES2022\",\n    \"module\": \"NodeNext\",\n    \"moduleResolution\": \"NodeNext\",\n    \"strict\": true,\n    \"esModuleInterop\": true,\n    \"skipLibCheck\": true,\n    \"forceConsistentCasingInFileNames\": true,\n    \"declaration\": true\n  },\n  \"include\": [\"src/**/*\"]\n}\n"
+    },
+    "initialGitCommit": "Initial commit for security-review benchmark fixture"
+  },
+  "limits": {
+    "maxTurns": 15,
+    "maxCostUSD": 1.0,
+    "maxWallClockTimeMs": 300000
+  },
+  "evaluation": {
+    "deterministicChecks": [
+      {
+        "id": "check-owasp-scanner-methods",
+        "name": "Verify OwaspSecurityScanner scanning methods",
+        "type": "file_content",
+        "filePath": "src/security/owasp-scanner.ts",
+        "fileContentPattern": "scanSourceCode|detectSqlInjection|detectSsrf",
+        "weight": 0.25
+      },
+      {
+        "id": "check-sarif-formatter-methods",
+        "name": "Verify SarifReportFormatter generateSarif method",
+        "type": "file_content",
+        "filePath": "src/security/sarif-formatter.ts",
+        "fileContentPattern": "generateSarif",
+        "weight": 0.25
+      },
+      {
+        "id": "check-owasp-categories-types",
+        "name": "Verify OwaspCategory union",
+        "type": "file_content",
+        "filePath": "src/security/types.ts",
+        "fileContentPattern": "A01_Broken_Access_Control|A03_Injection|A10_SSRF",
+        "weight": 0.25
+      },
+      {
+        "id": "check-sarif-log-interface",
+        "name": "Verify SarifLog interface definition",
+        "type": "file_content",
+        "filePath": "src/security/types.ts",
+        "fileContentPattern": "SarifLog|SecurityVulnerability",
+        "weight": 0.25
+      }
+    ],
+    "judgeRubrics": [
+      {
+        "name": "OWASP Top-10 Vulnerability Detection & SARIF Accuracy",
+        "category": "security",
+        "weight": 0.6,
+        "description": "Evaluates the agent's capability to detect OWASP vulnerabilities (SQLi, SSRF, Broken Auth, IDOR) with accurate line location reporting and valid SARIF v2.1.0 serialization.",
+        "criteria": {
+          "1": "Misses obvious SQL injection or SSRF patterns, outputs malformed SARIF, or generates high false positive rates.",
+          "3": "Detects standard SQLi and SSRF, but produces partial SARIF metadata without proper CWE mappings.",
+          "5": "Exemplary security review engine: precise detection of complex injection and SSRF patterns, rich CWE remediation advice, and compliant SARIF v2.1.0 output."
+        }
+      },
+      {
+        "name": "TypeScript Hygiene & Architecture",
+        "category": "general",
+        "weight": 0.4,
+        "description": "Evaluates TypeScript interface clarity, immutability, and zero-any cleanliness.",
+        "criteria": {
+          "1": "Broken types or frequent use of any.",
+          "3": "Standard types with basic error handling.",
+          "5": "Strictly typed, clean architecture with 0 any annotations."
+        }
+      }
+    ],
+    "passThreshold": 80
+  }
+}

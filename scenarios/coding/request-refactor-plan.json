@@ -1,0 +1,86 @@
+{
+  "id": "request-refactor-plan",
+  "name": "Safe Multi-Stage Code Refactoring Planner and Invariant Checker",
+  "category": "coding",
+  "difficulty": "hard",
+  "targetSkill": "request-refactor-plan",
+  "baselineModel": "claude-3-7-sonnet-20250219",
+  "description": "Code refactoring benchmark scenario evaluating an agent's capability to analyze complex legacy codebases, synthesize structured step-by-step refactoring plans with explicit rollback strategies, verify code invariants across refactoring stages, and compute risk scores.",
+  "instructions": "You are tasked with implementing the refactoring planner engine in `src/refactoring/planner.ts` and `src/refactoring/invariant-checker.ts`.\n\n### Task Objectives:\n1. **Refactoring Plan Synthesis (`RefactorPlanner`)**:\n   - Ingest source files and target refactoring goals (e.g. \"Extract shared database client and decouple auth service\").\n   - Generate an ordered sequence of atomic refactoring steps with dependency edges (`dependsOn`).\n   - Provide specific verification commands and rollback instructions for every single step.\n   - Calculate a numerical risk score (0-100) based on code blast radius, public API changes, and test coverage.\n\n2. **Invariant Verification (`InvariantChecker`)**:\n   - Validate that external exported symbols and TypeScript interfaces are preserved or backward-compatible.\n   - Detect circular dependencies introduced during refactoring stages.\n\n3. **Type Safety & Repository Invariants**:\n   - Pure TypeScript, 0 comments, 0 any, <= 400 LOC.",
+  "workspace": {
+    "fixtures": {
+      "src/refactoring/types.ts": "export type RiskLevel = \"low\" | \"medium\" | \"high\" | \"critical\";\n\nexport interface RefactorStep {\n  readonly stepNumber: number;\n  readonly title: string;\n  readonly targetFiles: readonly string[];\n  readonly actionDescription: string;\n  readonly verificationCommand: string;\n  readonly rollbackInstructions: string;\n  readonly dependsOn: readonly number[];\n}\n\nexport interface RefactorPlan {\n  readonly planId: string;\n  readonly objective: string;\n  readonly overallRisk: RiskLevel;\n  readonly riskScore: number;\n  readonly affectedFilesCount: number;\n  readonly steps: readonly RefactorStep[];\n  readonly preservedInvariants: readonly string[];\n}\n\nexport interface InvariantValidationResult {\n  readonly valid: boolean;\n  readonly brokenInvariants: readonly string[];\n  readonly circularDependenciesDetected: boolean;\n}\n",
+      "src/refactoring/planner.ts": "import type { RefactorPlan, RefactorStep, RiskLevel } from \"./types.js\";\n\nexport class RefactorPlanner {\n  public createPlan(objective: string, filePaths: readonly string[], sourceMap: Record<string, string>): RefactorPlan {\n    throw new Error(\"createPlan not implemented\");\n  }\n\n  public calculateRiskScore(steps: readonly RefactorStep[], affectedFilesCount: number): { score: number; level: RiskLevel } {\n    throw new Error(\"calculateRiskScore not implemented\");\n  }\n}\n",
+      "src/refactoring/invariant-checker.ts": "import type { InvariantValidationResult } from \"./types.js\";\n\nexport class InvariantChecker {\n  public validateInvariants(originalSource: string, modifiedSource: string): InvariantValidationResult {\n    throw new Error(\"validateInvariants not implemented\");\n  }\n}\n",
+      "package.json": "{\n  \"name\": \"request-refactor-plan-fixture\",\n  \"version\": \"1.0.0\",\n  \"type\": \"module\",\n  \"scripts\": {\n    \"build\": \"tsc --noEmit\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^22.13.0\",\n    \"typescript\": \"^5.7.3\"\n  }\n}\n",
+      "tsconfig.json": "{\n  \"compilerOptions\": {\n    \"target\": \"ES2022\",\n    \"module\": \"NodeNext\",\n    \"moduleResolution\": \"NodeNext\",\n    \"strict\": true,\n    \"esModuleInterop\": true,\n    \"skipLibCheck\": true,\n    \"forceConsistentCasingInFileNames\": true,\n    \"declaration\": true\n  },\n  \"include\": [\"src/**/*\"]\n}\n"
+    },
+    "initialGitCommit": "Initial commit for request-refactor-plan benchmark fixture"
+  },
+  "limits": {
+    "maxTurns": 15,
+    "maxCostUSD": 1.0,
+    "maxWallClockTimeMs": 300000
+  },
+  "evaluation": {
+    "deterministicChecks": [
+      {
+        "id": "check-refactor-planner-methods",
+        "name": "Verify RefactorPlanner plan creation and risk calculation",
+        "type": "file_content",
+        "filePath": "src/refactoring/planner.ts",
+        "fileContentPattern": "createPlan|calculateRiskScore",
+        "weight": 0.25
+      },
+      {
+        "id": "check-invariant-checker-methods",
+        "name": "Verify InvariantChecker invariant validation",
+        "type": "file_content",
+        "filePath": "src/refactoring/invariant-checker.ts",
+        "fileContentPattern": "validateInvariants",
+        "weight": 0.25
+      },
+      {
+        "id": "check-refactor-step-types",
+        "name": "Verify RefactorStep fields including rollback and verification",
+        "type": "file_content",
+        "filePath": "src/refactoring/types.ts",
+        "fileContentPattern": "verificationCommand|rollbackInstructions|dependsOn",
+        "weight": 0.25
+      },
+      {
+        "id": "check-refactor-plan-types",
+        "name": "Verify RefactorPlan schema",
+        "type": "file_content",
+        "filePath": "src/refactoring/types.ts",
+        "fileContentPattern": "preservedInvariants|overallRisk",
+        "weight": 0.25
+      }
+    ],
+    "judgeRubrics": [
+      {
+        "name": "Refactoring Plan Quality & Safety Invariant Preservation",
+        "category": "coding",
+        "weight": 0.6,
+        "description": "Evaluates the agent's capability to author structured, low-risk refactoring plans with atomic verification steps, rollback guarantees, and invariant checks.",
+        "criteria": {
+          "1": "Generates vague refactoring steps without verification commands or rollback procedures, or breaks API contracts.",
+          "3": "Provides decent refactoring steps, but lacks explicit dependency DAG ordering or fails to detect circular dependencies.",
+          "5": "Masterful refactoring planning: ordered atomic steps with rollback commands, accurate blast radius risk scoring, and invariant preservation verification."
+        }
+      },
+      {
+        "name": "TypeScript Modularity & Hygiene",
+        "category": "general",
+        "weight": 0.4,
+        "description": "Evaluates TypeScript interface clarity, immutability, and zero-any cleanliness.",
+        "criteria": {
+          "1": "Broken types or frequent use of any.",
+          "3": "Standard types with basic error handling.",
+          "5": "Strictly typed, clean architecture with 0 any annotations."
+        }
+      }
+    ],
+    "passThreshold": 80
+  }
+}
