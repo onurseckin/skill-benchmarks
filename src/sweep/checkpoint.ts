@@ -12,9 +12,9 @@ import type {
 import type { TokenUsage } from "../runner/types.js";
 import { sanitizeBenchmarkArtifactValue } from "../shared/artifact-sanitization.js";
 import { incompatibleSweepPlanMessage } from "./sweep-plan.js";
-import { removeCheckpointTemporaryFiles, writeCheckpointSnapshot } from "./checkpoint-storage.js";
+import { writeCheckpointSnapshot } from "./checkpoint-storage.js";
 
-const DEFAULT_METADATA_VERSION = "2.0.0";
+export const checkpointMetadataVersion = "2.0.0";
 
 export class CheckpointLedger implements ICheckpointLedger {
   public readonly filePath: string;
@@ -33,6 +33,7 @@ export class CheckpointLedger implements ICheckpointLedger {
       readonly repetitions: number;
       readonly totalPlannedCells: number;
       readonly planFingerprint: string;
+      readonly sweepStartedAt: string;
     },
     config?: Partial<CheckpointConfig>
   ) {
@@ -41,9 +42,10 @@ export class CheckpointLedger implements ICheckpointLedger {
     this.planFingerprint = initialSummary.planFingerprint;
 
     const metadata: CheckpointMetadata = {
-      version: DEFAULT_METADATA_VERSION,
+      version: checkpointMetadataVersion,
       sweepId: initialSummary.sweepId,
       planFingerprint: initialSummary.planFingerprint,
+      sweepStartedAt: initialSummary.sweepStartedAt,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       hostArch: os.arch(),
@@ -79,7 +81,6 @@ export class CheckpointLedger implements ICheckpointLedger {
   }
 
   async load(): Promise<CheckpointState | null> {
-    removeCheckpointTemporaryFiles(this.filePath);
     const candidates = [this.filePath];
     for (let i = 1; i <= this.maxBackups; i++) candidates.push(`${this.filePath}.bak.${i}`);
     for (const candidate of candidates) {
@@ -143,6 +144,7 @@ export class CheckpointLedger implements ICheckpointLedger {
       const completedSet = new Set(current.completedCellIds);
       completedSet.add(cellId);
       const prevTokens = current.totalTokens;
+      const completedResults = { ...current.completedResults, [cellId]: result };
       const newTokens: TokenUsage = {
         inputTokens: prevTokens.inputTokens + cellTokens.inputTokens,
         outputTokens: prevTokens.outputTokens + cellTokens.outputTokens,
@@ -152,8 +154,9 @@ export class CheckpointLedger implements ICheckpointLedger {
       };
       return {
         ...current,
+        status: resolveCheckpointStatus(current, completedSet, new Set(current.failedCellIds), new Set(current.skippedCellIds), completedResults),
         completedCellIds: Array.from(completedSet),
-        completedResults: { ...current.completedResults, [cellId]: result },
+        completedResults,
         totalTokens: newTokens,
         totalCostUSD: current.totalCostUSD + cellCost,
         wallClockDurationMs: current.wallClockDurationMs + result.durationMs,
@@ -166,10 +169,12 @@ export class CheckpointLedger implements ICheckpointLedger {
     await this.persistState((current) => {
       const failedSet = new Set(current.failedCellIds);
       failedSet.add(cellId);
+      const completedResults = { ...current.completedResults, [cellId]: result };
       return {
         ...current,
+        status: resolveCheckpointStatus(current, new Set(current.completedCellIds), failedSet, new Set(current.skippedCellIds), completedResults),
         failedCellIds: Array.from(failedSet),
-        completedResults: { ...current.completedResults, [cellId]: result },
+        completedResults,
         wallClockDurationMs: current.wallClockDurationMs + result.durationMs,
       };
     });
@@ -180,10 +185,12 @@ export class CheckpointLedger implements ICheckpointLedger {
     await this.persistState((current) => {
       const skippedSet = new Set(current.skippedCellIds);
       skippedSet.add(cellId);
+      const completedResults = { ...current.completedResults, [cellId]: result };
       return {
         ...current,
+        status: resolveCheckpointStatus(current, new Set(current.completedCellIds), new Set(current.failedCellIds), skippedSet, completedResults),
         skippedCellIds: Array.from(skippedSet),
-        completedResults: { ...current.completedResults, [cellId]: result },
+        completedResults,
       };
     });
   }
@@ -205,4 +212,18 @@ export class CheckpointLedger implements ICheckpointLedger {
       throw new TypeError(incompatibleSweepPlanMessage);
     }
   }
+}
+
+function resolveCheckpointStatus(
+  current: CheckpointState,
+  completedIds: ReadonlySet<string>,
+  failedIds: ReadonlySet<string>,
+  skippedIds: ReadonlySet<string>,
+  results: Readonly<Record<string, MatrixCellResult>>
+): SweepExecutionStatus {
+  const terminalIds = new Set([...completedIds, ...failedIds, ...skippedIds]);
+  if (terminalIds.size < current.totalPlannedCells) return "running";
+  if (failedIds.size === 0) return "completed";
+  const allFailuresAborted = [...failedIds].every((cellId) => results[cellId]?.runRecord?.terminationReason === "aborted");
+  return allFailuresAborted ? "aborted" : "failed";
 }

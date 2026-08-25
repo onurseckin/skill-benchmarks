@@ -148,6 +148,10 @@ export interface TelemetryEventRecord {
 }
 
 export interface RunRecord {
+  readonly sweepId?: string;
+  readonly planFingerprint?: string;
+  readonly cellId?: string;
+  readonly matrixOccurrenceIndex?: number;
   readonly runId: string;
   readonly scenarioId: string;
   readonly category: string;
@@ -170,6 +174,7 @@ export interface RunRecord {
   readonly totalCostUSD: number;
   readonly totalTurns: number;
   readonly errorCount: number;
+  readonly attemptCount?: number;
   readonly startedAt: string;
   readonly completedAt: string;
   readonly manifest?: RunManifest;

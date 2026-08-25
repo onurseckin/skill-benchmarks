@@ -94,6 +94,7 @@ export interface MatrixCellIdentifier {
 }
 
 export interface MatrixCellDescriptor extends MatrixCellIdentifier {
+  readonly sweepId: string;
   readonly runId: string;
   readonly executionMode: ExecutionMode;
   readonly outputRoot: string;
@@ -116,6 +117,7 @@ export interface MatrixCellResult {
   readonly scenarioResult?: ScenarioResult;
   readonly runRecord?: RunRecord;
   readonly error?: string;
+  readonly terminalIdentityConflict?: boolean;
   readonly retryable: boolean;
 }
 
@@ -180,6 +182,7 @@ export interface CheckpointMetadata {
   readonly version: string;
   readonly sweepId: string;
   readonly planFingerprint: string;
+  readonly sweepStartedAt: string;
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly hostArch: string;

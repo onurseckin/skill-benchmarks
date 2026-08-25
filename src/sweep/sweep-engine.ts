@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { mkdir } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import type {
   MatrixSweepConfig,
@@ -17,13 +18,15 @@ import { CheckpointLedger } from "./checkpoint.js";
 import { ScenarioRunnerEngine } from "../runner/runner-engine.js";
 import { ScenarioLoader } from "../runner/scenario-loader.js";
 import { TelemetryDatabase } from "../reporting/db.js";
-import type { ExecutionLimits } from "../runner/types.js";
 import { createSafeArtifactPathSegment } from "../shared/artifact-sanitization.js";
 import { executeSweepCell } from "./cell-execution.js";
 import { acquireSweepLease, sweepLeaseFileName } from "./sweep-lease.js";
 import { bindSweepPlan, createSweepPlanFingerprint } from "./sweep-plan.js";
 import { validateMatrixSweepConfig } from "./sweep-config-validation.js";
-import { reconcileCheckpointTerminalEvidence } from "./terminal-reconciliation.js";
+import { cleanupValidatedTerminalEvidence, validateCheckpointTerminalEvidence, validateSweepOutcomeEvidence } from "./terminal-reconciliation.js";
+import { generateMatrixCells } from "./matrix-cell-planner.js";
+import { removeCheckpointTemporaryFiles, validateCheckpointTemporaryFiles } from "./checkpoint-storage.js";
+import { createSweepOutcomePath, writeDatabasePreflightFailureOutcome, writeSweepOutcome } from "./sweep-outcome.js";
 export class MatrixSweepEngine implements IMatrixSweepEngine {
   public sweepId: string;
   private readonly constructorSweepId?: string;
@@ -99,64 +102,6 @@ export class MatrixSweepEngine implements IMatrixSweepEngine {
     if (this.resumeResolver) { this.resumeResolver(); this.resumeResolver = null; }
     this.emitEvent({ type: "sweep:abort", message: `Sweep ${this.sweepId} aborted: ${reason}` });
   }
-  private generateCells(config: MatrixSweepConfig): readonly MatrixCellDescriptor[] {
-    const reps = config.repetitions ?? 1;
-    const limits: ExecutionLimits = {
-      maxTurns: 10,
-      maxWallClockTimeMs: 120000,
-      maxCostUSD: 0.5,
-      maxConsecutiveToolFailures: 3,
-      toolTimeoutMs: 30000,
-      maxOutputSizeBytes: 1024 * 1024,
-      ...config.defaultExecutionLimits,
-    };
-    const cells: MatrixCellDescriptor[] = [];
-    const cellIds = new Set<string>();
-    const runIds = new Set<string>();
-    let matrixOccurrenceIndex = 0;
-    const thinkingLevels = config.thinkingLevels !== undefined && config.thinkingLevels.length > 0
-      ? config.thinkingLevels
-      : [undefined];
-    for (const [scenarioIndex, scenarioId] of config.scenarioIds.entries()) {
-      for (const [skillIndex, skillId] of config.skillIds.entries()) {
-        for (const [modelIndex, modelEntry] of config.models.entries()) {
-          for (const [thinkingIndex, thinkingLevel] of thinkingLevels.entries()) {
-            for (let rep = 0; rep < reps; rep++) {
-              const effectiveThinking = thinkingLevel !== undefined ? thinkingLevel : modelEntry.thinkingLevel;
-              const effectiveProviderId = config.runtimeConfig.requestedProviderId ?? modelEntry.providerId;
-              const executionMode = config.dryRun ? "fake" : config.runtimeConfig.executionMode;
-              const identityTuple = [
-                scenarioId, skillId, modelEntry.modelId, effectiveProviderId,
-                executionMode, effectiveThinking ?? null,
-                modelEntry.thinkingBudget ?? null, modelEntry.temperature ?? null,
-                scenarioIndex, skillIndex, modelIndex, thinkingIndex, rep, matrixOccurrenceIndex,
-              ];
-              const cellId = createSafeArtifactPathSegment(JSON.stringify(["cell", ...identityTuple]), "cell");
-              const runId = createSafeArtifactPathSegment(JSON.stringify(["run", this.sweepId, cellId, matrixOccurrenceIndex]), "run");
-              if (cellIds.has(cellId) || runIds.has(runId)) {
-                throw new TypeError("Matrix occurrence identity collision");
-              }
-              cellIds.add(cellId);
-              runIds.add(runId);
-              cells.push({
-                cellId, matrixOccurrenceIndex, scenarioId, skillId,
-                modelId: modelEntry.modelId, providerId: effectiveProviderId,
-                executionMode,
-                outputRoot: config.runtimeConfig.outputRoot,
-                thinkingLevel: effectiveThinking,
-                thinkingBudget: modelEntry.thinkingBudget,
-                repetitionIndex: rep, runId,
-                modelEntry, limits, temperature: modelEntry.temperature,
-                tags: modelEntry.tags, metadata: modelEntry.metadata,
-              });
-              matrixOccurrenceIndex += 1;
-            }
-          }
-        }
-      }
-    }
-    return cells;
-  }
   async run(config: MatrixSweepConfig): Promise<MatrixSweepSummary> {
     try {
       return await this.executeRun(config);
@@ -173,7 +118,7 @@ export class MatrixSweepEngine implements IMatrixSweepEngine {
   private async executeRun(config: MatrixSweepConfig): Promise<MatrixSweepSummary> {
     validateMatrixSweepConfig(config);
     this.applyConfiguredSweepIdentity(config.sweepId);
-    const startedAt = new Date().toISOString();
+    let startedAt = new Date().toISOString();
     this.startTimeMs = Date.now();
     this.status = "running";
     this.abortController = new AbortController();
@@ -183,7 +128,7 @@ export class MatrixSweepEngine implements IMatrixSweepEngine {
     const rateLimiterManager = new MultiProviderRateLimiter(config.rateLimits ?? []);
     const checkpointPath = config.checkpoint?.filePath
       ?? join(config.runtimeConfig.outputRoot, "sweeps", this.sweepId, "checkpoint.json");
-    const allPlannedCells = this.generateCells(config);
+    const allPlannedCells = generateMatrixCells(this.sweepId, config);
     this.totalCells = allPlannedCells.length;
     const telemetryDbPath = config.telemetryDbPath
       ?? join(config.runtimeConfig.outputRoot, "db", "benchmarks.sqlite");
@@ -194,6 +139,36 @@ export class MatrixSweepEngine implements IMatrixSweepEngine {
       config,
       cells: allPlannedCells,
     });
+    const checkpointLedger = new CheckpointLedger(checkpointPath, {
+      sweepId: this.sweepId,
+      scenarioIds: config.scenarioIds,
+      skillIds: config.skillIds,
+      modelIds: config.models.map((m) => m.modelId),
+      repetitions: config.repetitions ?? 1,
+      totalPlannedCells: this.totalCells,
+      planFingerprint,
+      sweepStartedAt: startedAt,
+    }, config.checkpoint);
+    let checkpointLoaded = false;
+    if (config.checkpoint?.autoResume) {
+      checkpointLoaded = await checkpointLedger.load() !== null;
+      if (checkpointLoaded) startedAt = checkpointLedger.getState().metadata.sweepStartedAt;
+      validateCheckpointTemporaryFiles(checkpointPath);
+      const readOnlyDb = existsSync(telemetryDbPath) ? new TelemetryDatabase(telemetryDbPath, { readonly: true }) : undefined;
+      try {
+        validateCheckpointTerminalEvidence(allPlannedCells, checkpointLedger.getState(), readOnlyDb, config);
+        validateSweepOutcomeEvidence(
+          createSweepOutcomePath(config.runtimeConfig.outputRoot, this.sweepId),
+          allPlannedCells,
+          checkpointLedger.getState(),
+          readOnlyDb,
+          planFingerprint,
+          checkpointLoaded
+        );
+      } finally {
+        readOnlyDb?.close();
+      }
+    }
     const sweepLease = await acquireSweepLease(config.runtimeConfig.outputRoot, this.sweepId);
     try {
     await bindSweepPlan(
@@ -203,26 +178,29 @@ export class MatrixSweepEngine implements IMatrixSweepEngine {
       planFingerprint,
       config.checkpoint?.autoResume === true
     );
-    const checkpointLedger = new CheckpointLedger(checkpointPath, {
-      sweepId: this.sweepId,
-      scenarioIds: config.scenarioIds,
-      skillIds: config.skillIds,
-      modelIds: config.models.map((m) => m.modelId),
-      repetitions: config.repetitions ?? 1,
-      totalPlannedCells: this.totalCells,
-      planFingerprint,
-    }, config.checkpoint);
     let telemetryDb: TelemetryDatabase;
     try {
       await mkdir(join(config.runtimeConfig.outputRoot, "db"), { recursive: true });
       telemetryDb = new TelemetryDatabase(telemetryDbPath);
     } catch {
+      try {
+        writeDatabasePreflightFailureOutcome(config.runtimeConfig.outputRoot, this.sweepId, planFingerprint, startedAt, allPlannedCells);
+      } catch {}
       throw new TypeError("Benchmark database preflight failed");
     }
     try {
     if (config.checkpoint?.autoResume) {
-      await checkpointLedger.load();
-      reconcileCheckpointTerminalEvidence(allPlannedCells, checkpointLedger.getState(), telemetryDb);
+      validateCheckpointTerminalEvidence(allPlannedCells, checkpointLedger.getState(), telemetryDb, config);
+      validateSweepOutcomeEvidence(
+        createSweepOutcomePath(config.runtimeConfig.outputRoot, this.sweepId),
+        allPlannedCells,
+        checkpointLedger.getState(),
+        telemetryDb,
+        planFingerprint,
+        checkpointLoaded
+      );
+      cleanupValidatedTerminalEvidence(allPlannedCells);
+      removeCheckpointTemporaryFiles(checkpointPath);
     }
     this.emitEvent({
       type: "sweep:start",
@@ -234,10 +212,15 @@ export class MatrixSweepEngine implements IMatrixSweepEngine {
     const cellQueue = [...allPlannedCells];
     const modelInFlight = new Map<string, number>();
     const providerInFlight = new Map<string, number>();
+    const durableRecords = new Map<string, NonNullable<MatrixCellResult["runRecord"]>>();
     let checkpointPersistenceFailed = false;
+    let terminalIdentityConflict = false;
     const recordCheckpointFailure = (result: MatrixCellResult): MatrixCellResult => {
+      if (result.runRecord !== undefined) durableRecords.set(result.cell.cellId, result.runRecord);
+      const { runRecord, ...publicResult } = result;
       const failedResult: MatrixCellResult = {
-        ...result,
+        ...publicResult,
+        ...(runRecord === undefined || runRecord.status === "completed" ? {} : { runRecord }),
         status: "failed",
         executionCompleted: false,
         passedBenchmark: false,
@@ -252,6 +235,14 @@ export class MatrixSweepEngine implements IMatrixSweepEngine {
     const recordCellResult = async (result: MatrixCellResult): Promise<MatrixCellResult> => {
       this.totalCellDurationMs += result.durationMs;
       if (checkpointPersistenceFailed) return recordCheckpointFailure(result);
+      if (result.terminalIdentityConflict === true) {
+        terminalIdentityConflict = true;
+        if (!this.abortController.signal.aborted) this.abortController.abort(new Error("terminal identity conflict"));
+        results.push(result);
+        this.failedCount += 1;
+        this.emitEvent({ type: "cell:error", cellId: result.cell.cellId, message: `Cell ${result.cell.cellId} terminal identity conflict` });
+        return result;
+      }
       try {
         if (result.executionCompleted) await checkpointLedger.recordCellSuccess(result);
         else await checkpointLedger.recordCellFailure(result);
@@ -261,6 +252,7 @@ export class MatrixSweepEngine implements IMatrixSweepEngine {
         return recordCheckpointFailure(result);
       }
       results.push(result);
+      if (result.runRecord !== undefined) durableRecords.set(result.cell.cellId, result.runRecord);
       if (result.executionCompleted) {
         this.completedCount += 1;
         this.totalTokensConsumed += result.scenarioResult?.totalTokens.totalTokens ?? 0;
@@ -299,6 +291,7 @@ export class MatrixSweepEngine implements IMatrixSweepEngine {
         telemetryDb,
         limiter,
         aborted: () => this.abortController.signal.aborted,
+        planFingerprint,
       }));
     };
     const workerPool: Promise<void>[] = [];
@@ -338,9 +331,11 @@ export class MatrixSweepEngine implements IMatrixSweepEngine {
       modelInFlight.set(queuedCell.modelId, Math.max(0, (modelInFlight.get(queuedCell.modelId) ?? 1) - 1));
       providerInFlight.set(queuedCell.providerId, Math.max(0, (providerInFlight.get(queuedCell.providerId) ?? 1) - 1));
     }
-    const completedAt = new Date().toISOString();
+    const completedAt = checkpointPersistenceFailed || terminalIdentityConflict
+      ? new Date().toISOString()
+      : checkpointLedger.getState().metadata.updatedAt;
     const totalDurationMs = Date.now() - this.startTimeMs;
-    this.status = checkpointPersistenceFailed ? "failed" : this.abortController.signal.aborted ? "aborted" : this.failedCount > 0 ? "failed" : "completed";
+    this.status = checkpointPersistenceFailed || terminalIdentityConflict ? "failed" : this.abortController.signal.aborted ? "aborted" : this.failedCount > 0 ? "failed" : "completed";
     const summary: MatrixSweepSummary = {
       sweepId: this.sweepId,
       status: this.status,
@@ -356,6 +351,24 @@ export class MatrixSweepEngine implements IMatrixSweepEngine {
       startedAt,
       completedAt,
     };
+    if (!checkpointLoaded) {
+      writeSweepOutcome({
+        outputRoot: config.runtimeConfig.outputRoot,
+        sweepId: this.sweepId,
+        planFingerprint,
+        status: this.status,
+        startedAt,
+        completedAt,
+        cells: allPlannedCells,
+        results,
+        durableRecords,
+        ...(checkpointPersistenceFailed
+          ? { orchestrationFailure: "checkpoint_persistence_failed" as const }
+          : terminalIdentityConflict
+            ? { orchestrationFailure: "terminal_identity_conflict" as const }
+            : {}),
+      });
+    }
     this.emitEvent({
       type: this.status === "completed" ? "sweep:complete" : this.status === "aborted" ? "sweep:abort" : "sweep:error",
       message: `Sweep ${this.sweepId} ${this.status}: ${this.completedCount} executed, ${this.failedCount} failed in ${totalDurationMs}ms`,

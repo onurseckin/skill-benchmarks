@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
-import type { MatrixCellDescriptor, MatrixSweepConfig } from "./types.js";
+import type { MatrixCellDescriptor, MatrixSweepConfig, ModelMatrixEntry } from "./types.js";
 
 export const incompatibleSweepPlanMessage = "Sweep plan is incompatible with the existing sweep identity";
 export const occupiedSweepNamespaceMessage = "Sweep identity already owns an existing benchmark namespace";
@@ -40,27 +40,7 @@ export function createSweepPlanFingerprint(input: SweepPlanFingerprintInput): st
       queuePollIntervalMs: input.config.concurrency?.queuePollIntervalMs ?? null,
     },
     rateLimits: input.config.rateLimits ?? [],
-    models: input.config.models.map((model) => ({
-      modelId: model.modelId,
-      providerId: model.providerId,
-      embeddedProvider: model.provider === undefined ? null : {
-        providerId: model.provider.providerId,
-        modelId: model.provider.modelId,
-        executionMode: model.provider.executionMode ?? null,
-        simulated: model.provider.simulated ?? null,
-      },
-      displayName: model.displayName ?? null,
-      temperature: model.temperature ?? null,
-      topP: model.topP ?? null,
-      maxTokens: model.maxTokens ?? null,
-      thinkingLevel: model.thinkingLevel ?? null,
-      thinkingBudget: model.thinkingBudget ?? null,
-      reasoningEffort: model.reasoningEffort ?? null,
-      concurrencyLimit: model.concurrencyLimit ?? null,
-      rateLimit: model.rateLimit ?? null,
-      tags: model.tags ?? [],
-      metadata: model.metadata ?? {},
-    })),
+    models: input.config.models.map(createModelEntryPlanIdentity),
     cells: input.cells.map((cell) => ({
       cellId: cell.cellId,
       runId: cell.runId,
@@ -80,6 +60,30 @@ export function createSweepPlanFingerprint(input: SweepPlanFingerprintInput): st
     })),
   };
   return createHash("sha256").update(canonicalJson(fingerprintInput)).digest("hex");
+}
+
+export function createModelEntryPlanIdentity(model: ModelMatrixEntry): Readonly<Record<string, unknown>> {
+  return {
+    modelId: model.modelId,
+    providerId: model.providerId,
+    embeddedProvider: model.provider === undefined ? null : {
+      providerId: model.provider.providerId,
+      modelId: model.provider.modelId,
+      executionMode: model.provider.executionMode ?? null,
+      simulated: model.provider.simulated ?? null,
+    },
+    displayName: model.displayName ?? null,
+    temperature: model.temperature ?? null,
+    topP: model.topP ?? null,
+    maxTokens: model.maxTokens ?? null,
+    thinkingLevel: model.thinkingLevel ?? null,
+    thinkingBudget: model.thinkingBudget ?? null,
+    reasoningEffort: model.reasoningEffort ?? null,
+    concurrencyLimit: model.concurrencyLimit ?? null,
+    rateLimit: model.rateLimit ?? null,
+    tags: model.tags ?? [],
+    metadata: model.metadata ?? {},
+  };
 }
 
 export async function bindSweepPlan(

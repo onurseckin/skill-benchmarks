@@ -11,8 +11,14 @@ import type {
   TelemetryEventRecord,
 } from "./types.js";
 import type { ExecutionMode } from "../shared/execution-mode.js";
+import { claimTerminalRunIdentity, TerminalRunIdentityConflictError } from "./run-identity.js";
+export { TerminalRunIdentityConflictError } from "./run-identity.js";
 
 interface RunRow {
+  readonly sweep_id: string | null;
+  readonly plan_fingerprint: string | null;
+  readonly cell_id: string | null;
+  readonly matrix_occurrence_index: number | null;
   readonly run_id: string;
   readonly scenario_id: string;
   readonly category: string;
@@ -35,6 +41,7 @@ interface RunRow {
   readonly total_cost_usd: number;
   readonly total_turns: number;
   readonly error_count: number;
+  readonly attempt_count: number;
   readonly started_at: string;
   readonly completed_at: string;
   readonly manifest_json: string | null;
@@ -74,6 +81,10 @@ function mapRowToRunRecord(row: RunRow): RunRecord {
   const metrics = parseJsonField<RunMetricsSummary>(row.metrics_json);
   const evaluation = parseJsonField<RunEvaluationSummary>(row.evaluation_json);
   return {
+    ...(row.sweep_id !== null ? { sweepId: row.sweep_id } : {}),
+    ...(row.plan_fingerprint !== null ? { planFingerprint: row.plan_fingerprint } : {}),
+    ...(row.cell_id !== null ? { cellId: row.cell_id } : {}),
+    ...(row.matrix_occurrence_index !== null ? { matrixOccurrenceIndex: row.matrix_occurrence_index } : {}),
     runId: row.run_id,
     scenarioId: row.scenario_id,
     category: row.category,
@@ -96,6 +107,7 @@ function mapRowToRunRecord(row: RunRow): RunRecord {
     totalCostUSD: row.total_cost_usd,
     totalTurns: row.total_turns,
     errorCount: row.error_count,
+    attemptCount: row.attempt_count,
     startedAt: row.started_at,
     completedAt: row.completed_at,
     ...(manifest !== undefined ? { manifest } : {}),
@@ -118,16 +130,18 @@ function computeConfidenceInterval(wins: number, ties: number, matches: number):
 export class TelemetryDatabase {
   private readonly db: Database;
 
-  public constructor(dbPath: string = ":memory:") {
-    this.db = new Database(dbPath);
-    this.initSchema();
+  public constructor(dbPath: string = ":memory:", options?: { readonly readonly?: boolean }) {
+    this.db = options?.readonly === true ? new Database(dbPath, { readonly: true }) : new Database(dbPath);
+    if (options?.readonly !== true) this.initSchema();
   }
 
   public initSchema(): void {
-    this.db.exec("PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA foreign_keys = ON; PRAGMA temp_store = MEMORY;");
+    this.db.exec("PRAGMA journal_mode = DELETE; PRAGMA synchronous = FULL; PRAGMA foreign_keys = ON; PRAGMA temp_store = MEMORY;");
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS runs (
-        run_id TEXT PRIMARY KEY, scenario_id TEXT NOT NULL, category TEXT NOT NULL,
+        run_id TEXT PRIMARY KEY, sweep_id TEXT, plan_fingerprint TEXT,
+        cell_id TEXT, matrix_occurrence_index INTEGER,
+        scenario_id TEXT NOT NULL, category TEXT NOT NULL,
         skill_id TEXT NOT NULL, skill_version TEXT, model_id TEXT NOT NULL,
         provider_id TEXT NOT NULL, execution_mode TEXT NOT NULL DEFAULT 'fake', simulated INTEGER NOT NULL DEFAULT 1,
         thinking_level TEXT, thinking_budget_tokens INTEGER, reasoning_tokens INTEGER,
@@ -135,8 +149,13 @@ export class TelemetryDatabase {
         passed_benchmark INTEGER NOT NULL, wall_clock_ms REAL NOT NULL,
         total_tokens INTEGER NOT NULL, cache_hit_ratio REAL NOT NULL,
         total_cost_usd REAL NOT NULL, total_turns INTEGER NOT NULL,
-        error_count INTEGER NOT NULL, started_at TEXT NOT NULL, completed_at TEXT NOT NULL,
+        error_count INTEGER NOT NULL, attempt_count INTEGER NOT NULL DEFAULT 0,
+        started_at TEXT NOT NULL, completed_at TEXT NOT NULL,
         manifest_json TEXT, metrics_json TEXT, evaluation_json TEXT, commit_sha TEXT
+      );
+      CREATE TABLE IF NOT EXISTS run_claims (
+        run_id TEXT PRIMARY KEY, sweep_id TEXT NOT NULL, cell_id TEXT NOT NULL,
+        created_at TEXT NOT NULL
       );
       CREATE INDEX IF NOT EXISTS idx_runs_scenario_id ON runs(scenario_id);
       CREATE INDEX IF NOT EXISTS idx_runs_skill_id ON runs(skill_id);
@@ -169,6 +188,11 @@ export class TelemetryDatabase {
     try { this.db.exec("ALTER TABLE runs ADD COLUMN execution_mode TEXT NOT NULL DEFAULT 'fake';"); } catch {}
     try { this.db.exec("ALTER TABLE runs ADD COLUMN simulated INTEGER NOT NULL DEFAULT 1;"); } catch {}
     try { this.db.exec("ALTER TABLE runs ADD COLUMN termination_reason TEXT;"); } catch {}
+    try { this.db.exec("ALTER TABLE runs ADD COLUMN sweep_id TEXT;"); } catch {}
+    try { this.db.exec("ALTER TABLE runs ADD COLUMN plan_fingerprint TEXT;"); } catch {}
+    try { this.db.exec("ALTER TABLE runs ADD COLUMN cell_id TEXT;"); } catch {}
+    try { this.db.exec("ALTER TABLE runs ADD COLUMN matrix_occurrence_index INTEGER;"); } catch {}
+    try { this.db.exec("ALTER TABLE runs ADD COLUMN attempt_count INTEGER NOT NULL DEFAULT 0;"); } catch {}
   }
 
   public saveRunRecord(record: RunRecord): void {
@@ -180,42 +204,35 @@ export class TelemetryDatabase {
 
     const stmt = this.db.prepare(`
       INSERT INTO runs (
-        run_id, scenario_id, category, skill_id, skill_version, model_id, provider_id, execution_mode, simulated,
+        run_id, sweep_id, plan_fingerprint, cell_id, matrix_occurrence_index,
+        scenario_id, category, skill_id, skill_version, model_id, provider_id, execution_mode, simulated,
         thinking_level, thinking_budget_tokens, reasoning_tokens,
         status, termination_reason, composite_score, passed_benchmark, wall_clock_ms, total_tokens, cache_hit_ratio,
-        total_cost_usd, total_turns, error_count, started_at, completed_at,
+        total_cost_usd, total_turns, error_count, attempt_count, started_at, completed_at,
         manifest_json, metrics_json, evaluation_json, commit_sha
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(run_id) DO UPDATE SET
-        scenario_id = excluded.scenario_id, category = excluded.category,
-        skill_id = excluded.skill_id, skill_version = excluded.skill_version,
-        model_id = excluded.model_id, provider_id = excluded.provider_id,
-        execution_mode = excluded.execution_mode, simulated = excluded.simulated,
-        thinking_level = excluded.thinking_level,
-        thinking_budget_tokens = excluded.thinking_budget_tokens,
-        reasoning_tokens = excluded.reasoning_tokens,
-        status = excluded.status, termination_reason = excluded.termination_reason,
-        composite_score = excluded.composite_score,
-        passed_benchmark = excluded.passed_benchmark, wall_clock_ms = excluded.wall_clock_ms,
-        total_tokens = excluded.total_tokens, cache_hit_ratio = excluded.cache_hit_ratio,
-        total_cost_usd = excluded.total_cost_usd, total_turns = excluded.total_turns,
-        error_count = excluded.error_count, started_at = excluded.started_at,
-        completed_at = excluded.completed_at, manifest_json = excluded.manifest_json,
-        metrics_json = excluded.metrics_json, evaluation_json = excluded.evaluation_json,
-        commit_sha = excluded.commit_sha
+      ) VALUES (
+        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+      )
     `);
 
-    stmt.run(
-      record.runId, record.scenarioId, record.category, record.skillId, skillVersion,
-      record.modelId, record.providerId, record.executionMode, record.simulated ? 1 : 0,
-      record.thinkingLevel ?? record.manifest?.modelParameters?.thinkingLevel ?? null,
-      record.thinkingBudgetTokens ?? record.manifest?.modelParameters?.thinkingBudgetTokens ?? null,
-      record.reasoningTokens ?? null,
-      record.status, record.terminationReason ?? null, record.compositeScore,
-      record.passedBenchmark ? 1 : 0, record.wallClockMs, record.totalTokens,
-      record.cacheHitRatio, record.totalCostUSD, record.totalTurns, record.errorCount,
-      record.startedAt, record.completedAt, manifestJson, metricsJson, evaluationJson, commitSha
-    );
+    try {
+      stmt.run(
+        record.runId, record.sweepId ?? null, record.planFingerprint ?? null, record.cellId ?? null, record.matrixOccurrenceIndex ?? null,
+        record.scenarioId, record.category, record.skillId, skillVersion,
+        record.modelId, record.providerId, record.executionMode, record.simulated ? 1 : 0,
+        record.thinkingLevel ?? record.manifest?.modelParameters?.thinkingLevel ?? null,
+        record.thinkingBudgetTokens ?? record.manifest?.modelParameters?.thinkingBudgetTokens ?? null,
+        record.reasoningTokens ?? null,
+        record.status, record.terminationReason ?? null, record.compositeScore,
+        record.passedBenchmark ? 1 : 0, record.wallClockMs, record.totalTokens,
+        record.cacheHitRatio, record.totalCostUSD, record.totalTurns, record.errorCount, record.attemptCount ?? 0,
+        record.startedAt, record.completedAt, manifestJson, metricsJson, evaluationJson, commitSha
+      );
+      this.db.prepare("DELETE FROM run_claims WHERE run_id = ?").run(record.runId);
+    } catch (error) {
+      if (this.getRunRecord(record.runId) !== undefined) throw new TerminalRunIdentityConflictError();
+      throw error;
+    }
   }
 
   public saveRunRecordWithArtifact(record: RunRecord, commitArtifact: () => void): void {
@@ -223,6 +240,10 @@ export class TelemetryDatabase {
       this.saveRunRecord(record);
       commitArtifact();
     })();
+  }
+
+  public claimRunIdentity(runId: string, sweepId: string, cellId: string): void {
+    claimTerminalRunIdentity(this.db, runId, sweepId, cellId);
   }
 
   public getRunRecord(runId: string): RunRecord | undefined {
