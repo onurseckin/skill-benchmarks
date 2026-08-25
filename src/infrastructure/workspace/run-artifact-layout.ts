@@ -30,6 +30,7 @@ export function createRunArtifactLayout(
     gitDiffPath: join(runDirectory, "git.diff"),
     diffManifestPath: join(runDirectory, "diff-manifest.json"),
     resultPath: join(runDirectory, "result.json"),
+    terminalFailurePath: join(runDirectory, "terminal-failure.json"),
   };
 }
 

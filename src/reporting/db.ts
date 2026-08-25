@@ -218,6 +218,13 @@ export class TelemetryDatabase {
     );
   }
 
+  public saveRunRecordWithArtifact(record: RunRecord, commitArtifact: () => void): void {
+    this.db.transaction(() => {
+      this.saveRunRecord(record);
+      commitArtifact();
+    })();
+  }
+
   public saveTelemetryEvents(events: ReadonlyArray<TelemetryEventRecord>): void {
     if (events.length === 0) return;
     const stmt = this.db.prepare(`

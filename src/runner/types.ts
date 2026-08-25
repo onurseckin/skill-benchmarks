@@ -195,6 +195,7 @@ export type RunTerminationReason =
   | "budget_exceeded"
   | "aborted"
   | "tool_error_loop"
+  | "persistence_failed"
   | "error";
 
 export interface ExecutionLimits {

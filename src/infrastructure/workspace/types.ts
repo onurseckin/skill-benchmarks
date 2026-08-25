@@ -76,6 +76,7 @@ export interface RunArtifactLayout {
   readonly gitDiffPath: string;
   readonly diffManifestPath: string;
   readonly resultPath: string;
+  readonly terminalFailurePath: string;
 }
 
 export interface DisposableWorkspace {

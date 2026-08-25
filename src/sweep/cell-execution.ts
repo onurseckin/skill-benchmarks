@@ -3,12 +3,21 @@ import { createDisposableWorkspace } from "../infrastructure/workspace/disposabl
 import { createRunArtifactLayout, prepareRunArtifactLayout } from "../infrastructure/workspace/run-artifact-layout.js";
 import { createProviderAdapter } from "../providers/factory.js";
 import { TelemetryDatabase } from "../reporting/db.js";
-import type { ScenarioResult } from "../runner/types.js";
+import type { ScenarioResult, RunTerminationReason } from "../runner/types.js";
 import { ScenarioRunnerEngine } from "../runner/runner-engine.js";
 import { ScenarioLoader } from "../runner/scenario-loader.js";
 import { createSafeArtifactPathSegment } from "../shared/artifact-sanitization.js";
 import type { ITokenBucketRateLimiter, MatrixCellDescriptor, MatrixCellResult, MatrixSweepConfig } from "./types.js";
-import { createTerminalRunRecord, mapTerminalStatus, summarizeTerminalFailure, writeRunManifest, writeRunResult } from "./run-evidence.js";
+import {
+  EvidenceCommitError,
+  commitRunResult,
+  commitTerminalFailure,
+  createTerminalRunRecord,
+  discardCommittedRunResult,
+  mapTerminalStatus,
+  summarizeTerminalFailure,
+  writeRunManifest,
+} from "./run-evidence.js";
 
 interface CellExecutionInput {
   readonly cell: MatrixCellDescriptor;
@@ -25,7 +34,7 @@ export async function executeSweepCell(input: CellExecutionInput): Promise<Matri
   const startedAt = new Date().toISOString();
   const startedMs = Date.now();
   const executionMode = config.dryRun ? "fake" : cell.executionMode;
-  const evidenceContext = {
+  const baseContext = {
     runId: cell.runId,
     scenarioId: cell.scenarioId,
     category: "unknown",
@@ -38,19 +47,21 @@ export async function executeSweepCell(input: CellExecutionInput): Promise<Matri
   } as const;
   const artifactLayout = createCellArtifactLayout(cell);
   let scenarioResult: ScenarioResult | undefined;
-  let container: IContainerInstance | undefined;
-  let attemptCount = 0;
-  let manifestWritten = false;
   let evidenceCategory = "unknown";
+  let attemptCount = 0;
+  let infrastructureFailure: RunTerminationReason | undefined;
 
   try {
     await prepareRunArtifactLayout(artifactLayout);
     assertEmbeddedAdapterMatchesMode(cell, executionMode);
     const scenarioDefinition = scenarioLoader.loadScenario(cell.scenarioId);
     evidenceCategory = scenarioDefinition.category;
-    const contextualEvidence = { ...evidenceContext, category: evidenceCategory };
-    await writeRunManifest(artifactLayout, contextualEvidence);
-    manifestWritten = true;
+    const context = { ...baseContext, category: evidenceCategory };
+    try {
+      await writeRunManifest(artifactLayout, context);
+    } catch {
+      return persistTerminalFailure(cell, telemetryDb, artifactLayout, context, scenarioResult, attemptCount, startedMs);
+    }
     const workspace = await createDisposableWorkspace({
       outputRoot: cell.outputRoot,
       runId: cell.runId,
@@ -60,9 +71,11 @@ export async function executeSweepCell(input: CellExecutionInput): Promise<Matri
     const maxRetries = config.maxRetriesPerCell ?? 2;
 
     while (attemptCount <= maxRetries) {
+      if (aborted()) break;
       attemptCount += 1;
+      let container: IContainerInstance | undefined;
+      let attemptFailed = false;
       try {
-        if (aborted()) break;
         await limiter.acquire(2000);
         if (aborted()) break;
         if (config.containerPool) {
@@ -101,42 +114,39 @@ export async function executeSweepCell(input: CellExecutionInput): Promise<Matri
             reasoningEffort: cell.modelEntry.reasoningEffort,
           });
         limiter.recordConsumption(scenarioResult.totalTokens.totalTokens);
-        if (scenarioResult.completed) {
-          return persistTerminalCell({
-            cell,
-            telemetryDb,
-            artifactLayout,
-            context: { ...evidenceContext, category: evidenceCategory },
-            scenarioResult,
-            attemptCount,
-          });
-        }
-        break;
       } catch {
-        if (attemptCount > maxRetries || aborted()) break;
-        await limiter.reportRateLimitViolation();
+        attemptFailed = true;
       } finally {
         if (container && config.containerPool) {
-          await config.containerPool.release(container);
-          container = undefined;
+          try {
+            await config.containerPool.release(container);
+          } catch {
+            infrastructureFailure = "error";
+          }
         }
+      }
+      if (infrastructureFailure || scenarioResult !== undefined || aborted()) break;
+      if (attemptFailed && attemptCount <= maxRetries) {
+        try {
+          await limiter.reportRateLimitViolation();
+        } catch {
+          infrastructureFailure = "error";
+        }
+      } else {
+        break;
       }
     }
   } catch {
+    infrastructureFailure = "error";
   }
 
-  const terminationReason = scenarioResult?.terminationReason ?? (aborted() ? "aborted" : "error");
-  if (!manifestWritten) {
-    try {
-      await writeRunManifest(artifactLayout, { ...evidenceContext, category: evidenceCategory });
-    } catch {
-    }
-  }
+  const context = { ...baseContext, category: evidenceCategory };
+  const terminationReason = resolveTerminationReason(infrastructureFailure, scenarioResult, aborted());
   return persistTerminalCell({
     cell,
     telemetryDb,
     artifactLayout,
-    context: { ...evidenceContext, category: evidenceCategory },
+    context,
     scenarioResult,
     attemptCount,
     terminationReason,
@@ -151,32 +161,93 @@ interface PersistTerminalCellInput {
   readonly context: Parameters<typeof createTerminalRunRecord>[0];
   readonly scenarioResult?: ScenarioResult;
   readonly attemptCount: number;
-  readonly terminationReason?: ScenarioResult["terminationReason"];
-  readonly startedMs?: number;
+  readonly terminationReason: RunTerminationReason;
+  readonly startedMs: number;
 }
 
-async function persistTerminalCell(input: PersistTerminalCellInput): Promise<MatrixCellResult> {
+function persistTerminalCell(input: PersistTerminalCellInput): MatrixCellResult {
   const scenarioResult = normalizeScenarioResult(input.context, input.scenarioResult);
-  const terminationReason = input.terminationReason ?? scenarioResult?.terminationReason ?? "error";
   const terminal = {
-    status: mapTerminalStatus(terminationReason),
-    terminationReason,
+    status: mapTerminalStatus(input.terminationReason),
+    terminationReason: input.terminationReason,
     completedAt: scenarioResult?.finishedAt ?? new Date().toISOString(),
   } as const;
   const runRecord = createTerminalRunRecord(input.context, terminal, scenarioResult);
-  input.telemetryDb.saveRunRecord(runRecord);
+  let resultCommitted = false;
   try {
-    await writeRunResult(input.artifactLayout, input.context, terminal, scenarioResult);
-  } catch {
+    input.telemetryDb.saveRunRecordWithArtifact(runRecord, () => {
+      commitRunResult(input.artifactLayout, input.context, terminal, scenarioResult);
+      resultCommitted = true;
+    });
+  } catch (error) {
+    const targetCommitted = resultCommitted || (error instanceof EvidenceCommitError && error.targetCommitted);
+    if (targetCommitted) {
+      try {
+        discardCommittedRunResult(input.artifactLayout);
+      } catch {
+        return createPersistenceFailureResult(input, scenarioResult, false);
+      }
+    }
+    return createPersistenceFailureResult(input, scenarioResult, targetCommitted);
   }
-  const executionCompleted = terminal.status === "completed";
+  return createCellResult(input, scenarioResult, runRecord, terminal.terminationReason);
+}
+
+function persistTerminalFailure(
+  cell: MatrixCellDescriptor,
+  telemetryDb: TelemetryDatabase,
+  artifactLayout: ReturnType<typeof createRunArtifactLayout>,
+  context: Parameters<typeof createTerminalRunRecord>[0],
+  scenarioResult: ScenarioResult | undefined,
+  attemptCount: number,
+  startedMs: number
+): MatrixCellResult {
+  return createPersistenceFailureResult({
+    cell, telemetryDb, artifactLayout, context, scenarioResult,
+    attemptCount, terminationReason: "persistence_failed", startedMs,
+  }, scenarioResult, true);
+}
+
+function createPersistenceFailureResult(
+  input: PersistTerminalCellInput,
+  scenarioResult: ScenarioResult | undefined,
+  preferResultPath: boolean
+): MatrixCellResult {
+  const terminal = { status: "failed", terminationReason: "persistence_failed", completedAt: new Date().toISOString() } as const;
+  const runRecord = createTerminalRunRecord(input.context, terminal, scenarioResult);
+  let failureArtifactDurable = false;
+  try {
+    commitTerminalFailure(input.artifactLayout, input.context, scenarioResult, preferResultPath);
+    failureArtifactDurable = true;
+  } catch {
+    failureArtifactDurable = false;
+  }
+  let databaseRecordDurable = false;
+  try {
+    input.telemetryDb.saveRunRecord(runRecord);
+    databaseRecordDurable = true;
+  } catch {
+    databaseRecordDurable = false;
+  }
+  const result = createCellResult(input, scenarioResult, runRecord, terminal.terminationReason);
+  if (!failureArtifactDurable || !databaseRecordDurable) return { ...result, retryable: false };
+  return result;
+}
+
+function createCellResult(
+  input: PersistTerminalCellInput,
+  scenarioResult: ScenarioResult | undefined,
+  runRecord: ReturnType<typeof createTerminalRunRecord>,
+  terminationReason: RunTerminationReason
+): MatrixCellResult {
+  const executionCompleted = runRecord.status === "completed";
   return {
     cell: input.cell,
     status: executionCompleted ? "completed" : "failed",
     attemptCount: input.attemptCount,
     startedAt: input.context.startedAt,
-    completedAt: terminal.completedAt,
-    durationMs: scenarioResult?.totalDurationMs ?? Date.now() - (input.startedMs ?? Date.now()),
+    completedAt: runRecord.completedAt,
+    durationMs: scenarioResult?.totalDurationMs ?? Date.now() - input.startedMs,
     scenarioResult,
     runRecord,
     error: executionCompleted ? undefined : summarizeTerminalFailure(terminationReason),
@@ -184,6 +255,18 @@ async function persistTerminalCell(input: PersistTerminalCellInput): Promise<Mat
     executionCompleted,
     passedBenchmark: runRecord.passedBenchmark,
   };
+}
+
+function resolveTerminationReason(
+  infrastructureFailure: RunTerminationReason | undefined,
+  scenarioResult: ScenarioResult | undefined,
+  aborted: boolean
+): RunTerminationReason {
+  if (infrastructureFailure !== undefined) return infrastructureFailure;
+  if (scenarioResult?.terminationReason === "timeout") return "timeout";
+  if (aborted) return "aborted";
+  if (scenarioResult !== undefined) return scenarioResult.terminationReason;
+  return "error";
 }
 
 function normalizeScenarioResult(
