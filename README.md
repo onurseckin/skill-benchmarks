@@ -65,6 +65,29 @@ bun run typecheck
 bun run src/scripts/quality-gate.ts
 ```
 
+CI runs one deterministic no-key operational diagnostic with Bun 1.3.14. Its `simulated-diagnostic-<sha>` artifact proves installed-command execution, workspace isolation, event persistence, terminal reconciliation, database persistence, and diagnostic report empty-state health. It does not publish benchmark results, rankings, or regression decisions.
+
+Reproduce the diagnostic locally with a temporary bundle:
+
+```bash
+bundle="$(mktemp -d)/skill-benchmarks-simulated-diagnostic"
+runtime="$bundle/runtime"
+mkdir -p "$bundle/logs"
+env -u ANTHROPIC_API_KEY -u OPENAI_API_KEY -u GEMINI_API_KEY -u GOOGLE_API_KEY \
+  SKILL_BENCHMARKS_USE_MOCK=true \
+  bun bin/skill-benchmarks run \
+    --mock \
+    --scenario git-worktrees \
+    --skill tdd \
+    --model gpt-4o \
+    --output-dir "$runtime" 2>&1 | tee "$bundle/logs/run.log"
+bun bin/skill-benchmarks report \
+  --db "$runtime/db/benchmarks.sqlite" \
+  --format json \
+  --output "$runtime/exports/diagnostic-report.json"
+bun run verify:ci-diagnostic -- "$bundle"
+```
+
 ## License
 
 MIT © [Onur Seckin Senoglu](https://github.com/onurseckin)
