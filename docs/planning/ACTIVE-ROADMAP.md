@@ -72,6 +72,10 @@ This document outlines the strategic product vision, future capability expansion
 - ✅ **Automated Bradley-Terry Elo Updates**: Instant dynamic rating adjustments with K-factor scaling and SQLite database persistence across matches.
 - ✅ **CLI Integration**: Full support for `--arena <modelA>,<modelB>` flag across `bin/skill-benchmarks` and `arena` / `run` commands.
 
+### 5. Multi-Model Tournament Engine (`src/runner/tournament-scheduler.ts`)
+- ✅ **Swiss-System & Round-Robin Schedulers**: Dynamic round pairings, Berger table polygon rotation, bye allocations, and Buchholz / Sonneborn-Berger tiebreaking metrics.
+- ✅ **CLI Tournament Options**: `--tournament-mode <round-robin|swiss>` and `--rounds <N>` flags wired into CLI parser and runner commands with live standings reporting.
+
 ---
 
 ## 📜 Completed Plans Archive
