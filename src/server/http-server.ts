@@ -25,7 +25,7 @@ export class HttpServer implements HttpServerInstance {
   private eventCount = 0;
   private heartbeatInterval: ReturnType<typeof setInterval> | null = null;
 
-  public constructor(options: ServerOptions = {}, router?: ApiRouter) {
+  public constructor(options: ServerOptions, router?: ApiRouter) {
     this.options = options;
     this.router = router ?? new ApiRouter();
     if (options.db) {
@@ -158,6 +158,7 @@ export class HttpServer implements HttpServerInstance {
     return this.router.handle(
       req,
       this.db,
+      this.options.outputRoot,
       this.getState(),
       (event, runIdFilter) => this.broadcast(event, runIdFilter)
     );

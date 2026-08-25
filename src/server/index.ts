@@ -48,11 +48,11 @@ export type {
 
 export { ApiRouter, HttpServer, jsonResponse, errorResponse, parsePattern };
 
-export function createServer(options?: ServerOptions, router?: ApiRouter): HttpServer {
+export function createServer(options: ServerOptions, router?: ApiRouter): HttpServer {
   return new HttpServer(options, router);
 }
 
-export async function startServer(options?: ServerOptions, router?: ApiRouter): Promise<HttpServer> {
+export async function startServer(options: ServerOptions, router?: ApiRouter): Promise<HttpServer> {
   const server = new HttpServer(options, router);
   await server.start();
   return server;

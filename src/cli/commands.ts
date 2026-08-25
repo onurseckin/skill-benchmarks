@@ -1,9 +1,9 @@
-import { writeFileSync, readFileSync, existsSync } from "node:fs";
+import { writeFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import type {
   CliParsedArgs, CliCommandResult,
   TournamentOptions, ReportOptions, SyncOptions, ListOptions,
-  ReplayCliOptions, FuzzCliOptions,
+  FuzzCliOptions,
 } from "./types.js";
 import { bold, green, cyan, yellow, formatSectionHeader, formatBadge } from "./formatter.js";
 import { getHelpText, getVersionText } from "./parser.js";
@@ -18,10 +18,6 @@ import {
   aggregateAllSkills, buildLeaderboardEntries,
   buildCategoryLeaderboards, extractCostEfficiencyPointsFromRuns,
 } from "../reporting/aggregator.js";
-import { ReplayEngine } from "../replay/replay-engine.js";
-import { TuiReplayPlayer } from "../replay/tui-player.js";
-import { exportWebReplayHtml } from "../replay/web-player.js";
-import type { ReplaySession } from "../replay/types.js";
 import { FuzzerEngine } from "../fuzzer/fuzzer-engine.js";
 import type { FuzzingStrategy, MutationSeverity } from "../fuzzer/types.js";
 import { TournamentScheduler } from "../runner/tournament-scheduler.js";
@@ -29,6 +25,7 @@ import { runArenaCommand } from "./arena-command.js";
 
 export { runArenaCommand };
 export { runBenchmarkCommand } from "./commands/run-command.js";
+export { runReplayCommand } from "./commands/replay-command.js";
 
 export async function runTournamentCommand(args: CliParsedArgs): Promise<CliCommandResult> {
   const startTime = Date.now();
@@ -179,66 +176,6 @@ export async function runListCommand(args: CliParsedArgs): Promise<CliCommandRes
       console.log(`  ${green(sk.name.padEnd(25))} ${sk.name} [v${sk.version}]`);
     }
   }
-
-  return { success: true, exitCode: 0, durationMs: Date.now() - startTime };
-}
-
-function createSampleReplaySession(): ReplaySession {
-  const engine = new ReplayEngine({ runId: "sample-run-1", scenarioId: "git-worktrees", skillId: "using-git-worktrees", modelId: "claude-3-7-sonnet" });
-  engine.recordEvent({ type: "run:start", timestamp: new Date(Date.now() - 10000).toISOString() });
-  engine.recordEvent({ type: "turn:start", turnNumber: 1, timestamp: new Date(Date.now() - 9000).toISOString() });
-  engine.recordEvent({ type: "tool:call", toolName: "run_command", callId: "call-1", payload: { command: "git worktree add -b feat-new ../worktree-feat" }, timestamp: new Date(Date.now() - 8500).toISOString() });
-  engine.recordEvent({ type: "RESOURCE_SAMPLE", cpuPercent: 32.5, memoryRssMb: 128.4, memoryLimitMb: 512, diskReadKb: 1024, diskWriteKb: 2048, networkRxKb: 12, networkTxKb: 8, activePids: 4, timestamp: new Date(Date.now() - 8000).toISOString() });
-  engine.recordEvent({ type: "tool:result", toolName: "run_command", callId: "call-1", stdout: "Preparing worktree (new branch 'feat-new')\nHEAD is now at 6ab0dc7 feat", exitCode: 0, durationMs: 420, timestamp: new Date(Date.now() - 7500).toISOString() });
-  engine.recordEvent({ type: "GIT_DIFF_CAPTURED", rawDiff: "diff --git a/src/feature.ts b/src/feature.ts\n--- a/src/feature.ts\n+++ b/src/feature.ts\n@@ -1,3 +1,4 @@\n+export const feature = true;\n", timestamp: new Date(Date.now() - 6500).toISOString() });
-  engine.recordEvent({ type: "turn:finish", timestamp: new Date(Date.now() - 5000).toISOString() });
-  engine.recordEvent({ type: "run:finish", timestamp: new Date().toISOString() });
-  return engine.finalizeSession("completed");
-}
-
-export async function runReplayCommand(args: CliParsedArgs): Promise<CliCommandResult> {
-  const startTime = Date.now();
-  const options = args.replayOptions !== undefined ? args.replayOptions : ({} as ReplayCliOptions);
-  const target = options.target ?? options.filePath;
-
-  let session: ReplaySession;
-  if (target && existsSync(target)) {
-    const rawContent = readFileSync(target, "utf8");
-    if (target.endsWith(".jsonl")) {
-      const engine = new ReplayEngine();
-      session = engine.parseJsonl(rawContent);
-    } else {
-      session = ReplayEngine.fromJson(rawContent);
-    }
-  } else {
-    session = createSampleReplaySession();
-  }
-
-  const format = options.format ?? "tui";
-  if (format === "html" || options.web) {
-    const outputPath = options.outputPath ?? resolve(process.cwd(), "replay.html");
-    exportWebReplayHtml(session, outputPath);
-    console.log(`  ${formatBadge("success", "EXPORT")} Web Replay exported to ${cyan(outputPath)}`);
-    return { success: true, exitCode: 0, durationMs: Date.now() - startTime };
-  }
-
-  if (format === "json") {
-    const engine = new ReplayEngine(session.metadata);
-    const jsonStr = engine.toJson(true);
-    if (options.outputPath) {
-      writeFileSync(options.outputPath, jsonStr, "utf8");
-      console.log(`  ${formatBadge("success", "EXPORT")} Replay JSON exported to ${cyan(options.outputPath)}`);
-    } else {
-      console.log(jsonStr);
-    }
-    return { success: true, exitCode: 0, durationMs: Date.now() - startTime };
-  }
-
-  const player = new TuiReplayPlayer(session, {
-    playbackSpeed: options.speed ?? 1,
-    autoPlay: options.live ?? false,
-  });
-  await player.playInteractive();
 
   return { success: true, exitCode: 0, durationMs: Date.now() - startTime };
 }

@@ -1,7 +1,7 @@
 import type { CliCommandName, CliOutputFormat, BenchmarkRunOptions, TournamentOptions, ReportOptions, SyncOptions, ListOptions, ReplayCliOptions, FuzzCliOptions, ArenaCliOptions, CliParsedArgs } from "./types.js";
+import { getReplayHelpText } from "./replay-help.js";
 type FlagValueKind = "string" | "boolean" | "number" | "array";
 interface FlagSpec { readonly canonical: string; readonly kind: FlagValueKind; readonly aliases: readonly string[]; }
-
 const SPECS: readonly (readonly [string, FlagValueKind, readonly string[]])[] = [
   ["scenario", "array", ["s", "scenario", "scenarios"]], ["skill", "array", ["k", "skill", "skills"]],
   ["model", "array", ["m", "model", "models"]], ["provider", "string", ["p", "provider"]],
@@ -22,8 +22,8 @@ const SPECS: readonly (readonly [string, FlagValueKind, readonly string[]])[] = 
   ["catalogPath", "string", ["catalog", "catalog-path", "catalogPath"]], ["targetDir", "string", ["target-dir", "targetDir"]],
   ["force", "boolean", ["force"]], ["verifyOnly", "boolean", ["verify-only", "verifyOnly"]],
   ["help", "boolean", ["h", "help"]], ["version", "boolean", ["version"]],
-  ["target", "string", ["target"]], ["runId", "string", ["run-id", "runId"]], ["speed", "number", ["speed"]],
-  ["web", "boolean", ["web"]], ["live", "boolean", ["live"]],
+  ["runId", "string", ["run-id", "runId"]], ["speed", "number", ["speed"]],
+  ["live", "boolean", ["live"]],
   ["strategies", "array", ["strategies", "strategy"]], ["severities", "array", ["severities", "severity"]],
   ["mutationsPerScenario", "number", ["mutations-per-scenario", "mutationsPerScenario", "mutations"]],
   ["seed", "number", ["seed"]],
@@ -215,10 +215,10 @@ export function parseCliArgs(argv: readonly string[]): CliParsedArgs {
   };
 
   const replayOptions: ReplayCliOptions = {
-    target: toStr(flags["target"]) ?? positionals[0], runId: toStr(flags["runId"]),
-    filePath: toStr(flags["outputPath"]) ?? toStr(flags["target"]), format: toStr(flags["format"]) as "tui" | "html" | "json" | undefined,
+    target: positionals[0], runId: toStr(flags["runId"]),
+    format: toStr(flags["format"]) as "tui" | "html" | "json" | undefined,
     outputPath: toStr(flags["outputPath"]), speed: toNum(flags["speed"]),
-    dbPath: toStr(flags["dbPath"]), web: toBool(flags["web"]), live: toBool(flags["live"]), verbose: toBool(flags["verbose"]),
+    dbPath: toStr(flags["dbPath"]), outputDir: toStr(flags["outputDir"]), verbose: toBool(flags["verbose"]),
   };
 
   const fuzzOptions: FuzzCliOptions = {
@@ -241,7 +241,6 @@ export function parseCliArgs(argv: readonly string[]): CliParsedArgs {
     fuzzOptions: command === "fuzz" ? fuzzOptions : undefined,
   };
 }
-
 export function getVersionText(): string { return "skill-benchmarks v0.1.0"; }
 
 function formatCmd(usage: string, desc: string, opts: readonly (readonly [string, string])[], ex: readonly string[]): string {
@@ -249,7 +248,6 @@ function formatCmd(usage: string, desc: string, opts: readonly (readonly [string
   const exStr = ex.map((e) => `  ${e}`).join("\n");
   return `Usage:\n  ${usage}\n\nDescription:\n  ${desc}\n\nOptions:\n${optStr}\n\nExamples:\n${exStr}`;
 }
-
 const RUN_OPTS: readonly (readonly [string, string])[] = [
   ["-s, --scenario <ids>", "Scenario IDs"], ["-k, --skill <ids>", "Skill IDs to evaluate"],
   ["-m, --model <ids>", "Model IDs to benchmark"], ["-p, --provider <id>", "Model provider ID"],
@@ -265,7 +263,6 @@ const RUN_OPTS: readonly (readonly [string, string])[] = [
   ["-f, --format <format>", "Output format: console, json, markdown, html"], ["-o, --output <path>", "Output file path"],
   ["-v, --verbose", "Enable verbose logs"], ["-h, --help", "Show help for run command"],
 ];
-
 const ARENA_OPTS: readonly (readonly [string, string])[] = [
   ["-s, --scenario <ids>", "Scenario IDs for head-to-head match"],
   ["--arena <m1,m2>", "Two competing model IDs (e.g. claude-3-7-sonnet,o3-mini)"],
@@ -277,7 +274,6 @@ const ARENA_OPTS: readonly (readonly [string, string])[] = [
   ["-v, --verbose", "Enable verbose telemetry"],
   ["-h, --help", "Show help for arena command"],
 ];
-
 const TOURNAMENT_OPTS: readonly (readonly [string, string])[] = [
   ["-s, --scenario <ids>", "Scenario IDs"], ["-k, --skill <ids>", "Skill IDs to compete"],
   ["-m, --model <ids>", "Model IDs for participants"], ["--tournament-mode <mode>", "Tournament mode: round-robin, swiss"],
@@ -288,7 +284,6 @@ const TOURNAMENT_OPTS: readonly (readonly [string, string])[] = [
   ["-f, --format <format>", "Output format: console, json, markdown, html"],
   ["-o, --output <path>", "Output file path"], ["-v, --verbose", "Enable verbose logs"], ["-h, --help", "Show help for tournament command"],
 ];
-
 const REPORT_OPTS: readonly (readonly [string, string])[] = [
   ["-f, --format <format>", "Report format: console, json, markdown, html"], ["-o, --output <path>", "Destination report file path"],
   ["--db <path>", "Source SQLite database path"], ["-c, --category <name>", "Filter results by category"],
@@ -297,20 +292,17 @@ const REPORT_OPTS: readonly (readonly [string, string])[] = [
   ["--include-trends", "Include historical trend data"], ["--include-cost", "Include cost-efficiency metrics"],
   ["-h, --help", "Show help for report command"],
 ];
-
 const SYNC_OPTS: readonly (readonly [string, string])[] = [
   ["--catalog <path>", "Catalog source path or URL"], ["--target-dir <path>", "Target installation directory"],
   ["-c, --category <name>", "Sync specific category only"], ["--force", "Overwrite existing files"],
   ["--verify-only", "Verify catalog manifest without writing"], ["-v, --verbose", "Enable verbose sync output"],
   ["-h, --help", "Show help for sync command"],
 ];
-
 const LIST_OPTS: readonly (readonly [string, string])[] = [
   ["-c, --category <name>", "Filter entities by category"], ["-t, --tag <tag>", "Filter scenarios by tag"],
   ["-f, --format <format>", "Output format: console, json, markdown, html"], ["--catalog <path>", "Custom catalog path"],
   ["-h, --help", "Show help for list command"],
 ];
-
 const FUZZ_OPTS: readonly (readonly [string, string])[] = [
   ["-s, --scenario <ids>", "Scenario IDs to fuzz"], ["-k, --skill <ids>", "Skill IDs under evaluation"],
   ["-m, --model <ids>", "Model IDs to test"], ["--strategies <strats>", "Mutation strategies (comma-separated)"],
@@ -358,6 +350,9 @@ export function getHelpText(command?: CliCommandName): string {
       "skill-bench list [target] [options]", "List available benchmark scenarios, skills, and models.",
       LIST_OPTS, ["skill-bench list scenarios", "skill-bench list skills -c reasoning"]
     );
+  }
+  if (command === "replay") {
+    return getReplayHelpText();
   }
   if (command === "fuzz") {
     return formatCmd(

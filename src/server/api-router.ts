@@ -9,11 +9,12 @@ import type {
   TelemetryEventRecord,
 } from "../reporting/types.js";
 import { aggregateAllSkills, buildLeaderboardEntries as createLeaderboardEntries } from "../reporting/aggregator.js";
-import { isEligibleRunRecord } from "../shared/benchmark-authority.js";
 import { generateHtmlDashboard } from "../reporting/html-dashboard.js";
 import { generateWebReplayHtml } from "../replay/web-player.js";
-import { ReplayEngine } from "../replay/replay-engine.js";
-import type { ReplaySession } from "../replay/types.js";
+import { createRunArtifactLayout } from "../infrastructure/workspace/run-artifact-layout.js";
+import { loadReplaySession } from "../replay/event-session-loader.js";
+import { ReplayEvidenceInvalidError, ReplayEvidenceUnavailableError } from "../replay/errors.js";
+import type { ReplayEvidenceIdentity, ReplaySession } from "../replay/types.js";
 import type {
   ApiResponse,
   HttpMethod,
@@ -97,6 +98,7 @@ export class ApiRouter {
   public async handle(
     req: Request,
     db: TelemetryDatabase,
+    outputRoot: string,
     serverState: ServerState,
     broadcast: (event: SseEvent, runIdFilter?: string) => void
   ): Promise<Response> {
@@ -119,7 +121,7 @@ export class ApiRouter {
         if (val !== undefined) params[name] = decodeURIComponent(val);
       });
 
-      const ctx: RouteContext = { req, params, query: url.searchParams, url, db, serverState, broadcast };
+      const ctx: RouteContext = { req, params, query: url.searchParams, url, db, outputRoot, serverState, broadcast };
       return this.executePipeline(ctx, route.handler);
     }
 
@@ -137,8 +139,8 @@ export class ApiRouter {
     };
     try {
       return await next();
-    } catch (err) {
-      return errorResponse(`Internal server error: ${err instanceof Error ? err.message : String(err)}`, 500);
+    } catch {
+      return errorResponse("Internal server error", 500);
     }
   }
 
@@ -178,9 +180,8 @@ export class ApiRouter {
 
     this.get("/api/replay/:id", (ctx) => {
       const id = ctx.params.id ?? "";
-      const run = ctx.db.queryRuns({ limit: 1000 }).find((r) => r.runId === id);
-      const session = this.buildReplaySessionFromRun(id, run);
-      return jsonResponse({ session, totalFrames: session.frames.length });
+      const replay = this.loadPersistedReplay(ctx, id);
+      return replay instanceof Response ? replay : jsonResponse({ session: replay });
     });
 
     this.get("/api/leaderboard", (ctx) => {
@@ -248,9 +249,9 @@ export class ApiRouter {
 
     this.get("/replay/:id", (ctx) => {
       const id = ctx.params.id ?? "";
-      const run = ctx.db.queryRuns({ limit: 1000 }).find((r) => r.runId === id);
-      const session = this.buildReplaySessionFromRun(id, run);
-      return new Response(generateWebReplayHtml(session), { headers: { "Content-Type": "text/html; charset=utf-8" } });
+      const replay = this.loadPersistedReplay(ctx, id);
+      if (replay instanceof Response) return replay;
+      return new Response(generateWebReplayHtml(replay), { headers: { "Content-Type": "text/html; charset=utf-8" } });
     });
   }
 
@@ -272,38 +273,28 @@ export class ApiRouter {
     return filter as RunQueryFilter;
   }
 
-  private buildReplaySessionFromRun(id: string, run?: RunRecord): ReplaySession {
-    const eligibleRun = run !== undefined && isEligibleRunRecord(run) ? run : undefined;
-    const engine = new ReplayEngine({
-      sessionId: `replay-${id}`,
-      runId: id,
-      scenarioId: run?.scenarioId ?? id,
-      skillId: run?.skillId ?? "unknown",
-      modelId: run?.modelId ?? "unknown",
-      providerId: run?.providerId ?? "unknown",
-      status: run?.status ?? "completed",
-      ...(eligibleRun === undefined ? {} : { score: eligibleRun.compositeScore }),
-      totalTurns: run?.totalTurns ?? 1,
-      totalTokens: run?.totalTokens ?? 0,
-      ...(eligibleRun?.actualCostUSD === undefined ? {} : { totalCostUSD: eligibleRun.actualCostUSD }),
-      durationMs: run?.wallClockMs ?? 0,
-    });
-    engine.recordEvent({ type: "run:start", timestamp: run?.startedAt ?? new Date().toISOString() });
-    engine.recordEvent({
-      type: "RESOURCE_SAMPLE",
-      timestamp: run?.completedAt ?? new Date().toISOString(),
-      cpuPercent: 12.5,
-      memoryRssMb: 128,
-      memoryLimitMb: 512,
-      memoryPercent: 25,
-      diskReadKb: 0,
-      diskWriteKb: 0,
-      networkRxKb: 0,
-      networkTxKb: 0,
-      activePids: 1,
-    });
-    engine.recordEvent({ type: "run:finish", timestamp: run?.completedAt ?? new Date().toISOString() });
-    return engine.getSession();
+  private loadPersistedReplay(ctx: RouteContext, id: string): ReplaySession | Response {
+    let record: RunRecord | undefined;
+    try {
+      record = ctx.db.getRunRecord(id);
+    } catch {
+      return errorResponse("Replay record is invalid", 422);
+    }
+    if (record === undefined) return errorResponse("Replay run was not found", 404);
+    try {
+      const layout = createRunArtifactLayout(ctx.outputRoot, id);
+      return loadReplaySession({
+        eventsPath: layout.eventsPath,
+        manifestPath: layout.manifestPath,
+        resultPath: layout.resultPath,
+        expectedRunId: id,
+        expectedIdentity: createExpectedReplayIdentity(record),
+      });
+    } catch (error) {
+      if (error instanceof ReplayEvidenceUnavailableError) return errorResponse("Replay evidence is unavailable", 409);
+      if (error instanceof ReplayEvidenceInvalidError || error instanceof TypeError) return errorResponse("Replay evidence is invalid", 422);
+      return errorResponse("Replay evidence could not be read", 500);
+    }
   }
 
   private buildSkillSummaries(runs: readonly EligibleRunRecord[]): readonly SkillBenchmarkSummary[] {
@@ -316,4 +307,42 @@ export class ApiRouter {
   ): readonly LeaderboardEntry[] {
     return createLeaderboardEntries(runs, undefined, eloRatings);
   }
+}
+
+function createExpectedReplayIdentity(record: RunRecord): ReplayEvidenceIdentity {
+  return {
+    sourceKind: "canonical-run",
+    runId: record.runId,
+    sweepId: record.sweepId,
+    cellId: record.cellId,
+    planFingerprint: record.planFingerprint,
+    matrixOccurrenceIndex: requireMatrixOccurrenceIndex(record.matrixOccurrenceIndex),
+    scenarioId: record.scenarioId,
+    category: record.category,
+    skillId: record.skillId,
+    modelId: record.modelId,
+    providerId: record.providerId,
+    executionMode: record.executionMode,
+    simulated: record.simulated,
+    dryRun: record.dryRun,
+    startedAt: record.startedAt,
+    completedAt: record.completedAt,
+    status: record.status,
+    terminationReason: record.terminationReason,
+    durationMs: record.wallClockMs,
+    totalCostUSD: record.operationalCost.amountUSD,
+    totalTurns: record.totalTurns,
+    totalTokens: record.totalTokens,
+    benchmarkCohort: record.benchmarkCohort,
+    eligibilityStatus: record.eligibility.status,
+    eligibilityReasons: record.eligibility.reasons,
+    evaluationStatus: record.evaluation.status,
+  };
+}
+
+function requireMatrixOccurrenceIndex(value: number | undefined): number {
+  if (value === undefined || !Number.isSafeInteger(value) || value < 0) {
+    throw new TypeError("Replay run identity is incomplete");
+  }
+  return value;
 }

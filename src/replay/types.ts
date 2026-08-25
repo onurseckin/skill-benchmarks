@@ -1,27 +1,48 @@
+import type { TelemetryEvent } from "../infrastructure/telemetry/types.js";
+import type { ExecutionMode } from "../shared/execution-mode.js";
+import type {
+  BenchmarkCohort,
+  BenchmarkEligibilityStatus,
+  EvaluationOutcomeStatus,
+} from "../shared/benchmark-authority.js";
+
+export const replaySessionSchemaVersion = "1.0.0" as const;
+
 export type ReplayFrameType =
   | "session_start"
   | "turn_start"
-  | "model_thinking"
-  | "tool_call"
-  | "tool_output"
-  | "cgroup_sample"
-  | "git_diff"
   | "turn_end"
+  | "tool_call"
+  | "tool_result"
+  | "command_start"
+  | "command_stream"
+  | "command_end"
+  | "resource_sample"
+  | "git_diff"
   | "session_end"
-  | "error";
+  | "error"
+  | "generic";
 
-export type ReplaySessionStatus = "completed" | "failed" | "timed_out" | "aborted";
+export type ReplayExecutionStatus = "completed" | "failed" | "timed_out" | "aborted";
+export type ReplayStream = "stdout" | "stderr";
 
 export interface ToolCallEvent {
   readonly toolName: string;
   readonly callId: string;
-  readonly inputPayload: Readonly<Record<string, unknown>>;
+  readonly inputPayload?: Readonly<Record<string, unknown>>;
   readonly timestampUs: string;
   readonly durationMs?: number;
   readonly exitCode?: number;
-  readonly stdout?: string;
-  readonly stderr?: string;
-  readonly error?: string;
+  readonly isError?: boolean;
+}
+
+export interface CommandEvent {
+  readonly commandId: string;
+  readonly stream?: ReplayStream;
+  readonly chunk?: string;
+  readonly durationMs?: number;
+  readonly exitCode?: number;
+  readonly outputTruncated?: boolean;
 }
 
 export interface ThinkingEvent {
@@ -56,12 +77,17 @@ export interface CgroupTelemetryPoint {
 
 export interface TrajectoryFrame {
   readonly frameIndex: number;
-  readonly timestampMs: number;
+  readonly sequenceNumber: number;
+  readonly timestampUs: string;
+  readonly sourceEventType: string;
+  readonly payload: Readonly<Record<string, unknown>>;
   readonly eventType: ReplayFrameType;
-  readonly turnIndex: number;
   readonly summary: string;
+  readonly elapsedUs: string;
   readonly elapsedMs: number;
+  readonly turnIndex?: number;
   readonly toolCall?: ToolCallEvent;
+  readonly command?: CommandEvent;
   readonly thinking?: ThinkingEvent;
   readonly diff?: DiffDelta;
   readonly telemetry?: CgroupTelemetryPoint;
@@ -70,33 +96,83 @@ export interface TrajectoryFrame {
 }
 
 export interface ReplaySessionMetadata {
-  readonly sessionId: string;
   readonly runId: string;
   readonly scenarioId: string;
-  readonly scenarioName?: string;
-  readonly skillId: string;
-  readonly skillVersion?: string;
+  readonly skillIds: readonly string[];
   readonly modelId: string;
-  readonly providerId: string;
-  readonly startTime: string;
-  readonly endTime?: string;
+  readonly providerId?: string;
+  readonly executionMode?: ExecutionMode;
+  readonly simulated?: boolean;
+  readonly startTimestampUs: string;
+  readonly endTimestampUs: string;
+  readonly startedAt?: string;
+  readonly completedAt?: string;
   readonly durationMs: number;
-  readonly status: ReplaySessionStatus;
+  readonly executionStatus: ReplayExecutionStatus;
+  readonly terminationReason: string;
   readonly totalTurns: number;
   readonly totalToolCalls: number;
-  readonly totalTokens: number;
-  readonly totalCostUSD: number;
-  readonly score?: number;
-  readonly exitCode?: number;
-  readonly errorMessage?: string;
+  readonly totalTokens?: number;
+  readonly totalCostUSD?: number;
+}
+
+export interface ReplayProvenance {
+  readonly source: "persisted-events";
+  readonly sourceKind: "direct" | "canonical-run";
+  readonly sweepId?: string;
+  readonly cellId?: string;
+  readonly planFingerprint?: string;
+  readonly benchmarkCohort?: BenchmarkCohort;
+  readonly eligibilityStatus?: BenchmarkEligibilityStatus;
+  readonly eligibilityReasons?: readonly string[];
+  readonly evaluationStatus?: EvaluationOutcomeStatus;
 }
 
 export interface ReplaySession {
+  readonly schemaVersion: typeof replaySessionSchemaVersion;
+  readonly provenance: ReplayProvenance;
   readonly metadata: ReplaySessionMetadata;
   readonly frames: readonly TrajectoryFrame[];
   readonly telemetrySeries: readonly CgroupTelemetryPoint[];
   readonly diffs: readonly DiffDelta[];
-  readonly rawEvents?: readonly Readonly<Record<string, unknown>>[];
+  readonly sourceEvents: readonly TelemetryEvent[];
+}
+
+export interface ReplayEvidenceIdentity {
+  readonly sourceKind?: "direct" | "canonical-run";
+  readonly runId?: string;
+  readonly sweepId?: string;
+  readonly cellId?: string;
+  readonly planFingerprint?: string;
+  readonly matrixOccurrenceIndex?: number;
+  readonly scenarioId?: string;
+  readonly category?: string;
+  readonly skillId?: string;
+  readonly modelId?: string;
+  readonly providerId?: string;
+  readonly executionMode?: ExecutionMode;
+  readonly simulated?: boolean;
+  readonly dryRun?: boolean;
+  readonly startedAt?: string;
+  readonly completedAt?: string;
+  readonly status?: ReplayExecutionStatus;
+  readonly terminationReason?: string;
+  readonly durationMs?: number;
+  readonly totalCostUSD?: number;
+  readonly totalTurns?: number;
+  readonly totalTokens?: number;
+  readonly benchmarkCohort?: BenchmarkCohort;
+  readonly eligibilityStatus?: BenchmarkEligibilityStatus;
+  readonly eligibilityReasons?: readonly string[];
+  readonly evaluationStatus?: EvaluationOutcomeStatus;
+}
+
+export interface ReplayEvidenceSource {
+  readonly eventsPath: string;
+  readonly expectedRunId?: string;
+  readonly manifestPath?: string;
+  readonly resultPath?: string;
+  readonly expectedIdentity?: ReplayEvidenceIdentity;
 }
 
 export interface TuiPlayerOptions {
@@ -126,11 +202,11 @@ export interface ReplaySummary {
   readonly frameCount: number;
   readonly turnCount: number;
   readonly toolCallCount: number;
-  readonly peakCpuPercent: number;
-  readonly peakMemoryMb: number;
+  readonly peakCpuPercent?: number;
+  readonly peakMemoryMb?: number;
   readonly totalInsertions: number;
   readonly totalDeletions: number;
-  readonly verdict: string;
+  readonly executionStatus: ReplayExecutionStatus;
 }
 
 export type PlayerTab = "overview" | "tool" | "thinking" | "diff" | "telemetry";

@@ -102,13 +102,11 @@ export interface ListOptions {
 export interface ReplayCliOptions {
   readonly target?: string;
   readonly runId?: string;
-  readonly filePath?: string;
   readonly format?: "tui" | "html" | "json";
   readonly outputPath?: string;
   readonly speed?: number;
   readonly dbPath?: string;
-  readonly web?: boolean;
-  readonly live?: boolean;
+  readonly outputDir?: string;
   readonly verbose?: boolean;
 }
 

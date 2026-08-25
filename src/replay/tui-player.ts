@@ -15,9 +15,9 @@ import {
   cyan,
   magenta,
   white,
-  gray,
   formatBadge,
 } from "../cli/formatter.js";
+import { sanitizeTerminalText } from "./terminal-text.js";
 
 function renderBar(value: number, max: number, width: number, colorFn: (s: string) => string): string {
   const safeMax = max > 0 ? max : 1;
@@ -90,9 +90,9 @@ export class TuiReplayPlayer {
 
   public renderHeader(frame?: TrajectoryFrame): string {
     const meta = this.session.metadata;
-    const statusBadge = meta.status === "completed"
-      ? formatBadge("success", "COMPLETED")
-      : formatBadge("error", meta.status.toUpperCase());
+    const statusBadge = meta.executionStatus === "completed"
+      ? formatBadge("info", "COMPLETED")
+      : formatBadge("error", meta.executionStatus.toUpperCase());
     const frameNum = (this.state.currentFrameIndex + 1).toString().padStart(3, " ");
     const totalNum = this.state.totalFrames.toString().padStart(3, " ");
     const elapsedSec = frame ? (frame.elapsedMs / 1000).toFixed(2) : "0.00";
@@ -100,9 +100,11 @@ export class TuiReplayPlayer {
 
     const lines: string[] = [];
     lines.push(bold(cyan("╭─────────────────────────────────────────────────────────────────────────────╮")));
-    lines.push(`${bold(cyan("│"))}  ${bold("Skill-Benchmarks Live Interactive Replay")}  ${statusBadge}  ${dim(`[Speed: ${speedStr}]`)}`);
-    lines.push(`${bold(cyan("│"))}  ${dim("Scenario:")} ${bold(meta.scenarioId)}  ${dim("Skill:")} ${bold(meta.skillId)}  ${dim("Model:")} ${bold(meta.modelId)}`);
-    lines.push(`${bold(cyan("│"))}  ${dim("Frame:")} ${green(frameNum)}/${cyan(totalNum)}  ${dim("Turn:")} ${yellow(frame ? frame.turnIndex.toString() : "0")}  ${dim("Time:")} ${white(`${elapsedSec}s`)}`);
+    lines.push(`${bold(cyan("│"))}  ${bold("Skill-Benchmarks Persisted Execution Replay")}  ${statusBadge}  ${dim(`[Speed: ${speedStr}]`)}`);
+    lines.push(`${bold(cyan("│"))}  ${dim("Scenario:")} ${bold(sanitizeTerminalText(meta.scenarioId))}  ${dim("Skills:")} ${bold(sanitizeTerminalText(meta.skillIds.join(", ")))}  ${dim("Model:")} ${bold(sanitizeTerminalText(meta.modelId))}`);
+    const provenance = [meta.providerId, meta.executionMode, meta.simulated === undefined ? undefined : (meta.simulated ? "simulated" : "nonsimulated")].filter(Boolean).join(" | ");
+    if (provenance.length > 0) lines.push(`${bold(cyan("│"))}  ${dim("Provenance:")} ${white(sanitizeTerminalText(provenance))}`);
+    lines.push(`${bold(cyan("│"))}  ${dim("Frame:")} ${green(frameNum)}/${cyan(totalNum)}  ${dim("Turn:")} ${yellow(frame?.turnIndex?.toString() ?? "—")}  ${dim("Time:")} ${white(`${elapsedSec}s`)}`);
     lines.push(bold(cyan("╰─────────────────────────────────────────────────────────────────────────────╯")));
     return lines.join("\n");
   }
@@ -157,34 +159,41 @@ export class TuiReplayPlayer {
       case "overview": {
         lines.push(bold("  Event Summary:"));
         lines.push(`    ${cyan("•")} Type:    ${bold(frame.eventType.toUpperCase())}`);
-        lines.push(`    ${cyan("•")} Summary: ${frame.summary}`);
-        lines.push(`    ${cyan("•")} Turn:    #${frame.turnIndex}`);
+        lines.push(`    ${cyan("•")} Summary: ${sanitizeTerminalText(frame.summary)}`);
+        if (frame.turnIndex !== undefined) lines.push(`    ${cyan("•")} Turn:    #${frame.turnIndex}`);
         lines.push(`    ${cyan("•")} Elapsed: ${frame.elapsedMs}ms`);
         if (frame.totalTokens !== undefined) lines.push(`    ${cyan("•")} Tokens:  ${frame.totalTokens}`);
         if (frame.totalCostUSD !== undefined) lines.push(`    ${cyan("•")} Cost:    $${frame.totalCostUSD.toFixed(4)}`);
-        const vel = frame.elapsedMs > 0 && frame.totalTokens !== undefined ? (frame.totalTokens / (frame.elapsedMs / 1000)).toFixed(1) : "0.0";
-        lines.push(`    ${cyan("•")} Velocity: ${green(vel)} tok/s`);
+        if (frame.elapsedMs > 0 && frame.totalTokens !== undefined) {
+          const velocity = (frame.totalTokens / (frame.elapsedMs / 1000)).toFixed(1);
+          lines.push(`    ${cyan("•")} Velocity: ${green(velocity)} tok/s`);
+        }
         break;
       }
       case "tool": {
         if (frame.toolCall) {
           const tc = frame.toolCall;
-          lines.push(bold(`  Tool Invocation: ${cyan(tc.toolName)}`));
-          lines.push(`    Call ID:  ${dim(tc.callId)}`);
-          lines.push(`    Payload:  ${dim(JSON.stringify(tc.inputPayload))}`);
+          lines.push(bold(`  Tool Invocation: ${cyan(sanitizeTerminalText(tc.toolName))}`));
+          lines.push(`    Call ID:  ${dim(sanitizeTerminalText(tc.callId))}`);
+          if (tc.inputPayload !== undefined) lines.push(`    Payload:  ${dim(sanitizeTerminalText(JSON.stringify(tc.inputPayload)))}`);
           if (tc.durationMs !== undefined) lines.push(`    Duration: ${tc.durationMs}ms`);
           if (tc.exitCode !== undefined) lines.push(`    Exit:     ${tc.exitCode === 0 ? green("0 (OK)") : red(tc.exitCode.toString())}`);
-          if (tc.stdout) lines.push(`    Stdout:   ${dim(tc.stdout.slice(0, 120))}`);
-          if (tc.stderr) lines.push(`    Stderr:   ${red(tc.stderr.slice(0, 120))}`);
+        } else if (frame.command) {
+          const command = frame.command;
+          lines.push(bold(`  Persisted Command: ${cyan(sanitizeTerminalText(command.commandId))}`));
+          if (command.stream !== undefined) lines.push(`    Stream:   ${command.stream}`);
+          if (command.chunk !== undefined) lines.push(`    Chunk:    ${dim(sanitizeTerminalText(command.chunk.slice(0, 240)))}`);
+          if (command.durationMs !== undefined) lines.push(`    Duration: ${command.durationMs}ms`);
+          if (command.exitCode !== undefined) lines.push(`    Exit:     ${command.exitCode}`);
         } else {
-          lines.push(dim("  No tool invocation in this frame."));
+          lines.push(dim("  No tool or command evidence in this frame."));
         }
         break;
       }
       case "thinking": {
         if (frame.thinking) {
           lines.push(bold(`  Model Reasoning Stream (${frame.thinking.tokenCount} tokens):`));
-          lines.push(`    ${dim(frame.thinking.thoughtChunk.slice(0, 240))}`);
+          lines.push(`    ${dim(sanitizeTerminalText(frame.thinking.thoughtChunk.slice(0, 240)))}`);
         } else {
           lines.push(dim("  No thinking tokens in this frame."));
         }
@@ -193,13 +202,13 @@ export class TuiReplayPlayer {
       case "diff": {
         if (frame.diff) {
           const d = frame.diff;
-          lines.push(bold(`  File Mutation (Side-by-Side): ${cyan(d.path)} [${d.changeType.toUpperCase()}]`));
+          lines.push(bold(`  File Mutation (Side-by-Side): ${cyan(sanitizeTerminalText(d.path))} [${d.changeType.toUpperCase()}]`));
           lines.push(`    Changes: ${green(`+${d.insertions} additions`)} | ${red(`-${d.deletions} deletions`)}`);
           lines.push(`    ${dim("┌───────────────────────────┬───────────────────────────┐")}`);
           lines.push(`    ${dim("│")} ${bold(red("BEFORE / BASELINE"))}${" ".repeat(10)} ${dim("│")} ${bold(green("AFTER / AGENT MUTATION"))}${" ".repeat(5)} ${dim("│")}`);
           lines.push(`    ${dim("├───────────────────────────┼───────────────────────────┤")}`);
           if (d.diffHunk) {
-            const hunkLines = d.diffHunk.split("\n").slice(0, 6);
+            const hunkLines = sanitizeTerminalText(d.diffHunk).split("\n").slice(0, 6);
             for (const hl of hunkLines) {
               if (hl.startsWith("+")) {
                 const right = hl.slice(1).padEnd(25, " ").slice(0, 25);
@@ -220,11 +229,11 @@ export class TuiReplayPlayer {
         break;
       }
       case "telemetry": {
-        const tel: CgroupTelemetryPoint | undefined = frame.telemetry ?? this.session.telemetrySeries[0];
+        const tel: CgroupTelemetryPoint | undefined = frame.telemetry;
         if (tel) {
           lines.push(bold("  Cgroup Host & Container Telemetry:"));
           lines.push(`    CPU Usage:     ${renderBar(tel.cpuPercent, 100, 20, (s) => (tel.cpuPercent > 80 ? red(s) : green(s)))} (${tel.cpuPercent.toFixed(1)}%)`);
-          lines.push(`    Memory RSS:    ${renderBar(tel.memoryRssMb, tel.memoryLimitMb || 512, 20, (s) => (tel.memoryPercent > 80 ? red(s) : yellow(s)))} (${tel.memoryRssMb.toFixed(1)}MB / ${tel.memoryLimitMb}MB)`);
+          lines.push(`    Memory RSS:    ${renderBar(tel.memoryRssMb, tel.memoryLimitMb, 20, (s) => (tel.memoryPercent > 80 ? red(s) : yellow(s)))} (${tel.memoryRssMb.toFixed(1)}MB / ${tel.memoryLimitMb}MB)`);
           lines.push(`    Disk I/O:      Read ${tel.diskReadKb}KB | Write ${tel.diskWriteKb}KB`);
           lines.push(`    Network I/O:   Rx ${tel.networkRxKb}KB | Tx ${tel.networkTxKb}KB`);
           lines.push(`    Active PIDs:   ${tel.activePids}`);

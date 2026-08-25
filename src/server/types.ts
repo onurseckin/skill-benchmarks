@@ -32,6 +32,7 @@ export type SseEventType =
   | "error";
 
 export interface ServerOptions {
+  readonly outputRoot: string;
   readonly port?: number;
   readonly hostname?: string;
   readonly dbPath?: string;
@@ -60,6 +61,7 @@ export interface RouteContext {
   readonly query: URLSearchParams;
   readonly url: URL;
   readonly db: TelemetryDatabase;
+  readonly outputRoot: string;
   readonly serverState: ServerState;
   readonly broadcast: (event: SseEvent, runIdFilter?: string) => void;
 }
@@ -96,7 +98,6 @@ export interface ApiRunsResponse {
 
 export interface ApiReplayResponse {
   readonly session: ReplaySession;
-  readonly totalFrames: number;
 }
 
 export interface ApiLeaderboardResponse {

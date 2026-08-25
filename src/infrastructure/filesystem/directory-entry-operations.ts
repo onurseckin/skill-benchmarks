@@ -14,6 +14,10 @@ const directoryEntryLibrary = dlopen(libraryPath, {
     args: [FFIType.i32, FFIType.ptr, FFIType.i32],
     returns: FFIType.i32,
   },
+  renameat: {
+    args: [FFIType.i32, FFIType.ptr, FFIType.i32, FFIType.ptr],
+    returns: FFIType.i32,
+  },
 });
 const renameDirectoryEntry = createRenameDirectoryEntry();
 
@@ -71,6 +75,22 @@ export function renameDirectoryEntryNoReplace(
   const target = createEntryName(targetName);
   const result = renameDirectoryEntry(directoryDescriptor, source, target);
   if (result !== 0) throw new TypeError("Owned directory entry quarantine failed");
+}
+
+export function replaceDirectoryEntry(
+  directoryDescriptor: number,
+  sourceName: string,
+  targetName: string
+): void {
+  const source = createEntryName(sourceName);
+  const target = createEntryName(targetName);
+  const result = directoryEntryLibrary.symbols.renameat(
+    directoryDescriptor,
+    ptr(source),
+    directoryDescriptor,
+    ptr(target)
+  );
+  if (result !== 0) throw new TypeError("Owned directory entry replacement failed");
 }
 
 function createRenameDirectoryEntry(): (descriptor: number, source: Buffer, target: Buffer) => number {
