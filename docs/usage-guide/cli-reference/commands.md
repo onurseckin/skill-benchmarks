@@ -59,14 +59,6 @@ bun run cli -- report \
 | `--format <console|json|markdown|html>` | Report rendering format |
 | `--output <path>` | Destination for markdown, HTML, or JSON output |
 
-## Supporting commands
-
-The package also exposes `arena`, `tournament`, `sync`, `list`, `replay`, and `fuzz`. Their behavior and output contracts are not part of the fake-first benchmark workflow. Use the built-in command help for their currently implemented options:
-
-```bash
-bun run cli -- help <command>
-```
-
 ## Runtime output
 
 `run` creates its output under `.benchmarks/` by default. The runtime root contains `db/`, `runs/`, `sweeps/`, and `exports/`. Each run has `manifest.json` and `result.json`, and each sweep has `sweeps/<sweep-id>/checkpoint.json`. Runtime output is ignored by Git; checked-in `data/` files are demonstrations, not generated benchmark results.

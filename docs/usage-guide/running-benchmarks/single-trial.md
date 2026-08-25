@@ -19,7 +19,7 @@ The CLI reports `COMPLETE` when the execution finishes. It reports `PASS` only w
 
 ## Select a live provider intentionally
 
-Live execution must be selected with `--live` or `SKILL_BENCHMARKS_USE_MOCK=false`. The selected provider credential is required before provider construction.
+Live execution must be selected with `--live` or `SKILL_BENCHMARKS_USE_MOCK=false`. The selected provider credential is required before any provider request.
 
 ```bash
 GEMINI_API_KEY="replace-with-a-real-key" bun run cli -- run \
