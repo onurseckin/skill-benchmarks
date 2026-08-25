@@ -386,7 +386,8 @@ export async function runFuzzCommand(args: CliParsedArgs): Promise<CliCommandRes
 }
 
 export async function runHelpCommand(args: CliParsedArgs): Promise<CliCommandResult> {
-  const text = getHelpText(args.command);
+  const requestedCommand = args.command === "help" ? args.positionals[0] as CliParsedArgs["command"] | undefined : args.command;
+  const text = getHelpText(requestedCommand);
   console.log(text);
   return { success: true, exitCode: 0, durationMs: 0 };
 }

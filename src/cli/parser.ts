@@ -1,9 +1,4 @@
-import type {
-  CliCommandName, CliOutputFormat, BenchmarkRunOptions,
-  TournamentOptions, ReportOptions, SyncOptions, ListOptions,
-  ReplayCliOptions, FuzzCliOptions, ArenaCliOptions, CliParsedArgs,
-} from "./types.js";
-
+import type { CliCommandName, CliOutputFormat, BenchmarkRunOptions, TournamentOptions, ReportOptions, SyncOptions, ListOptions, ReplayCliOptions, FuzzCliOptions, ArenaCliOptions, CliParsedArgs } from "./types.js";
 type FlagValueKind = "string" | "boolean" | "number" | "array";
 interface FlagSpec { readonly canonical: string; readonly kind: FlagValueKind; readonly aliases: readonly string[]; }
 
@@ -138,7 +133,10 @@ export function parseCliArgs(argv: readonly string[]): CliParsedArgs {
   if (!foundCommand && toArr(flags["arena"]).length >= 2 && !Boolean(flags["help"]) && !Boolean(flags["version"])) {
     command = "arena";
   }
-  if (Boolean(flags["help"]) && command !== "version") command = "help";
+  if (Boolean(flags["help"]) && command !== "version") {
+    if (foundCommand && command !== "help") positionals.unshift(command);
+    command = "help";
+  }
   if (Boolean(flags["version"])) command = "version";
 
   const benchmarkOptions: BenchmarkRunOptions = {
@@ -262,6 +260,8 @@ const RUN_OPTS: readonly (readonly [string, string])[] = [
   ["--max-turns <n>", "Maximum agent interaction turns"], ["--max-cost <usd>", "Max cost in USD"],
   ["--judge-model <id>", "LLM judge model ID"], ["--skip-judge", "Skip LLM judge scoring"],
   ["--clean-sandbox", "Clean sandboxes after completion"], ["--db <path>", "SQLite database path"],
+  ["--mock", "Use deterministic fake provider mode"], ["--live", "Use live provider mode and require credentials"],
+  ["--output-dir <path>", "Benchmark runtime output root"],
   ["-f, --format <format>", "Output format: console, json, markdown, html"], ["-o, --output <path>", "Output file path"],
   ["-v, --verbose", "Enable verbose logs"], ["-h, --help", "Show help for run command"],
 ];
