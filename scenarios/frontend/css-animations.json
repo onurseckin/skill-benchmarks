@@ -1,0 +1,87 @@
+{
+  "id": "css-animations",
+  "name": "Modern GPU-Accelerated CSS Animations, View Transitions, and Scroll-Driven Timelines",
+  "category": "frontend",
+  "difficulty": "hard",
+  "targetSkill": "css-animations",
+  "baselineModel": "claude-3-7-sonnet-20250219",
+  "description": "High-fidelity CSS animation and styling scenario evaluating an agent's capability to architect performant GPU-composited CSS animations, scroll-driven timelines (animation-timeline: scroll() and view()), discrete property transitions with @starting-style, and smooth document View Transitions.",
+  "instructions": "You are tasked with implementing the modern CSS animations architecture in `src/styles/animations.css`, `src/styles/view-transitions.css`, and `src/components/animated-carousel.ts`.\n\n### Task Objectives:\n1. **GPU-Accelerated Compositing & Scroll-Driven Timelines (`src/styles/animations.css`)**:\n   - Implement performant 60fps CSS keyframes utilizing only composite properties (`transform`, `opacity`, `filter`). Strictly avoid animating layout/reflow properties (`height`, `top`, `margin`).\n   - Author scroll-driven animation rules using `animation-timeline: scroll(root)` and `animation-timeline: view()` with custom animation ranges (`entry 0% cover 100%`).\n   - Implement discrete property transitions for entry/exit animations using `@starting-style` and `transition-behavior: allow-discrete`.\n\n2. **Document View Transitions (`src/styles/view-transitions.css`)**:\n   - Configure smooth cross-fade and morphing animations for `::view-transition-old(root)` and `::view-transition-new(root)`.\n   - Define named view transition identities (`view-transition-name`) for cards and hero images.\n\n3. **Interactive Animation Controller (`src/components/animated-carousel.ts`)**:\n   - Implement `AnimatedCarouselController` triggering document View Transitions via `document.startViewTransition()`.\n   - Honor accessibility user settings with `@media (prefers-reduced-motion: reduce)` fallbacks.\n   - Measure animation frame rate using `requestAnimationFrame` delta tracking.\n\n4. **Type Safety & Clean Code**:\n   - Maintain strict TypeScript type annotations, readonly property interfaces, and zero any annotations.",
+  "workspace": {
+    "fixtures": {
+      "src/styles/animations.css": "@keyframes smoothSlideFadeIn {\n  0% {\n    opacity: 0;\n    transform: translate3d(0, 24px, 0) scale(0.96);\n  }\n  100% {\n    opacity: 1;\n    transform: translate3d(0, 0, 0) scale(1);\n  }\n}\n\n@keyframes scrollProgressScale {\n  from {\n    transform: scaleX(0);\n  }\n  to {\n    transform: scaleX(1);\n  }\n}\n\n.scroll-progress-bar {\n  transform-origin: left center;\n  animation: scrollProgressScale auto linear;\n  animation-timeline: scroll(root);\n}\n\n.reveal-on-scroll {\n  animation: smoothSlideFadeIn auto ease-out both;\n  animation-timeline: view();\n  animation-range: entry 10% cover 30%;\n}\n\n.popover-card {\n  opacity: 1;\n  transform: scale(1);\n  transition: opacity 0.3s ease, transform 0.3s ease, overlay 0.3s ease allow-discrete, display 0.3s ease allow-discrete;\n}\n\n@starting-style {\n  .popover-card {\n    opacity: 0;\n    transform: scale(0.92);\n  }\n}\n\n@media (prefers-reduced-motion: reduce) {\n  *, ::before, ::after {\n    animation-duration: 0.01ms !important;\n    animation-iteration-count: 1 !important;\n    transition-duration: 0.01ms !important;\n  }\n}\n",
+      "src/styles/view-transitions.css": "::view-transition-old(root) {\n  animation: 250ms cubic-bezier(0.4, 0, 0.2, 1) both fadeOutScale;\n}\n\n::view-transition-new(root) {\n  animation: 250ms cubic-bezier(0.4, 0, 0.2, 1) both fadeInScale;\n}\n\n@keyframes fadeOutScale {\n  from {\n    opacity: 1;\n    transform: scale(1);\n  }\n  to {\n    opacity: 0;\n    transform: scale(0.98);\n  }\n}\n\n@keyframes fadeInScale {\n  from {\n    opacity: 0;\n    transform: scale(1.02);\n  }\n  to {\n    opacity: 1;\n    transform: scale(1);\n  }\n}\n\n.hero-header-card {\n  view-transition-name: hero-card;\n}\n",
+      "src/types/animation.ts": "export interface CarouselSlide {\n  readonly id: string;\n  readonly title: string;\n  readonly imageUrl: string;\n  readonly description: string;\n}\n\nexport interface AnimationMetrics {\n  readonly averageFps: number;\n  readonly droppedFrames: number;\n  readonly totalFramesMeasured: number;\n  readonly durationMs: number;\n}\n\nexport interface CarouselState {\n  readonly activeIndex: number;\n  readonly totalSlides: number;\n  readonly isTransitioning: boolean;\n  readonly reducedMotionActive: boolean;\n}\n",
+      "src/components/animated-carousel.ts": "import type { CarouselSlide, CarouselState, AnimationMetrics } from \"../types/animation.js\";\n\nexport class AnimatedCarouselController {\n  private readonly slides: readonly CarouselSlide[];\n  private currentIndex = 0;\n  private transitioning = false;\n\n  constructor(slides: readonly CarouselSlide[]) {\n    this.slides = slides;\n  }\n\n  public getState(): CarouselState {\n    return {\n      activeIndex: this.currentIndex,\n      totalSlides: this.slides.length,\n      isTransitioning: this.transitioning,\n      reducedMotionActive: false,\n    };\n  }\n\n  public async transitionTo(targetIndex: number): Promise<void> {\n    throw new Error(\"transitionTo not implemented\");\n  }\n\n  public async measureFrameRate(durationMs: number): Promise<AnimationMetrics> {\n    throw new Error(\"measureFrameRate not implemented\");\n  }\n}\n",
+      "package.json": "{\n  \"name\": \"css-animations-fixture\",\n  \"version\": \"1.0.0\",\n  \"type\": \"module\",\n  \"scripts\": {\n    \"build\": \"tsc --noEmit\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^22.13.0\",\n    \"typescript\": \"^5.7.3\"\n  }\n}\n",
+      "tsconfig.json": "{\n  \"compilerOptions\": {\n    \"target\": \"ES2022\",\n    \"module\": \"NodeNext\",\n    \"moduleResolution\": \"NodeNext\",\n    \"strict\": true,\n    \"esModuleInterop\": true,\n    \"skipLibCheck\": true,\n    \"forceConsistentCasingInFileNames\": true,\n    \"declaration\": true\n  },\n  \"include\": [\"src/**/*\"]\n}\n"
+    },
+    "initialGitCommit": "Initial commit for css-animations benchmark fixture"
+  },
+  "limits": {
+    "maxTurns": 15,
+    "maxCostUSD": 1.0,
+    "maxWallClockTimeMs": 300000
+  },
+  "evaluation": {
+    "deterministicChecks": [
+      {
+        "id": "check-scroll-driven-animations",
+        "name": "Verify scroll-driven animation properties",
+        "type": "file_content",
+        "filePath": "src/styles/animations.css",
+        "fileContentPattern": "animation-timeline:\\s*(scroll|view)",
+        "weight": 0.25
+      },
+      {
+        "id": "check-starting-style-rule",
+        "name": "Verify @starting-style discrete transition rule",
+        "type": "file_content",
+        "filePath": "src/styles/animations.css",
+        "fileContentPattern": "@starting-style",
+        "weight": 0.25
+      },
+      {
+        "id": "check-view-transitions-pseudo",
+        "name": "Verify view transition pseudo elements in css",
+        "type": "file_content",
+        "filePath": "src/styles/view-transitions.css",
+        "fileContentPattern": "::view-transition-(old|new)",
+        "weight": 0.25
+      },
+      {
+        "id": "check-carousel-controller-methods",
+        "name": "Verify AnimatedCarouselController implementation",
+        "type": "file_content",
+        "filePath": "src/components/animated-carousel.ts",
+        "fileContentPattern": "transitionTo|measureFrameRate",
+        "weight": 0.25
+      }
+    ],
+    "judgeRubrics": [
+      {
+        "name": "Modern CSS Animation Architecture & GPU Efficiency",
+        "category": "frontend",
+        "weight": 0.6,
+        "description": "Evaluates the agent's proficiency in authoring hardware-accelerated CSS animations, scroll-driven timelines, discrete popover transitions with @starting-style, and View Transitions API integration.",
+        "criteria": {
+          "1": "Animates layout properties causing paint/reflow thrashing, ignores reduced motion, or omits scroll-driven animation features.",
+          "3": "Implements basic keyframe animations and simple view transitions, but misses scroll-driven timelines or proper starting-style rules.",
+          "5": "Masterful CSS animation architecture: pure composited transform3d/opacity animations, scroll/view timeline integrations, flawless View Transitions with named elements, and full accessibility compliance."
+        }
+      },
+      {
+        "name": "TypeScript Controller Design",
+        "category": "general",
+        "weight": 0.4,
+        "description": "Evaluates TypeScript interface clarity, animation metrics measurement, and zero-any cleanliness.",
+        "criteria": {
+          "1": "Broken types or incorrect rAF metrics loop.",
+          "3": "Working controller with basic transition calls and standard types.",
+          "5": "Strictly typed, robust rAF delta frame tracker with seamless document.startViewTransition integration."
+        }
+      }
+    ],
+    "passThreshold": 80
+  }
+}

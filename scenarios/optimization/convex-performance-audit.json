@@ -1,0 +1,85 @@
+{
+  "id": "convex-performance-audit",
+  "name": "Convex Reactive Database Indexing, Query Optimization, and Bandwidth Audit",
+  "category": "optimization",
+  "difficulty": "hard",
+  "targetSkill": "convex-performance-audit",
+  "baselineModel": "claude-3-7-sonnet-20250219",
+  "description": "Reactive database optimization scenario evaluating an agent's capability to audit Convex queries, identify unindexed table scans, optimize reactive subscription bandwidth, construct compound indices with .withIndex(), eliminate N+1 relational query anti-patterns, and measure database read/write document counts.",
+  "instructions": "You are tasked with implementing the Convex performance auditor in `src/convex/query-auditor.ts` and `src/convex/schema.ts`.\n\n### Task Objectives:\n1. **Unindexed Table Scan & N+1 Query Detection (`ConvexQueryAuditor`)**:\n   - Ingest query AST and execution logs (table name, scan count, returned documents count, query duration).\n   - Flag severe performance anti-patterns:\n     - Table scan where `scannedDocs > 50` but returned `< 10%` of documents without `.withIndex()`.\n     - N+1 relational query loops where multiple sequential `db.get()` or `db.query()` calls are executed inside Array.map().\n     - Unbounded `.collect()` calls without `.take(n)` or `.paginate()` on high-cardinality tables.\n\n2. **Compound Index & Query Refactoring Recommendations**:\n   - Synthesize optimal compound index definitions (`by_channel_and_created_at: [\"channelId\", \"createdAt\"]`).\n   - Refactor queries to utilize indexed range queries with `.withIndex(\"by_channel_and_created_at\", (q) => q.eq(\"channelId\", channelId).gt(\"createdAt\", since))`.\n\n3. **Bandwidth & Document Size Profiler**:\n   - Measure document payload size and recommend field projections to reduce reactive websocket subscription bandwidth.\n\n4. **Type Safety & Repository Invariants**:\n   - Adhere strictly to TypeScript type safety, 0 comments, <= 400 lines, 0 any.",
+  "workspace": {
+    "fixtures": {
+      "src/convex/types.ts": "export interface QueryLogEntry {\n  readonly queryId: string;\n  readonly functionName: string;\n  readonly tableName: string;\n  readonly indexName?: string;\n  readonly scannedDocumentsCount: number;\n  readonly returnedDocumentsCount: number;\n  readonly executionTimeMs: number;\n  readonly queryAstSnippet: string;\n}\n\nexport interface PerformanceIssue {\n  readonly severity: \"critical\" | \"warning\" | \"info\";\n  readonly issueType: \"unindexed_table_scan\" | \"n_plus_one_loop\" | \"unbounded_collect\" | \"oversized_payload\";\n  readonly message: string;\n  readonly suggestedIndexName?: string;\n  readonly suggestedIndexFields?: readonly string[];\n  readonly suggestedQueryRefactor?: string;\n}\n\nexport interface ConvexAuditReport {\n  readonly totalQueriesAudited: number;\n  readonly scannedDocumentsTotal: number;\n  readonly performanceScore: number;\n  readonly issues: readonly PerformanceIssue[];\n  readonly estimatedBandwidthSavingsKb: number;\n}\n",
+      "src/convex/query-auditor.ts": "import type { QueryLogEntry, ConvexAuditReport, PerformanceIssue } from \"./types.js\";\n\nexport class ConvexQueryAuditor {\n  public auditQueryLogs(logs: readonly QueryLogEntry[]): ConvexAuditReport {\n    throw new Error(\"auditQueryLogs not implemented\");\n  }\n\n  public detectUnindexedScans(log: QueryLogEntry): PerformanceIssue | null {\n    throw new Error(\"detectUnindexedScans not implemented\");\n  }\n\n  public detectNPlusOnePattern(logs: readonly QueryLogEntry[]): readonly PerformanceIssue[] {\n    throw new Error(\"detectNPlusOnePattern not implemented\");\n  }\n}\n",
+      "package.json": "{\n  \"name\": \"convex-performance-audit-fixture\",\n  \"version\": \"1.0.0\",\n  \"type\": \"module\",\n  \"scripts\": {\n    \"build\": \"tsc --noEmit\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^22.13.0\",\n    \"typescript\": \"^5.7.3\"\n  }\n}\n",
+      "tsconfig.json": "{\n  \"compilerOptions\": {\n    \"target\": \"ES2022\",\n    \"module\": \"NodeNext\",\n    \"moduleResolution\": \"NodeNext\",\n    \"strict\": true,\n    \"esModuleInterop\": true,\n    \"skipLibCheck\": true,\n    \"forceConsistentCasingInFileNames\": true,\n    \"declaration\": true\n  },\n  \"include\": [\"src/**/*\"]\n}\n"
+    },
+    "initialGitCommit": "Initial commit for convex-performance-audit benchmark fixture"
+  },
+  "limits": {
+    "maxTurns": 15,
+    "maxCostUSD": 1.0,
+    "maxWallClockTimeMs": 300000
+  },
+  "evaluation": {
+    "deterministicChecks": [
+      {
+        "id": "check-query-auditor-methods",
+        "name": "Verify ConvexQueryAuditor detection methods",
+        "type": "file_content",
+        "filePath": "src/convex/query-auditor.ts",
+        "fileContentPattern": "auditQueryLogs|detectUnindexedScans|detectNPlusOnePattern",
+        "weight": 0.25
+      },
+      {
+        "id": "check-performance-issue-types",
+        "name": "Verify PerformanceIssue issue types",
+        "type": "file_content",
+        "filePath": "src/convex/types.ts",
+        "fileContentPattern": "unindexed_table_scan|n_plus_one_loop|unbounded_collect",
+        "weight": 0.25
+      },
+      {
+        "id": "check-convex-audit-report-fields",
+        "name": "Verify ConvexAuditReport summary fields",
+        "type": "file_content",
+        "filePath": "src/convex/types.ts",
+        "fileContentPattern": "performanceScore|scannedDocumentsTotal",
+        "weight": 0.25
+      },
+      {
+        "id": "check-query-log-types",
+        "name": "Verify QueryLogEntry definition",
+        "type": "file_content",
+        "filePath": "src/convex/types.ts",
+        "fileContentPattern": "QueryLogEntry|scannedDocumentsCount",
+        "weight": 0.25
+      }
+    ],
+    "judgeRubrics": [
+      {
+        "name": "Reactive Database Indexing & Query Optimization Precision",
+        "category": "optimization",
+        "weight": 0.6,
+        "description": "Evaluates the agent's capability to detect Convex reactive database performance anti-patterns (unindexed table scans, N+1 iterations, unbounded subscriptions) and author performant compound index definitions.",
+        "criteria": {
+          "1": "Fails to identify table scans, generates invalid index field orders, or misses N+1 relational query loops.",
+          "3": "Detects simple table scans, but lacks compound index synthesis or N+1 query loop detection.",
+          "5": "Exemplary reactive database audit engine: precise detection of unindexed table scans and N+1 query loops, accurate compound index recommendations, and bandwidth calculation."
+        }
+      },
+      {
+        "name": "TypeScript Modularity & Invariants",
+        "category": "general",
+        "weight": 0.4,
+        "description": "Evaluates TypeScript interface design, numerical scoring accuracy, and zero-any compliance.",
+        "criteria": {
+          "1": "Broken types or non-deterministic scoring.",
+          "3": "Standard types with basic error handling.",
+          "5": "Strictly typed, robust architecture with 0 any annotations and clean modular design."
+        }
+      }
+    ],
+    "passThreshold": 80
+  }
+}

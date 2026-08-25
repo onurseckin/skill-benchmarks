@@ -162,6 +162,8 @@ export class TuiReplayPlayer {
         lines.push(`    ${cyan("•")} Elapsed: ${frame.elapsedMs}ms`);
         if (frame.totalTokens !== undefined) lines.push(`    ${cyan("•")} Tokens:  ${frame.totalTokens}`);
         if (frame.totalCostUSD !== undefined) lines.push(`    ${cyan("•")} Cost:    $${frame.totalCostUSD.toFixed(4)}`);
+        const vel = frame.elapsedMs > 0 && frame.totalTokens !== undefined ? (frame.totalTokens / (frame.elapsedMs / 1000)).toFixed(1) : "0.0";
+        lines.push(`    ${cyan("•")} Velocity: ${green(vel)} tok/s`);
         break;
       }
       case "tool": {
@@ -191,16 +193,27 @@ export class TuiReplayPlayer {
       case "diff": {
         if (frame.diff) {
           const d = frame.diff;
-          lines.push(bold(`  File Mutation: ${cyan(d.path)} [${d.changeType.toUpperCase()}]`));
-          lines.push(`    Stats: ${green(`+${d.insertions}`)} / ${red(`-${d.deletions}`)}`);
+          lines.push(bold(`  File Mutation (Side-by-Side): ${cyan(d.path)} [${d.changeType.toUpperCase()}]`));
+          lines.push(`    Changes: ${green(`+${d.insertions} additions`)} | ${red(`-${d.deletions} deletions`)}`);
+          lines.push(`    ${dim("┌───────────────────────────┬───────────────────────────┐")}`);
+          lines.push(`    ${dim("│")} ${bold(red("BEFORE / BASELINE"))}${" ".repeat(10)} ${dim("│")} ${bold(green("AFTER / AGENT MUTATION"))}${" ".repeat(5)} ${dim("│")}`);
+          lines.push(`    ${dim("├───────────────────────────┼───────────────────────────┤")}`);
           if (d.diffHunk) {
             const hunkLines = d.diffHunk.split("\n").slice(0, 6);
             for (const hl of hunkLines) {
-              if (hl.startsWith("+")) lines.push(`    ${green(hl)}`);
-              else if (hl.startsWith("-")) lines.push(`    ${red(hl)}`);
-              else lines.push(`    ${dim(hl)}`);
+              if (hl.startsWith("+")) {
+                const right = hl.slice(1).padEnd(25, " ").slice(0, 25);
+                lines.push(`    ${dim("│")} ${" ".repeat(25)} ${dim("│")} ${green(right)} ${dim("│")}`);
+              } else if (hl.startsWith("-")) {
+                const left = hl.slice(1).padEnd(25, " ").slice(0, 25);
+                lines.push(`    ${dim("│")} ${red(left)} ${dim("│")} ${" ".repeat(25)} ${dim("│")}`);
+              } else {
+                const ctx = hl.startsWith(" ") ? hl.slice(1).padEnd(25, " ").slice(0, 25) : hl.padEnd(25, " ").slice(0, 25);
+                lines.push(`    ${dim("│")} ${dim(ctx)} ${dim("│")} ${dim(ctx)} ${dim("│")}`);
+              }
             }
           }
+          lines.push(`    ${dim("└───────────────────────────┴───────────────────────────┘")}`);
         } else {
           lines.push(dim("  No git diff changes in this frame."));
         }

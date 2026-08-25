@@ -1,5 +1,5 @@
 import { writeFileSync } from "node:fs";
-import type { AppState, SpaCompilerOptions } from "./types.js";
+import type { AppState, DiffViewModel, SpaCompilerOptions } from "./types.js";
 import { THEME_DARK, DashboardStateManager } from "./state.js";
 import {
   escapeHtml,
@@ -8,16 +8,21 @@ import {
   renderNavbar,
   renderTrajectoryScrubber,
 } from "./components.js";
+import { parseRawDiffToSideBySide, renderInteractiveDiffViewer } from "./diff-viewer.js";
+import { renderLatencyPercentilesSvg, renderTokenVelocityChartSvg } from "./charts.js";
 
 export function generateDashboardCss(): string {
   return `
 html, body, div, span, p, h1, h2, h3, h4, table, tr, th, td, button, input, select, main, header, section, nav { box-sizing: border-box; margin: 0; padding: 0; }
-body { background: var(--bg); color: var(--text); font-family: var(--font-sans); width: 100vw; min-height: 100vh; display: flex; flex-direction: column; overflow-x: hidden; }
+body { background: #000000; color: #ffffff; font-family: "JetBrains Mono", "Fira Code", monospace; width: 100vw; min-height: 100vh; display: flex; flex-direction: column; overflow-x: hidden; }
 .main-content { flex: 1; padding: 20px; width: 100%; max-width: 100%; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
 .kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
-.panel { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 20px; }
-.panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; font-weight: 700; font-size: 15px; color: var(--primary); }
-.code-box { background: var(--bg-sec); border: 1px solid var(--border); border-radius: 6px; padding: 12px; font-family: var(--font-mono); font-size: 12px; max-height: 280px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; }
+.panel { background: #000000; border: 2px solid #ffffff; border-radius: 0px; box-shadow: 4px 4px 0px #ffffff; padding: 20px; }
+.panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; font-weight: 900; font-size: 14px; color: #ffffff; text-transform: uppercase; letter-spacing: 1px; }
+.code-box { background: #0a0a0a; border: 2px solid #ffffff; border-radius: 0px; padding: 14px; font-family: "JetBrains Mono", monospace; font-size: 11px; max-height: 320px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; color: #ffffff; line-height: 1.4; box-shadow: 2px 2px 0px #ffffff; }
+.btn-neo { background: #000000; border: 2px solid #ffffff; color: #ffffff; padding: 6px 12px; font-family: "JetBrains Mono", monospace; font-size: 11px; font-weight: 800; cursor: pointer; text-transform: uppercase; box-shadow: 2px 2px 0px #ffffff; }
+.btn-neo:hover { background: #ffffff; color: #000000; }
+.charts-grid-neo { display: grid; grid-template-columns: repeat(auto-fit, minmax(440px, 1fr)); gap: 16px; }
 `.trim();
 }
 
@@ -37,11 +42,31 @@ export function renderDashboardApp(state: AppState): string {
   if (activeView === "leaderboard") {
     viewContent = `<section class="panel"><div class="panel-header"><span>Skill Leaderboard &amp; Benchmark Metrics</span></div>${renderLeaderboardTable(leaderboard, theme)}</section>`;
   } else if (activeView === "replay") {
-    viewContent = `<section class="panel"><div class="panel-header"><span>Interactive Trajectory Replay</span></div><div id="replay-view-content" style="min-height:300px">${replay.session ? `<div style="font-size:13px;color:${theme.textMuted};margin-bottom:12px">Loaded Run: <strong>${escapeHtml(replay.session.metadata.scenarioId)}</strong> (${escapeHtml(replay.session.metadata.skillId)})</div>` : `<div style="padding:40px;text-align:center;color:${theme.textDim}">Select a run from the leaderboard to inspect execution trajectory.</div>`}</div>${renderTrajectoryScrubber(replay, theme)}</section>`;
+    const mockDiff: DiffViewModel = replay.session?.frames.find((f) => f.diff)?.diff
+      ? parseRawDiffToSideBySide(
+          replay.session.frames.find((f) => f.diff)!.diff!.path,
+          replay.session.frames.find((f) => f.diff)!.diff!.diffHunk || "--- a/file\n+++ b/file\n@@ -1,2 +1,3 @@\n context\n-old line\n+new line\n+added line",
+          replay.session.frames.find((f) => f.diff)!.diff!.changeType
+        )
+      : parseRawDiffToSideBySide("src/index.ts", "--- a/src/index.ts\n+++ b/src/index.ts\n@@ -10,4 +10,6 @@\n export function executeTask() {\n-  return false;\n+  const verified = true;\n+  return verified;\n }");
+
+    const diffViewerHtml = renderInteractiveDiffViewer(mockDiff, "split", theme);
+
+    viewContent = `<section class="panel"><div class="panel-header"><span>Interactive Trajectory Replay &amp; Diff Inspector</span></div><div id="replay-view-content" style="display:flex;flex-direction:column;gap:16px;margin-bottom:16px">${replay.session ? `<div style="font-size:12px;color:#aaaaaa">Loaded Run: <strong style="color:#ffffff">${escapeHtml(replay.session.metadata.scenarioId)}</strong> (${escapeHtml(replay.session.metadata.skillId)})</div>` : `<div style="padding:16px;background:#050505;border:1px solid #333333;color:#888888;font-size:12px">Select a run from the leaderboard or review default trajectory frame mutations below.</div>`}${diffViewerHtml}</div>${renderTrajectoryScrubber(replay, theme)}</section>`;
   } else if (activeView === "live") {
-    viewContent = `<section class="panel"><div class="panel-header"><span>Real-Time Host Telemetry Stream</span><button onclick="appClearLiveBuffer()" style="background:${theme.surfaceAlt};border:1px solid ${theme.border};color:${theme.text};padding:4px 10px;border-radius:4px;font-size:12px;cursor:pointer">Clear Buffer</button></div><div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:12px;margin-bottom:16px"><div style="background:${theme.bgSecondary};padding:12px;border-radius:6px;border:1px solid ${theme.border}"><div style="font-size:11px;color:${theme.textDim}">Peak CPU</div><div style="font-size:20px;font-weight:700;color:${theme.success};font-family:${theme.fontMono}">${live.peakCpuPercent.toFixed(1)}%</div></div><div style="background:${theme.bgSecondary};padding:12px;border-radius:6px;border:1px solid ${theme.border}"><div style="font-size:11px;color:${theme.textDim}">Peak Memory RSS</div><div style="font-size:20px;font-weight:700;color:${theme.warning};font-family:${theme.fontMono}">${live.peakMemoryMb.toFixed(1)} MB</div></div><div style="background:${theme.bgSecondary};padding:12px;border-radius:6px;border:1px solid ${theme.border}"><div style="font-size:11px;color:${theme.textDim}">Buffered Frames</div><div style="font-size:20px;font-weight:700;color:${theme.primary};font-family:${theme.fontMono}">${live.bufferedFrames.length}</div></div></div><div class="code-box" id="live-log-box">${live.bufferedFrames.length > 0 ? live.bufferedFrames.map((f, i) => `#${i + 1} [${f.eventType.toUpperCase()}] ${escapeHtml(f.summary)}`).join("\n") : "Waiting for live telemetry stream..."}</div></section>`;
+    viewContent = `<section class="panel"><div class="panel-header"><span>Real-Time WebSocket &amp; SSE Telemetry Stream</span><div style="display:flex;gap:8px"><button onclick="appReconnectWs()" class="btn-neo">RECONNECT WS</button><button onclick="appClearLiveBuffer()" class="btn-neo">CLEAR BUFFER</button></div></div><div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:12px;margin-bottom:16px"><div class="panel" style="padding:12px"><div style="font-size:10px;color:#888888;font-weight:700">PEAK CPU %</div><div style="font-size:24px;font-weight:900;color:#ffffff">${live.peakCpuPercent.toFixed(1)}%</div></div><div class="panel" style="padding:12px"><div style="font-size:10px;color:#888888;font-weight:700">PEAK MEMORY RSS</div><div style="font-size:24px;font-weight:900;color:#ffffff">${live.peakMemoryMb.toFixed(1)} MB</div></div><div class="panel" style="padding:12px"><div style="font-size:10px;color:#888888;font-weight:700">STREAMED FRAMES</div><div style="font-size:24px;font-weight:900;color:#ffffff" id="live-frame-count">${live.bufferedFrames.length}</div></div><div class="panel" style="padding:12px"><div style="font-size:10px;color:#888888;font-weight:700">THROUGHPUT</div><div style="font-size:24px;font-weight:900;color:#ffffff" id="live-fps-meter">0.0 evt/s</div></div></div><div class="code-box" id="live-log-box">${live.bufferedFrames.length > 0 ? live.bufferedFrames.map((f, i) => `#${i + 1} [${f.eventType.toUpperCase()}] ${escapeHtml(f.summary)}`).join("\n") : "Waiting for live WebSocket/SSE telemetry stream on ws://localhost:4000/tunnel and /api/sse..."}</div></section>`;
   } else {
-    viewContent = `<section class="panel"><div class="panel-header"><span>Analytics &amp; System Overview</span></div><p style="color:${theme.textMuted};font-size:13px">Aggregate run summaries and historical model comparison metrics.</p></section>`;
+    const mockVelPoints = [
+      { turn: 1, elapsedMs: 800, tokensPerSec: 42, cumulativeTokens: 42 },
+      { turn: 2, elapsedMs: 1600, tokensPerSec: 88, cumulativeTokens: 130 },
+      { turn: 3, elapsedMs: 2400, tokensPerSec: 124, cumulativeTokens: 254 },
+      { turn: 4, elapsedMs: 3100, tokensPerSec: 165, cumulativeTokens: 419 },
+      { turn: 5, elapsedMs: 3900, tokensPerSec: 142, cumulativeTokens: 561 },
+    ];
+    const velocityChart = renderTokenVelocityChartSvg(mockVelPoints, theme);
+    const latencyChart = renderLatencyPercentilesSvg({ p50: 240, p90: 820, p99: 1450, max: 1800 }, theme);
+
+    viewContent = `<section class="panel"><div class="panel-header"><span>Analytics &amp; System Telemetry Insights</span></div><div class="charts-grid-neo"><div class="panel" style="padding:14px"><div style="font-size:11px;font-weight:900;margin-bottom:10px;color:#ffffff">GENERATION VELOCITY DYNAMICS</div>${velocityChart}</div><div class="panel" style="padding:14px"><div style="font-size:11px;font-weight:900;margin-bottom:10px;color:#ffffff">TOOL &amp; REASONING LATENCY BREAKDOWN</div>${latencyChart}</div></div></section>`;
   }
 
   return `${navbar}<main class="main-content">${kpiSection}${viewContent}</main>`;
@@ -59,12 +84,13 @@ export function generateStandaloneSpaHtml(options: SpaCompilerOptions = {}): str
 (function() {
   var embedded = JSON.parse(document.getElementById('embedded-data').textContent || '{}');
   var currentView = '${state.activeView}';
-  var currentTheme = '${state.themeMode}';
   var isPlaying = false;
   var timer = null;
+  var eventCount = 0;
+  var lastSecCount = 0;
+  var ws = null;
 
   window.appSetView = function(view) {
-    currentView = view;
     var params = new URLSearchParams(window.location.search);
     params.set('view', view);
     window.history.replaceState({}, '', window.location.pathname + '?' + params.toString());
@@ -72,7 +98,6 @@ export function generateStandaloneSpaHtml(options: SpaCompilerOptions = {}): str
   };
 
   window.appSetTheme = function(mode) {
-    currentTheme = mode;
     var params = new URLSearchParams(window.location.search);
     params.set('theme', mode);
     window.history.replaceState({}, '', window.location.pathname + '?' + params.toString());
@@ -111,10 +136,17 @@ export function generateStandaloneSpaHtml(options: SpaCompilerOptions = {}): str
     window.appSetView('replay');
   };
 
+  window.appSetDiffMode = function(mode) {
+    var params = new URLSearchParams(window.location.search);
+    params.set('diffMode', mode);
+    window.history.replaceState({}, '', window.location.pathname + '?' + params.toString());
+    window.location.reload();
+  };
+
   window.appTogglePlay = function() {
     isPlaying = !isPlaying;
     var btn = document.querySelector('.scrubber-bar button');
-    if (btn) btn.textContent = isPlaying ? 'Pause' : 'Play';
+    if (btn) btn.textContent = isPlaying ? 'PAUSE' : 'PLAY';
   };
 
   window.appStepFrame = function(delta) {
@@ -126,23 +158,61 @@ export function generateStandaloneSpaHtml(options: SpaCompilerOptions = {}): str
 
   window.appSeekFrame = function(idx) {};
   window.appSetPlaybackSpeed = function(spd) {};
+
   window.appClearLiveBuffer = function() {
     var box = document.getElementById('live-log-box');
     if (box) box.textContent = 'Buffer cleared. Waiting for telemetry...';
   };
 
+  function connectWebSocket() {
+    try {
+      var protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      var wsUrl = protocol + '//' + window.location.host + '/tunnel';
+      ws = new WebSocket(wsUrl);
+      ws.onmessage = function(ev) {
+        eventCount += 1;
+        var box = document.getElementById('live-log-box');
+        var countEl = document.getElementById('live-frame-count');
+        if (box) {
+          box.textContent = ev.data + '\\n' + box.textContent.slice(0, 4000);
+        }
+        if (countEl) countEl.textContent = String(eventCount);
+      };
+      ws.onerror = function() {};
+    } catch (e) {}
+  }
+
+  window.appReconnectWs = function() {
+    if (ws) {
+      try { ws.close(); } catch (e) {}
+    }
+    connectWebSocket();
+  };
+
+  setInterval(function() {
+    var diff = eventCount - lastSecCount;
+    lastSecCount = eventCount;
+    var fpsEl = document.getElementById('live-fps-meter');
+    if (fpsEl) fpsEl.textContent = diff.toFixed(1) + ' evt/s';
+  }, 1000);
+
   try {
     var es = new EventSource('/api/sse');
     es.onmessage = function(ev) {
+      eventCount += 1;
       try {
         var d = JSON.parse(ev.data);
         var box = document.getElementById('live-log-box');
+        var countEl = document.getElementById('live-frame-count');
         if (box) {
-          box.textContent = JSON.stringify(d, null, 2) + '\\n\\n' + box.textContent.slice(0, 2000);
+          box.textContent = JSON.stringify(d, null, 2) + '\\n\\n' + box.textContent.slice(0, 3000);
         }
+        if (countEl) countEl.textContent = String(eventCount);
       } catch (err) {}
     };
   } catch (err) {}
+
+  connectWebSocket();
 })();
 `.trim();
 
@@ -186,3 +256,4 @@ export function exportDashboardSpa(outputPath: string, options: SpaCompilerOptio
   const html = generateStandaloneSpaHtml(options);
   writeFileSync(outputPath, html, "utf8");
 }
+

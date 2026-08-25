@@ -117,3 +117,42 @@ export function renderBarChart(summaries: readonly SkillBenchmarkSummary[]): str
 
   return `<svg viewBox="0 0 650 320" width="100%" height="280" class="chart-svg" style="background:#000000;border:2px solid #ffffff;box-shadow:4px 4px 0px #ffffff"><g>${gridY}</g><g>${bars}</g><line x1="60" y1="260" x2="620" y2="260" stroke="#ffffff" stroke-width="2"/><line x1="60" y1="30" x2="60" y2="260" stroke="#ffffff" stroke-width="2"/><text x="18" y="145" text-anchor="middle" transform="rotate(-90, 18, 145)" font-size="11" fill="#ffffff" font-family="monospace">Pass Rate (%)</text><g transform="translate(480, 15)"><line x1="0" y1="5" x2="12" y2="5" stroke="#ffffff" stroke-width="2"/><text x="18" y="8" font-size="10" fill="#ffffff" font-family="monospace">95% Error Bar</text></g></svg>`;
 }
+
+export function renderTokenVelocityOverviewChart(velocities: readonly { skillId: string; tokensPerSec: number }[]): string {
+  const top = velocities.slice(0, 8);
+  const count = Math.max(1, top.length);
+  const step = 540 / count;
+  const maxVel = Math.max(10, ...top.map((v) => v.tokensPerSec)) * 1.2;
+
+  const bars = top
+    .map((v, idx) => {
+      const x = 60 + step * idx + 10;
+      const w = Math.min(40, step * 0.7);
+      const h = (v.tokensPerSec / maxVel) * 200;
+      const y = 240 - h;
+      return `<g><rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}" fill="#ffffff" stroke="#000000" stroke-width="1"/><text x="${(x + w / 2).toFixed(1)}" y="${Math.max(20, y - 6).toFixed(1)}" text-anchor="middle" font-size="10" fill="#ffffff" font-family="monospace">${v.tokensPerSec.toFixed(0)}</text><text x="${(x + w / 2).toFixed(1)}" y="258" text-anchor="end" transform="rotate(-35, ${(x + w / 2).toFixed(1)}, 258)" font-size="10" fill="#aaaaaa" font-family="monospace">${escapeHtml(v.skillId.slice(0, 10))}</text></g>`;
+    })
+    .join("");
+
+  return `<svg viewBox="0 0 650 300" width="100%" height="260" class="chart-svg" style="background:#000000;border:2px solid #ffffff;box-shadow:4px 4px 0px #ffffff"><g>${bars}</g><line x1="60" y1="240" x2="620" y2="240" stroke="#ffffff" stroke-width="2"/><line x1="60" y1="20" x2="60" y2="240" stroke="#ffffff" stroke-width="2"/><text x="18" y="130" text-anchor="middle" transform="rotate(-90, 18, 130)" font-size="11" fill="#ffffff" font-family="monospace">Tokens / Sec</text></svg>`;
+}
+
+export function renderLatencyPercentilesBarChart(p50: number, p90: number, p99: number): string {
+  const maxVal = Math.max(100, p99 * 1.25);
+  const items = [
+    { label: "P50 (Median)", val: p50 },
+    { label: "P90 (Tail)", val: p90 },
+    { label: "P99 (Extreme)", val: p99 },
+  ];
+
+  const rows = items
+    .map((it, idx) => {
+      const y = 40 + idx * 50;
+      const w = Math.max(10, (it.val / maxVal) * 440);
+      return `<text x="120" y="${y + 18}" text-anchor="end" font-size="11" fill="#aaaaaa" font-family="monospace" font-weight="700">${it.label}</text><rect x="130" y="${y}" width="${w.toFixed(1)}" height="26" fill="#ffffff" stroke="#000000" stroke-width="1.5"/><text x="${(140 + w).toFixed(1)}" y="${y + 18}" font-size="11" fill="#ffffff" font-family="monospace" font-weight="900">${it.val.toFixed(0)} ms</text>`;
+    })
+    .join("");
+
+  return `<svg viewBox="0 0 650 220" width="100%" height="190" class="chart-svg" style="background:#000000;border:2px solid #ffffff;box-shadow:4px 4px 0px #ffffff"><text x="16" y="22" font-size="11" fill="#ffffff" font-family="monospace" font-weight="900">EXECUTION LATENCY PERCENTILES</text><g>${rows}</g></svg>`;
+}
+

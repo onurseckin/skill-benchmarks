@@ -1,0 +1,86 @@
+{
+  "id": "modern-web-guidance",
+  "name": "Modern Web Platform Standards, Baseline Features, and Native Web Components",
+  "category": "frontend",
+  "difficulty": "medium",
+  "targetSkill": "modern-web-guidance",
+  "baselineModel": "claude-3-7-sonnet-20250219",
+  "description": "Modern web architecture scenario evaluating an agent's capability to apply contemporary baseline web APIs: autonomous Custom Elements / HTML Web Components with Shadow DOM encapsulation, CSS Subgrid, Container Queries (@container), native Popover API, inert attribute focus trapping, and progressive enhancement.",
+  "instructions": "You are tasked with implementing modern web platform components and styles in `src/components/modal-dialog.ts`, `src/styles/container-layout.css`, and `src/types/components.ts`.\n\n### Task Objectives:\n1. **Autonomous Custom Element Web Component (`ModalDialogElement`)**:\n   - Extend `HTMLElement` to build a `<modal-dialog>` web component registered via `customElements.define`.\n   - Utilize Shadow DOM encapsulation (`attachShadow({ mode: 'open' })`) with named slots (`<slot name=\"header\">`, `<slot name=\"body\">`, `<slot name=\"footer\">`).\n   - Implement accessible modal dialog behaviors: native `<dialog>` or popover API fallback, `inert` attribute applied to document background elements to trap focus, `Escape` key close handlers, and event dispatching (`dialog-opened`, `dialog-closed`).\n\n2. **Modern CSS Container Queries and Subgrid (`src/styles/container-layout.css`)**:\n   - Implement responsive component card layouts using `@container (min-width: 400px)` and `container-type: inline-size`.\n   - Author aligned card grids using `grid-template-columns: subgrid` to ensure card headers, bodies, and footers align across grid tracks without brittle height hacks.\n   - Utilize modern CSS color functions: `color-mix(in srgb, var(--primary) 80%, white)`.\n\n3. **Type Safety & Component Lifecycle**:\n   - Implement typed lifecycle callbacks: `connectedCallback`, `disconnectedCallback`, `attributeChangedCallback` for observed attributes (`open`, `heading`, `dismissible`).",
+  "workspace": {
+    "fixtures": {
+      "src/types/components.ts": "export interface ModalDialogAttributes {\n  readonly open: boolean;\n  readonly heading?: string;\n  readonly dismissible: boolean;\n}\n\nexport interface DialogCloseEventDetail {\n  readonly reason: \"backdrop-click\" | \"escape-key\" | \"close-button\" | \"programmatic\";\n  readonly timestamp: number;\n}\n\nexport interface ContainerQueryMetrics {\n  readonly containerWidthPx: number;\n  readonly appliedLayout: \"single-column\" | \"multi-column\" | \"dense-grid\";\n  readonly subgridActive: boolean;\n}\n",
+      "src/styles/container-layout.css": ".card-container {\n  container-type: inline-size;\n  container-name: card-wrapper;\n  display: grid;\n  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));\n  gap: 1.5rem;\n}\n\n.card-item {\n  display: grid;\n  grid-template-rows: subgrid;\n  grid-row: span 3;\n  padding: 1.25rem;\n  border-radius: 8px;\n  background: color-mix(in srgb, #2563eb 5%, #ffffff);\n}\n\n@container card-wrapper (min-width: 500px) {\n  .card-item {\n    padding: 2rem;\n    background: color-mix(in srgb, #2563eb 10%, #ffffff);\n  }\n}\n",
+      "src/components/modal-dialog.ts": "import type { DialogCloseEventDetail } from \"../types/components.js\";\n\nexport class ModalDialogElement extends HTMLElement {\n  public static get observedAttributes(): readonly string[] {\n    return [\"open\", \"heading\", \"dismissible\"];\n  }\n\n  constructor() {\n    super();\n  }\n\n  public connectedCallback(): void {\n    throw new Error(\"connectedCallback not implemented\");\n  }\n\n  public disconnectedCallback(): void {\n    throw new Error(\"disconnectedCallback not implemented\");\n  }\n\n  public attributeChangedCallback(name: string, oldValue: string | null, newValue: string | null): void {\n    throw new Error(\"attributeChangedCallback not implemented\");\n  }\n\n  public showModal(): void {\n    throw new Error(\"showModal not implemented\");\n  }\n\n  public close(reason: DialogCloseEventDetail[\"reason\"] = \"programmatic\"): void {\n    throw new Error(\"close not implemented\");\n  }\n}\n",
+      "package.json": "{\n  \"name\": \"modern-web-guidance-fixture\",\n  \"version\": \"1.0.0\",\n  \"type\": \"module\",\n  \"scripts\": {\n    \"build\": \"tsc --noEmit\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^22.13.0\",\n    \"typescript\": \"^5.7.3\"\n  }\n}\n",
+      "tsconfig.json": "{\n  \"compilerOptions\": {\n    \"target\": \"ES2022\",\n    \"module\": \"NodeNext\",\n    \"moduleResolution\": \"NodeNext\",\n    \"strict\": true,\n    \"esModuleInterop\": true,\n    \"skipLibCheck\": true,\n    \"forceConsistentCasingInFileNames\": true,\n    \"declaration\": true\n  },\n  \"include\": [\"src/**/*\"]\n}\n"
+    },
+    "initialGitCommit": "Initial commit for modern-web-guidance benchmark fixture"
+  },
+  "limits": {
+    "maxTurns": 15,
+    "maxCostUSD": 1.0,
+    "maxWallClockTimeMs": 300000
+  },
+  "evaluation": {
+    "deterministicChecks": [
+      {
+        "id": "check-container-queries-css",
+        "name": "Verify Container Queries and Subgrid in CSS",
+        "type": "file_content",
+        "filePath": "src/styles/container-layout.css",
+        "fileContentPattern": "container-type:\\s*inline-size|@container|grid-template-rows:\\s*subgrid",
+        "weight": 0.25
+      },
+      {
+        "id": "check-web-component-class",
+        "name": "Verify ModalDialogElement Custom Element",
+        "type": "file_content",
+        "filePath": "src/components/modal-dialog.ts",
+        "fileContentPattern": "class ModalDialogElement extends HTMLElement",
+        "weight": 0.25
+      },
+      {
+        "id": "check-observed-attributes",
+        "name": "Verify observed attributes and lifecycle callbacks",
+        "type": "file_content",
+        "filePath": "src/components/modal-dialog.ts",
+        "fileContentPattern": "observedAttributes|connectedCallback|attributeChangedCallback",
+        "weight": 0.25
+      },
+      {
+        "id": "check-modal-dialog-methods",
+        "name": "Verify showModal and close methods",
+        "type": "file_content",
+        "filePath": "src/components/modal-dialog.ts",
+        "fileContentPattern": "showModal|close",
+        "weight": 0.25
+      }
+    ],
+    "judgeRubrics": [
+      {
+        "name": "Modern Web Platform Standards & Baseline Architecture",
+        "category": "frontend",
+        "weight": 0.6,
+        "description": "Evaluates the agent's proficiency with modern web standards: Custom Elements (Web Components), Shadow DOM slots, CSS Container Queries, CSS Subgrid, popovers, and inert attribute focus trapping.",
+        "criteria": {
+          "1": "Relies on obsolete patterns (e.g. jQuery/div modals without focus trapping, legacy media query hacks instead of container queries).",
+          "3": "Implements basic Custom Element and CSS container queries, but misses focus trapping, slots, or subgrid alignment.",
+          "5": "Exemplary implementation of modern web platform standards: encapsulated Shadow DOM custom elements with named slots, keyboard accessibility with inert background trapping, CSS Subgrid, and container queries."
+        }
+      },
+      {
+        "name": "TypeScript Custom Element Design",
+        "category": "general",
+        "weight": 0.4,
+        "description": "Evaluates custom element lifecycle implementation, custom event dispatching, and zero-any cleanliness.",
+        "criteria": {
+          "1": "Broken types or memory leaks from unremoved event listeners in disconnectedCallback.",
+          "3": "Working custom element with standard types.",
+          "5": "Strictly typed custom element with robust event cleanup, custom event typing, and zero any annotations."
+        }
+      }
+    ],
+    "passThreshold": 80
+  }
+}

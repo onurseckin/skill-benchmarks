@@ -1,0 +1,86 @@
+{
+  "id": "api-design-principles",
+  "name": "Idempotent RESTful API Architecture, Versioning, and Error Contract Design",
+  "category": "coding",
+  "difficulty": "hard",
+  "targetSkill": "api-design-principles",
+  "baselineModel": "claude-3-7-sonnet-20250219",
+  "description": "API architecture benchmark scenario evaluating an agent's capability to design industrial-grade REST APIs featuring Idempotency-Key handling, RFC 9457 Problem Details for HTTP APIs error contracts, semantic URI versioning, cursor-based pagination, and strict rate-limiting headers.",
+  "instructions": "You are tasked with implementing the API design principles architecture in `src/api/router.ts`, `src/api/idempotency.ts`, and `src/api/problem-details.ts`.\n\n### Task Objectives:\n1. **Idempotency Engine (`IdempotencyManager`)**:\n   - Ingest `Idempotency-Key` header with payload SHA-256 fingerprint validation.\n   - If duplicate key with same payload arrives within TTL, replay cached response with `Idempotent-Replayed: true` header.\n   - If duplicate key arrives with modified payload, return 422/409 Conflict Problem Details.\n   - Implement in-flight request lock lease to prevent concurrent race conditions.\n\n2. **RFC 9457 Problem Details (`ProblemDetailsFactory`)**:\n   - Construct standardized Problem Details objects (`type`, `title`, `status`, `detail`, `instance`, `invalidParams`).\n   - Handle validation errors, rate limit exceeded (429), and resource not found (404).\n\n3. **Cursor-Based Pagination (`PaginationEngine`)**:\n   - Implement opaque base64 cursor encoding/decoding (`cursor = base64(createdAt:id)`).\n   - Provide `hasMore`, `nextCursor`, and `totalCount` metadata.\n\n4. **Type Safety & Modularity**:\n   - Pure TypeScript, zero `any`, strict immutable interfaces, and <= 400 LOC.",
+  "workspace": {
+    "fixtures": {
+      "src/api/types.ts": "export interface ProblemDetails {\n  readonly type: string;\n  readonly title: string;\n  readonly status: number;\n  readonly detail: string;\n  readonly instance?: string;\n  readonly invalidParams?: readonly {\n    readonly name: string;\n    readonly reason: string;\n  }[];\n}\n\nexport interface IdempotencyRecord<T = unknown> {\n  readonly key: string;\n  readonly payloadHash: string;\n  readonly statusCode: number;\n  readonly responseBody: T;\n  readonly headers: Readonly<Record<string, string>>;\n  readonly createdAt: number;\n  readonly status: \"processing\" | \"completed\" | \"failed\";\n}\n\nexport interface CursorPaginationParams {\n  readonly cursor?: string;\n  readonly limit?: number;\n}\n\nexport interface PaginatedResult<T> {\n  readonly items: readonly T[];\n  readonly nextCursor?: string;\n  readonly hasMore: boolean;\n  readonly limit: number;\n}\n",
+      "src/api/idempotency.ts": "import type { IdempotencyRecord, ProblemDetails } from \"./types.js\";\n\nexport class IdempotencyManager {\n  private readonly storage: Map<string, IdempotencyRecord> = new Map();\n  private readonly ttlMs: number;\n\n  constructor(ttlMs = 86400000) {\n    this.ttlMs = ttlMs;\n  }\n\n  public async acquireLock(key: string, payload: unknown): Promise<{ locked: boolean; existingRecord?: IdempotencyRecord }> {\n    throw new Error(\"acquireLock not implemented\");\n  }\n\n  public async commitResponse(key: string, statusCode: number, body: unknown, headers: Record<string, string>): Promise<void> {\n    throw new Error(\"commitResponse not implemented\");\n  }\n\n  public hashPayload(payload: unknown): string {\n    throw new Error(\"hashPayload not implemented\");\n  }\n}\n",
+      "src/api/problem-details.ts": "import type { ProblemDetails } from \"./types.js\";\n\nexport class ProblemDetailsFactory {\n  public static validationError(invalidParams: readonly { name: string; reason: string }[], instance?: string): ProblemDetails {\n    throw new Error(\"validationError not implemented\");\n  }\n\n  public static rateLimitExceeded(retryAfterSec: number, instance?: string): ProblemDetails {\n    throw new Error(\"rateLimitExceeded not implemented\");\n  }\n\n  public static notFound(resourceName: string, id: string, instance?: string): ProblemDetails {\n    throw new Error(\"notFound not implemented\");\n  }\n}\n",
+      "package.json": "{\n  \"name\": \"api-design-principles-fixture\",\n  \"version\": \"1.0.0\",\n  \"type\": \"module\",\n  \"scripts\": {\n    \"build\": \"tsc --noEmit\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^22.13.0\",\n    \"typescript\": \"^5.7.3\"\n  }\n}\n",
+      "tsconfig.json": "{\n  \"compilerOptions\": {\n    \"target\": \"ES2022\",\n    \"module\": \"NodeNext\",\n    \"moduleResolution\": \"NodeNext\",\n    \"strict\": true,\n    \"esModuleInterop\": true,\n    \"skipLibCheck\": true,\n    \"forceConsistentCasingInFileNames\": true,\n    \"declaration\": true\n  },\n  \"include\": [\"src/**/*\"]\n}\n"
+    },
+    "initialGitCommit": "Initial commit for api-design-principles benchmark fixture"
+  },
+  "limits": {
+    "maxTurns": 15,
+    "maxCostUSD": 1.0,
+    "maxWallClockTimeMs": 300000
+  },
+  "evaluation": {
+    "deterministicChecks": [
+      {
+        "id": "check-idempotency-manager-methods",
+        "name": "Verify IdempotencyManager acquireLock and commitResponse",
+        "type": "file_content",
+        "filePath": "src/api/idempotency.ts",
+        "fileContentPattern": "acquireLock|commitResponse|hashPayload",
+        "weight": 0.25
+      },
+      {
+        "id": "check-problem-details-factory-methods",
+        "name": "Verify RFC 9457 ProblemDetailsFactory methods",
+        "type": "file_content",
+        "filePath": "src/api/problem-details.ts",
+        "fileContentPattern": "validationError|rateLimitExceeded|notFound",
+        "weight": 0.25
+      },
+      {
+        "id": "check-problem-details-rfc-types",
+        "name": "Verify ProblemDetails fields",
+        "type": "file_content",
+        "filePath": "src/api/types.ts",
+        "fileContentPattern": "invalidParams|IdempotencyRecord",
+        "weight": 0.25
+      },
+      {
+        "id": "check-cursor-pagination-types",
+        "name": "Verify CursorPaginationParams and PaginatedResult",
+        "type": "file_content",
+        "filePath": "src/api/types.ts",
+        "fileContentPattern": "CursorPaginationParams|PaginatedResult",
+        "weight": 0.25
+      }
+    ],
+    "judgeRubrics": [
+      {
+        "name": "RESTful API Contract Design & Robust Idempotency",
+        "category": "coding",
+        "weight": 0.6,
+        "description": "Evaluates the agent's adherence to API design principles: robust Idempotency-Key validation with SHA-256 fingerprinting, RFC 9457 Problem Details error schemas, and cursor-based pagination.",
+        "criteria": {
+          "1": "Ignores idempotency collisions, returns non-standard error structures (raw strings or arbitrary JSON), or fails to encode opaque cursors.",
+          "3": "Implements basic idempotency storage and problem details, but lacks payload fingerprint mismatch detection or concurrent lock handling.",
+          "5": "Exemplary API architecture: cryptographic payload hashing for Idempotency-Key verification, full RFC 9457 Problem Details factory, and resilient cursor pagination."
+        }
+      },
+      {
+        "name": "TypeScript Architecture & Type Hygiene",
+        "category": "general",
+        "weight": 0.4,
+        "description": "Evaluates TypeScript interface clarity, immutability, and zero-any cleanliness.",
+        "criteria": {
+          "1": "Broken types or frequent use of any.",
+          "3": "Standard types with basic error handling.",
+          "5": "Production-grade TypeScript architecture with strict generics and zero any annotations."
+        }
+      }
+    ],
+    "passThreshold": 80
+  }
+}

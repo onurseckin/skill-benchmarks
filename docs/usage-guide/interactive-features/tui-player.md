@@ -47,7 +47,7 @@ Active PIDs: 4 | Disk Read: 1,024 KB | Disk Write: 2,048 KB
 Navigate between tabs using the number keys `1` through `5`:
 
 ### `1` Overview Tab
-Displays the high-level trial summary, scenario description, skill manifest metadata, target model, overall score breakdown, and elapsed wall-clock duration.
+Displays the high-level trial summary, scenario description, skill manifest metadata, target model, overall score breakdown, elapsed wall-clock duration, and instantaneous generation velocity (`tokens/sec`).
 
 ### `2` Tool Call Tab
 Presents the exact tool invocation payload sent by the agent, formatted JSON arguments, shell commands, and the sandbox's returned `stdout`, `stderr`, exit code, and execution duration.
@@ -55,14 +55,18 @@ Presents the exact tool invocation payload sent by the agent, formatted JSON arg
 ### `3` Thinking Trace Tab
 Displays the model's internal reasoning and chain-of-thought tokens, showing how the agent analyzed previous tool outputs and planned its next action.
 
-### `4` Git Diff Tab
-Shows color-coded Git diffs representing the workspace state changes produced during the current turn, highlighting modified, added, and deleted lines.
+### `4` Git Diff Tab (Side-by-Side & Unified)
+Presents structured workspace state mutations with side-by-side terminal columns:
+- **Left Column**: Baseline / Prior Turn state (colored in red for deletions and modifications)
+- **Right Column**: Agent Mutation / Current Turn state (colored in green for additions)
+- **Hunk Statistics**: Line insertions (`+`), deletions (`-`), and modified file paths
 
 ### `5` Telemetry Tab
 Visualizes real-time system resource consumption captured via cgroups v2:
 - CPU utilization percentage and throttling events
 - Memory RSS vs. container memory limit
 - Disk read/write throughput
+- Network Rx/Tx rates
 - Active child process count (PIDs)
 
 ---

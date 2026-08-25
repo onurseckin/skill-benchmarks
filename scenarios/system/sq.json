@@ -1,0 +1,87 @@
+{
+  "id": "sq",
+  "name": "Structured Query Data Lake CLI and Streaming Columnar Engine",
+  "category": "system",
+  "difficulty": "hard",
+  "targetSkill": "sq",
+  "baselineModel": "claude-3-7-sonnet-20250219",
+  "description": "Data systems benchmark scenario evaluating an agent's capability to construct a streaming structured query engine (sq) that ingests heterogeneous data formats (JSON Lines, CSV, Parquet schemas), executes streaming SQL-like projections, filters, aggregates, and joins with zero-copy buffer recycling and graceful backpressure handling.",
+  "instructions": "You are tasked with implementing the streaming Structured Query (`sq`) engine in `src/sq/engine.ts`, `src/sq/parser.ts`, and `src/sq/stream-reader.ts`.\n\n### Task Objectives:\n1. **SQL Dialect Parser (`SqQueryParser`)**:\n   - Parse streaming queries supporting clauses: `SELECT <columns...>`, `FROM <source>`, `WHERE <predicate>`, `GROUP BY <columns...>`, `HAVING <condition>`, `ORDER BY <column> [ASC|DESC]`, and `LIMIT <n>`.\n   - Construct an Abstract Syntax Tree (`QueryPlanAST`) with typed operators (Project, Filter, Aggregate, Sort, Limit).\n\n2. **Streaming Chunk Reader (`StreamingChunkReader`)**:\n   - Implement asynchronous stream decoding for JSON Lines (`.jsonl`) and delimited CSV formats.\n   - Yield typed records using `AsyncIterableIterator<Record<string, unknown>>` without loading entire datasets into memory.\n   - Handle backpressure by buffering fixed batch slices (e.g. 500 rows/batch).\n\n3. **Query Execution Engine (`SqExecutionEngine`)**:\n   - Execute query pipelines using streaming pipelines.\n   - Support aggregate functions (`COUNT(*)`, `SUM(col)`, `AVG(col)`, `MIN(col)`, `MAX(col)`).\n   - Provide schema inference (`inferSchema`) based on sampled initial records.\n\n4. **Type Safety & Performance Invariants**:\n   - Strict TypeScript types, zero `any` usage, comprehensive error reporting on syntax or type mismatch errors.",
+  "workspace": {
+    "fixtures": {
+      "src/sq/types.ts": "export type SqlOperator = \"=\" | \"!=\" | \">\" | \">=\" | \"<\" | \"<=\" | \"LIKE\" | \"IN\";\n\nexport type AggregateFunction = \"COUNT\" | \"SUM\" | \"AVG\" | \"MIN\" | \"MAX\";\n\nexport interface SelectColumn {\n  readonly expression: string;\n  readonly alias?: string;\n  readonly aggregate?: AggregateFunction;\n}\n\nexport interface WhereCondition {\n  readonly field: string;\n  readonly operator: SqlOperator;\n  readonly value: string | number | boolean | readonly (string | number)[];\n}\n\nexport interface QueryPlanAST {\n  readonly selectColumns: readonly SelectColumn[];\n  readonly sourceName: string;\n  readonly whereConditions: readonly WhereCondition[];\n  readonly groupByColumns: readonly string[];\n  readonly havingConditions: readonly WhereCondition[];\n  readonly orderByColumn?: { readonly column: string; readonly descending: boolean };\n  readonly limit?: number;\n}\n\nexport interface ColumnSchema {\n  readonly name: string;\n  readonly type: \"string\" | \"number\" | \"boolean\" | \"null\" | \"object\" | \"array\";\n  readonly nullable: boolean;\n}\n\nexport interface ExecutionStats {\n  readonly rowsRead: number;\n  readonly rowsEmitted: number;\n  readonly executionTimeMs: number;\n  readonly memoryPeakBytes: number;\n}\n",
+      "src/sq/parser.ts": "import type { QueryPlanAST } from \"./types.js\";\n\nexport class SqQueryParser {\n  public parse(sql: string): QueryPlanAST {\n    throw new Error(\"parse not implemented\");\n  }\n}\n",
+      "src/sq/stream-reader.ts": "export class StreamingChunkReader {\n  public async *readJsonLines(stream: NodeJS.ReadableStream): AsyncIterableIterator<Record<string, unknown>> {\n    throw new Error(\"readJsonLines not implemented\");\n  }\n\n  public async *readCsv(stream: NodeJS.ReadableStream, delimiter = \",\"): AsyncIterableIterator<Record<string, unknown>> {\n    throw new Error(\"readCsv not implemented\");\n  }\n}\n",
+      "src/sq/engine.ts": "import type { QueryPlanAST, ColumnSchema, ExecutionStats } from \"./types.js\";\n\nexport class SqExecutionEngine {\n  public inferSchema(sampleRecords: readonly Record<string, unknown>[]): readonly ColumnSchema[] {\n    throw new Error(\"inferSchema not implemented\");\n  }\n\n  public async *executeQuery(\n    plan: QueryPlanAST,\n    sourceStream: AsyncIterable<Record<string, unknown>>\n  ): AsyncIterableIterator<Record<string, unknown>> {\n    throw new Error(\"executeQuery not implemented\");\n  }\n\n  public getExecutionStats(): ExecutionStats {\n    throw new Error(\"getExecutionStats not implemented\");\n  }\n}\n",
+      "package.json": "{\n  \"name\": \"sq-fixture\",\n  \"version\": \"1.0.0\",\n  \"type\": \"module\",\n  \"scripts\": {\n    \"build\": \"tsc --noEmit\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^22.13.0\",\n    \"typescript\": \"^5.7.3\"\n  }\n}\n",
+      "tsconfig.json": "{\n  \"compilerOptions\": {\n    \"target\": \"ES2022\",\n    \"module\": \"NodeNext\",\n    \"moduleResolution\": \"NodeNext\",\n    \"strict\": true,\n    \"esModuleInterop\": true,\n    \"skipLibCheck\": true,\n    \"forceConsistentCasingInFileNames\": true,\n    \"declaration\": true\n  },\n  \"include\": [\"src/**/*\"]\n}\n"
+    },
+    "initialGitCommit": "Initial commit for sq benchmark fixture"
+  },
+  "limits": {
+    "maxTurns": 15,
+    "maxCostUSD": 1.0,
+    "maxWallClockTimeMs": 300000
+  },
+  "evaluation": {
+    "deterministicChecks": [
+      {
+        "id": "check-sq-parser-methods",
+        "name": "Verify SqQueryParser parse method",
+        "type": "file_content",
+        "filePath": "src/sq/parser.ts",
+        "fileContentPattern": "parse\\(sql:\\s*string\\):\\s*QueryPlanAST",
+        "weight": 0.25
+      },
+      {
+        "id": "check-stream-reader-methods",
+        "name": "Verify StreamingChunkReader async generators",
+        "type": "file_content",
+        "filePath": "src/sq/stream-reader.ts",
+        "fileContentPattern": "readJsonLines|readCsv",
+        "weight": 0.25
+      },
+      {
+        "id": "check-execution-engine-methods",
+        "name": "Verify SqExecutionEngine query execution and schema inference",
+        "type": "file_content",
+        "filePath": "src/sq/engine.ts",
+        "fileContentPattern": "inferSchema|executeQuery|getExecutionStats",
+        "weight": 0.25
+      },
+      {
+        "id": "check-aggregate-functions-support",
+        "name": "Verify AggregateFunction types",
+        "type": "file_content",
+        "filePath": "src/sq/types.ts",
+        "fileContentPattern": "\"COUNT\"\\s*\\|\\s*\"SUM\"\\s*\\|\\s*\"AVG\"\\s*\\|\\s*\"MIN\"\\s*\\|\\s*\"MAX\"",
+        "weight": 0.25
+      }
+    ],
+    "judgeRubrics": [
+      {
+        "name": "Streaming Query Engine Architecture & Performance",
+        "category": "system",
+        "weight": 0.6,
+        "description": "Evaluates the agent's capability to build a streaming SQL-like execution engine with async generators, proper predicate evaluation, aggregation groups, and memory-conscious chunked streaming.",
+        "criteria": {
+          "1": "Buffering entire stream into memory, broken SQL parsing, or non-functional aggregation logic.",
+          "3": "Implements basic query pipeline with filtering and projection, but fails on complex group-by aggregations or lacks streaming backpressure.",
+          "5": "Exemplary streaming data engine: robust SQL AST parsing, streaming async generators for JSONL/CSV, accurate schema inference, and memory-bounded GROUP BY / aggregate processing."
+        }
+      },
+      {
+        "name": "TypeScript Engineering & Immutability",
+        "category": "general",
+        "weight": 0.4,
+        "description": "Evaluates TypeScript types, AST data modeling, error boundaries, and zero-any cleanliness.",
+        "criteria": {
+          "1": "Broken types or excessive any annotations.",
+          "3": "Standard TypeScript types with basic error handling.",
+          "5": "Production-grade TypeScript architecture with strict AST modeling, comprehensive type guards, and zero any."
+        }
+      }
+    ],
+    "passThreshold": 80
+  }
+}

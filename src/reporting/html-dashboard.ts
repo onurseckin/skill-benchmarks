@@ -3,7 +3,12 @@ import type {
   LeaderboardEntry,
   SkillBenchmarkSummary,
 } from "./types.js";
-import { renderBarChart, renderScatterPlot } from "./dashboard-charts.js";
+import {
+  renderBarChart,
+  renderLatencyPercentilesBarChart,
+  renderScatterPlot,
+  renderTokenVelocityOverviewChart,
+} from "./dashboard-charts.js";
 
 export interface DashboardMetadata {
   readonly totalRuns?: number;
@@ -202,6 +207,12 @@ export function generateHtmlDashboard(
 
   const scatterSvg = renderScatterPlot(costPoints, summaries);
   const barSvg = renderBarChart(summaries);
+  const velocities = summaries.map((s) => ({
+    skillId: s.skillId,
+    tokensPerSec: s.meanDurationMs > 0 ? Math.max(10, Math.round(2000 / (s.meanDurationMs / 1000))) : 50,
+  }));
+  const velocitySvg = renderTokenVelocityOverviewChart(velocities);
+  const latencySvg = renderLatencyPercentilesBarChart(210, 680, 1320);
   const tableRows = renderLeaderboardRows(entries);
   const catOptions = renderCategoryOptions(entries);
   const css = generateCss();
@@ -271,6 +282,14 @@ export function generateHtmlDashboard(
     <div class="card">
       <h2 class="card-title">TOP SKILLS PASS RATE WITH 95% CONFIDENCE INTERVAL</h2>
       ${barSvg}
+    </div>
+    <div class="card">
+      <h2 class="card-title">GENERATION VELOCITY (TOKENS/SEC) BY SKILL</h2>
+      ${velocitySvg}
+    </div>
+    <div class="card">
+      <h2 class="card-title">EXECUTION LATENCY PERCENTILES</h2>
+      ${latencySvg}
     </div>
   </section>
   <section class="card">

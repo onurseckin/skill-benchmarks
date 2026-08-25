@@ -1,7 +1,7 @@
 {
   "version": "1.1.0",
   "generatedAt": "2026-08-25T02:00:37.682Z",
-  "totalScenarios": 13,
+  "totalScenarios": 19,
   "categories": [
     "coding",
     "frontend",
@@ -129,6 +129,87 @@
       "targetSkill": "diagnosing-bugs",
       "path": "scenarios/debugging/systematic-debugging.json",
       "description": "Advanced systematic debugging benchmark scenario evaluating an agent's capability to apply the scientific debugging method (Hypothesize -> Isolate -> Reproduce -> Fix -> Verify) across a distributed state machine suffering from concurrency race conditions, unhandled clock drift, and partial write corruption."
+    },
+    {
+      "id": "chrome-extensions",
+      "name": "Chrome Manifest V3 Extension Service Worker and DeclarativeNetRequest Pipeline",
+      "category": "frontend",
+      "difficulty": "hard",
+      "targetSkill": "chrome-extensions",
+      "path": "scenarios/frontend/chrome-extensions.json",
+      "description": "Chrome Extension Manifest V3 architecture scenario evaluating an agent's capability to build a modern MV3 extension with background Service Worker lifecycle management, declarativeNetRequest rule engine, message passing between content scripts and popup, chrome.storage session state, and CSP compliance."
+    },
+    {
+      "id": "css-animations",
+      "name": "Modern GPU-Accelerated CSS Animations, View Transitions, and Scroll-Driven Timelines",
+      "category": "frontend",
+      "difficulty": "hard",
+      "targetSkill": "css-animations",
+      "path": "scenarios/frontend/css-animations.json",
+      "description": "High-fidelity CSS animation and styling scenario evaluating an agent's capability to architect performant GPU-composited CSS animations, scroll-driven timelines (animation-timeline: scroll() and view()), discrete property transitions with @starting-style, and smooth document View Transitions."
+    },
+    {
+      "id": "debug-optimize-lcp",
+      "name": "Largest Contentful Paint (LCP) Diagnostic Triage and Core Web Vitals Optimization",
+      "category": "optimization",
+      "difficulty": "hard",
+      "targetSkill": "debug-optimize-lcp",
+      "path": "scenarios/optimization/debug-optimize-lcp.json",
+      "description": "Core Web Vitals performance optimization benchmark evaluating an agent's capability to diagnose LCP sub-part breakdowns (TTFB, Resource Load Delay, Resource Load Duration, Element Render Delay), optimize critical path waterfalls, insert preload hints with fetchpriority=\"high\", inline critical CSS, and eliminate client-side render blocking."
+    },
+    {
+      "id": "modern-web-guidance",
+      "name": "Modern Web Platform Standards, Baseline Features, and Native Web Components",
+      "category": "frontend",
+      "difficulty": "medium",
+      "targetSkill": "modern-web-guidance",
+      "path": "scenarios/frontend/modern-web-guidance.json",
+      "description": "Modern web architecture scenario evaluating an agent's capability to apply contemporary baseline web APIs: autonomous Custom Elements / HTML Web Components with Shadow DOM encapsulation, CSS Subgrid, Container Queries (@container), native Popover API, inert attribute focus trapping, and progressive enhancement."
+    },
+    {
+      "id": "sq",
+      "name": "Structured Query Data Lake CLI and Streaming Columnar Engine",
+      "category": "system",
+      "difficulty": "hard",
+      "targetSkill": "sq",
+      "path": "scenarios/system/sq.json",
+      "description": "Data systems benchmark scenario evaluating an agent's capability to construct a streaming structured query engine (sq) that ingests heterogeneous data formats (JSON Lines, CSV, Parquet schemas), executes streaming SQL-like projections, filters, aggregates, and joins with zero-copy buffer recycling and graceful backpressure handling."
+    },
+    {
+      "id": "google-antigravity-sdk",
+      "name": "Google Antigravity SDK Agent Orchestrator and Streaming Tool Protocol Harness",
+      "category": "coding",
+      "difficulty": "hard",
+      "targetSkill": "google-antigravity-sdk",
+      "path": "scenarios/coding/google-antigravity-sdk.json",
+      "description": "Agent SDK benchmark scenario evaluating an agent's capability to construct a Google Antigravity SDK orchestration layer supporting multi-agent delegation, streaming tool execution, structured output validation, backpressure token throttling, and sandboxed command execution."
+    },
+    {
+      "id": "api-design-principles",
+      "name": "Idempotent RESTful API Architecture, Versioning, and Error Contract Design",
+      "category": "coding",
+      "difficulty": "hard",
+      "targetSkill": "api-design-principles",
+      "path": "scenarios/coding/api-design-principles.json",
+      "description": "API architecture benchmark scenario evaluating an agent's capability to design industrial-grade REST APIs featuring Idempotency-Key handling, RFC 9457 Problem Details for HTTP APIs error contracts, semantic URI versioning, cursor-based pagination, and strict rate-limiting headers."
+    },
+    {
+      "id": "mcp-builder",
+      "name": "Model Context Protocol (MCP) Server Architecture and Transport Harness",
+      "category": "composite",
+      "difficulty": "hard",
+      "targetSkill": "mcp-builder",
+      "path": "scenarios/composite/mcp-builder.json",
+      "description": "MCP Server architecture scenario evaluating an agent's capability to build a robust Model Context Protocol (MCP) server supporting Stdio and SSE transports, dynamic tool registrations with JSON Schema, prompt templates, resource subscriptions with change notifications, and strict JSON-RPC 2.0 error handling."
+    },
+    {
+      "id": "convex-performance-audit",
+      "name": "Convex Reactive Database Indexing, Query Optimization, and Bandwidth Audit",
+      "category": "optimization",
+      "difficulty": "hard",
+      "targetSkill": "convex-performance-audit",
+      "path": "scenarios/optimization/convex-performance-audit.json",
+      "description": "Reactive database optimization scenario evaluating an agent's capability to audit Convex queries, identify unindexed table scans, optimize reactive subscription bandwidth, construct compound indices with .withIndex(), eliminate N+1 relational query anti-patterns, and measure database read/write document counts."
     }
   ],
   "canonicalSkills": [

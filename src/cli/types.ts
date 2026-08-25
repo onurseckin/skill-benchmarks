@@ -28,6 +28,9 @@ export interface BenchmarkRunOptions {
   readonly reasoning?: "low" | "medium" | "high";
   readonly thinkingBudget?: number;
   readonly matrixThinking?: readonly ("none" | "low" | "medium" | "high" | "max")[];
+  readonly dryRun?: boolean;
+  readonly live?: boolean;
+  readonly mock?: boolean;
   readonly timeoutSeconds?: number;
   readonly maxTurns?: number;
   readonly maxCostUSD?: number;

@@ -1,0 +1,87 @@
+{
+  "id": "google-antigravity-sdk",
+  "name": "Google Antigravity SDK Agent Orchestrator and Streaming Tool Protocol Harness",
+  "category": "coding",
+  "difficulty": "hard",
+  "targetSkill": "google-antigravity-sdk",
+  "baselineModel": "claude-3-7-sonnet-20250219",
+  "description": "Agent SDK benchmark scenario evaluating an agent's capability to construct a Google Antigravity SDK orchestration layer supporting multi-agent delegation, streaming tool execution, structured output validation, backpressure token throttling, and sandboxed command execution.",
+  "instructions": "You are tasked with implementing the Google Antigravity SDK agent harness in `src/sdk/client.ts`, `src/sdk/tool-registry.ts`, and `src/sdk/stream-parser.ts`.\n\n### Task Objectives:\n1. **Typed Tool Registry with Sandboxing (`AntigravityToolRegistry`)**:\n   - Implement tool registration with JSON Schema parameter definitions.\n   - Enforce runtime validation of input arguments before invoking tool handlers.\n   - Support declaration of lazy-loaded and eager tool schemas.\n\n2. **Streaming Protocol & Event Stream Parser (`AntigravityStreamParser`)**:\n   - Ingest server-sent event (SSE) / newline-delimited JSON chunks.\n   - Parse text delta chunks, function call invitations, and tool execution completions.\n   - Yield typed stream events (`text_delta`, `tool_call`, `thought_delta`, `finish`).\n\n3. **Agent Orchestrator Client (`AntigravityAgentClient`)**:\n   - Manage multi-turn conversation state and token budgeting.\n   - Dispatch tool calls asynchronously to `AntigravityToolRegistry` and append tool responses back into the conversation context.\n   - Handle backpressure and token consumption rate limits.\n\n4. **Type Safety & Zero Invariant Violations**:\n   - Strictly typed immutable structures, zero comments, zero `any` usage, and <= 400 LOC.",
+  "workspace": {
+    "fixtures": {
+      "src/sdk/types.ts": "export type StreamEventType = \"text_delta\" | \"thought_delta\" | \"tool_call\" | \"tool_result\" | \"finish\";\n\nexport interface ToolParameterSchema {\n  readonly type: \"string\" | \"number\" | \"boolean\" | \"object\" | \"array\";\n  readonly description?: string;\n  readonly enum?: readonly string[];\n  readonly properties?: Readonly<Record<string, ToolParameterSchema>>;\n  readonly required?: readonly string[];\n}\n\nexport interface AntigravityToolDefinition {\n  readonly name: string;\n  readonly description: string;\n  readonly parameters: ToolParameterSchema;\n  readonly execute: (args: Record<string, unknown>) => Promise<unknown>;\n}\n\nexport interface StreamEvent {\n  readonly type: StreamEventType;\n  readonly text?: string;\n  readonly thought?: string;\n  readonly toolCall?: {\n    readonly id: string;\n    readonly name: string;\n    readonly args: Record<string, unknown>;\n  };\n  readonly finishReason?: \"stop\" | \"tool_use\" | \"max_tokens\" | \"budget_exhausted\";\n}\n\nexport interface AgentMessage {\n  readonly role: \"user\" | \"assistant\" | \"system\" | \"tool\";\n  readonly content: string;\n  readonly toolCallId?: string;\n  readonly toolCalls?: readonly {\n    readonly id: string;\n    readonly name: string;\n    readonly arguments: string;\n  }[];\n}\n\nexport interface AgentSessionConfig {\n  readonly agentId: string;\n  readonly model: string;\n  readonly systemPrompt: string;\n  readonly maxTokens?: number;\n  readonly thinkingBudget?: number;\n}\n",
+      "src/sdk/tool-registry.ts": "import type { AntigravityToolDefinition, ToolParameterSchema } from \"./types.js\";\n\nexport class AntigravityToolRegistry {\n  private readonly tools: Map<string, AntigravityToolDefinition> = new Map();\n\n  public registerTool(tool: AntigravityToolDefinition): void {\n    this.tools.set(tool.name, tool);\n  }\n\n  public getTool(name: string): AntigravityToolDefinition | undefined {\n    return this.tools.get(name);\n  }\n\n  public listTools(): readonly AntigravityToolDefinition[] {\n    return Array.from(this.tools.values());\n  }\n\n  public async executeTool(name: string, args: Record<string, unknown>): Promise<unknown> {\n    throw new Error(\"executeTool not implemented\");\n  }\n\n  public validateArguments(schema: ToolParameterSchema, args: Record<string, unknown>): boolean {\n    throw new Error(\"validateArguments not implemented\");\n  }\n}\n",
+      "src/sdk/stream-parser.ts": "import type { StreamEvent } from \"./types.js\";\n\nexport class AntigravityStreamParser {\n  public async *parseStream(stream: NodeJS.ReadableStream): AsyncIterableIterator<StreamEvent> {\n    throw new Error(\"parseStream not implemented\");\n  }\n}\n",
+      "src/sdk/client.ts": "import type { AgentMessage, AgentSessionConfig, StreamEvent } from \"./types.js\";\nimport { AntigravityToolRegistry } from \"./tool-registry.js\";\n\nexport class AntigravityAgentClient {\n  private readonly config: AgentSessionConfig;\n  private readonly registry: AntigravityToolRegistry;\n  private readonly history: AgentMessage[] = [];\n\n  constructor(config: AgentSessionConfig, registry?: AntigravityToolRegistry) {\n    this.config = config;\n    this.registry = registry ?? new AntigravityToolRegistry();\n  }\n\n  public getHistory(): readonly AgentMessage[] {\n    return [...this.history];\n  }\n\n  public async sendMessage(content: string): Promise<readonly StreamEvent[]> {\n    throw new Error(\"sendMessage not implemented\");\n  }\n\n  public async executeMultiTurnTurnLoop(maxTurns = 5): Promise<void> {\n    throw new Error(\"executeMultiTurnTurnLoop not implemented\");\n  }\n}\n",
+      "package.json": "{\n  \"name\": \"google-antigravity-sdk-fixture\",\n  \"version\": \"1.0.0\",\n  \"type\": \"module\",\n  \"scripts\": {\n    \"build\": \"tsc --noEmit\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^22.13.0\",\n    \"typescript\": \"^5.7.3\"\n  }\n}\n",
+      "tsconfig.json": "{\n  \"compilerOptions\": {\n    \"target\": \"ES2022\",\n    \"module\": \"NodeNext\",\n    \"moduleResolution\": \"NodeNext\",\n    \"strict\": true,\n    \"esModuleInterop\": true,\n    \"skipLibCheck\": true,\n    \"forceConsistentCasingInFileNames\": true,\n    \"declaration\": true\n  },\n  \"include\": [\"src/**/*\"]\n}\n"
+    },
+    "initialGitCommit": "Initial commit for google-antigravity-sdk benchmark fixture"
+  },
+  "limits": {
+    "maxTurns": 15,
+    "maxCostUSD": 1.0,
+    "maxWallClockTimeMs": 300000
+  },
+  "evaluation": {
+    "deterministicChecks": [
+      {
+        "id": "check-tool-registry-methods",
+        "name": "Verify AntigravityToolRegistry registration and validation",
+        "type": "file_content",
+        "filePath": "src/sdk/tool-registry.ts",
+        "fileContentPattern": "registerTool|executeTool|validateArguments",
+        "weight": 0.25
+      },
+      {
+        "id": "check-stream-parser-methods",
+        "name": "Verify AntigravityStreamParser stream iterator",
+        "type": "file_content",
+        "filePath": "src/sdk/stream-parser.ts",
+        "fileContentPattern": "parseStream",
+        "weight": 0.25
+      },
+      {
+        "id": "check-agent-client-methods",
+        "name": "Verify AntigravityAgentClient message handling and turn loop",
+        "type": "file_content",
+        "filePath": "src/sdk/client.ts",
+        "fileContentPattern": "sendMessage|executeMultiTurnTurnLoop",
+        "weight": 0.25
+      },
+      {
+        "id": "check-stream-event-types",
+        "name": "Verify StreamEventType stream events",
+        "type": "file_content",
+        "filePath": "src/sdk/types.ts",
+        "fileContentPattern": "\"text_delta\"\\s*\\|\\s*\"thought_delta\"\\s*\\|\\s*\"tool_call\"\\s*\\|\\s*\"tool_result\"\\s*\\|\\s*\"finish\"",
+        "weight": 0.25
+      }
+    ],
+    "judgeRubrics": [
+      {
+        "name": "Antigravity SDK Protocol & Tool Dispatch Orchestration",
+        "category": "coding",
+        "weight": 0.6,
+        "description": "Evaluates the agent's proficiency in building an SDK orchestration layer with JSON Schema tool validation, streaming SSE/NDJSON parsing, recursive tool invocation turns, and token budget throttling.",
+        "criteria": {
+          "1": "Broken stream parsing, unvalidated tool inputs, or infinite looping in multi-turn dispatch.",
+          "3": "Implements basic tool execution and stream parsing, but lacks schema validation or robust multi-turn handling.",
+          "5": "Exemplary SDK harness: strictly validated tool arguments against JSON Schema, async streaming generator, automated tool-use loop resolution, and full history management."
+        }
+      },
+      {
+        "name": "TypeScript Architecture & Type Safety",
+        "category": "general",
+        "weight": 0.4,
+        "description": "Evaluates TypeScript interface design, stream event discriminators, and zero-any cleanliness.",
+        "criteria": {
+          "1": "Broken types or excessive any usage.",
+          "3": "Working types with standard structure.",
+          "5": "Clean, modular TypeScript architecture with strict discriminated unions for stream events and zero any annotations."
+        }
+      }
+    ],
+    "passThreshold": 80
+  }
+}

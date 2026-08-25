@@ -42,6 +42,8 @@ const SPECS: readonly (readonly [string, FlagValueKind, readonly string[]])[] = 
   ["reasoning", "string", ["reasoning", "reasoning-effort", "reasoningEffort"]],
   ["thinkingBudget", "number", ["thinking-budget", "thinkingBudget", "budget-tokens", "budgetTokens"]],
   ["matrixThinking", "array", ["matrix-thinking", "matrixThinking", "thinking-matrix", "thinkingMatrix"]],
+  ["dryRun", "boolean", ["dry-run", "dryRun"]],
+  ["mock", "boolean", ["mock"]],
 ];
 
 const FLAG_MAP = new Map<string, FlagSpec>();
@@ -149,6 +151,9 @@ export function parseCliArgs(argv: readonly string[]): CliParsedArgs {
     reasoning: toStr(flags["reasoning"]) as BenchmarkRunOptions["reasoning"],
     thinkingBudget: toNum(flags["thinkingBudget"]),
     matrixThinking: toArr(flags["matrixThinking"]) as BenchmarkRunOptions["matrixThinking"],
+    dryRun: toBool(flags["dryRun"]),
+    live: toBool(flags["live"]),
+    mock: toBool(flags["mock"]),
     timeoutSeconds: toNum(flags["timeoutSeconds"]),
     maxTurns: toNum(flags["maxTurns"]), maxCostUSD: toNum(flags["maxCostUSD"]),
     dbPath: toStr(flags["dbPath"]), outputFormat: toStr(flags["format"]) as CliOutputFormat | undefined,

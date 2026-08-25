@@ -47,7 +47,16 @@ import { getOrCreateModelDefinition } from "../models/index.js";
 export async function runBenchmarkCommand(args: CliParsedArgs): Promise<CliCommandResult> {
   const startTime = Date.now();
   const options = args.benchmarkOptions !== undefined ? args.benchmarkOptions : ({} as BenchmarkRunOptions);
-  const scenarioIds = options.scenarioIds.length > 0 ? options.scenarioIds : ["git-worktrees"];
+  const scenarioLoader = new ScenarioLoader();
+  let scenarioIds = options.scenarioIds.length > 0 ? [...options.scenarioIds] : [];
+  if (scenarioIds.length === 0) {
+    if (options.category) {
+      const filtered = scenarioLoader.queryScenarios({ category: options.category });
+      scenarioIds = filtered.length > 0 ? filtered.map((s) => s.id) : ["git-worktrees"];
+    } else {
+      scenarioIds = ["git-worktrees"];
+    }
+  }
   const skillIds = options.skillIds.length > 0 ? options.skillIds : ["using-git-worktrees"];
   const modelIds = options.modelIds.length > 0 ? options.modelIds : ["claude-3-7-sonnet"];
   const dbPath = options.dbPath !== undefined ? options.dbPath : resolve(process.cwd(), "benchmarks.db");
@@ -68,6 +77,7 @@ export async function runBenchmarkCommand(args: CliParsedArgs): Promise<CliComma
     return {
       modelId: m,
       providerId: def.provider,
+      temperature: options.temperature,
       thinkingLevel: options.thinking ?? def.defaultThinkingLevel,
       thinkingBudget: options.thinkingBudget,
       reasoningEffort: options.reasoning,
@@ -79,6 +89,13 @@ export async function runBenchmarkCommand(args: CliParsedArgs): Promise<CliComma
     skillIds,
     models,
     thinkingLevels: options.matrixThinking,
+    repetitions: options.repetitions ?? 1,
+    dryRun: options.dryRun,
+    defaultExecutionLimits: {
+      maxTurns: options.maxTurns,
+      maxCostUSD: options.maxCostUSD,
+      maxWallClockTimeMs: options.timeoutSeconds ? options.timeoutSeconds * 1000 : undefined,
+    },
     concurrency: { maxGlobalConcurrency: options.concurrency ?? 2 },
     telemetryDbPath: dbPath,
   });

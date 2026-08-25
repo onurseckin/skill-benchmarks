@@ -1,0 +1,86 @@
+{
+  "id": "mcp-builder",
+  "name": "Model Context Protocol (MCP) Server Architecture and Transport Harness",
+  "category": "composite",
+  "difficulty": "hard",
+  "targetSkill": "mcp-builder",
+  "baselineModel": "claude-3-7-sonnet-20250219",
+  "description": "MCP Server architecture scenario evaluating an agent's capability to build a robust Model Context Protocol (MCP) server supporting Stdio and SSE transports, dynamic tool registrations with JSON Schema, prompt templates, resource subscriptions with change notifications, and strict JSON-RPC 2.0 error handling.",
+  "instructions": "You are tasked with implementing the MCP Server framework in `src/mcp/server.ts`, `src/mcp/transports.ts`, and `src/mcp/resource-manager.ts` conforming to the official Model Context Protocol (MCP) specification.\n\n### Task Objectives:\n1. **JSON-RPC 2.0 Protocol & Handshake (`McpServer`)**:\n   - Implement the `initialize` lifecycle handshake responding with server info and advertised capabilities (`tools`, `resources`, `prompts`).\n   - Handle `tools/list` and `tools/call` with strict JSON Schema argument validation.\n   - Route JSON-RPC 2.0 requests, responses, and notifications with standard error codes (-32700 Parse error, -32600 Invalid Request, -32601 Method not found, -32602 Invalid params, -32603 Internal error).\n\n2. **Resource Management & Subscriptions (`McpResourceManager`)**:\n   - Implement URI-based resource providers (e.g. `memo://notes/{id}`).\n   - Support resource reading (`resources/read`) and dynamic subscription tracking (`resources/subscribe`, `resources/unsubscribe`).\n   - Emit `notifications/resources/updated` when resource contents change.\n\n3. **Stdio and SSE Transports (`StdioTransport`, `SseTransport`)**:\n   - Implement newline-delimited JSON parser for standard I/O.\n   - Implement Server-Sent Events (SSE) transport with session IDs and message endpoint routing.\n\n4. **Type Safety & Modularity**:\n   - Strictly typed, zero `any`, and adherence to repository quality gates.",
+  "workspace": {
+    "fixtures": {
+      "src/mcp/types.ts": "export interface JsonRpcRequest<T = unknown> {\n  readonly jsonrpc: \"2.0\";\n  readonly id: string | number;\n  readonly method: string;\n  readonly params?: T;\n}\n\nexport interface JsonRpcResponse<T = unknown> {\n  readonly jsonrpc: \"2.0\";\n  readonly id: string | number | null;\n  readonly result?: T;\n  readonly error?: {\n    readonly code: number;\n    readonly message: string;\n    readonly data?: unknown;\n  };\n}\n\nexport interface McpTool {\n  readonly name: string;\n  readonly description: string;\n  readonly inputSchema: {\n    readonly type: \"object\";\n    readonly properties?: Readonly<Record<string, unknown>>;\n    readonly required?: readonly string[];\n  };\n}\n\nexport interface McpResource {\n  readonly uri: string;\n  readonly name: string;\n  readonly description?: string;\n  readonly mimeType?: string;\n}\n\nexport interface ServerCapabilities {\n  readonly tools?: { readonly listChanged?: boolean };\n  readonly resources?: { readonly subscribe?: boolean; readonly listChanged?: boolean };\n  readonly prompts?: { readonly listChanged?: boolean };\n}\n",
+      "src/mcp/server.ts": "import type { JsonRpcRequest, JsonRpcResponse, McpTool, ServerCapabilities } from \"./types.js\";\n\nexport class McpServer {\n  private readonly tools: Map<string, { tool: McpTool; handler: (args: Record<string, unknown>) => Promise<unknown> }> = new Map();\n\n  public registerTool(tool: McpTool, handler: (args: Record<string, unknown>) => Promise<unknown>): void {\n    this.tools.set(tool.name, { tool, handler });\n  }\n\n  public async handleRequest(request: JsonRpcRequest): Promise<JsonRpcResponse> {\n    throw new Error(\"handleRequest not implemented\");\n  }\n\n  public getCapabilities(): ServerCapabilities {\n    throw new Error(\"getCapabilities not implemented\");\n  }\n}\n",
+      "src/mcp/resource-manager.ts": "import type { McpResource } from \"./types.js\";\n\nexport class McpResourceManager {\n  private readonly resources: Map<string, McpResource> = new Map();\n  private readonly subscribers: Map<string, Set<string>> = new Map();\n\n  public registerResource(resource: McpResource, reader: () => Promise<string>): void {\n    throw new Error(\"registerResource not implemented\");\n  }\n\n  public async readResource(uri: string): Promise<{ contents: readonly { uri: string; text?: string; blob?: string }[] }> {\n    throw new Error(\"readResource not implemented\");\n  }\n\n  public subscribe(sessionId: string, uri: string): void {\n    throw new Error(\"subscribe not implemented\");\n  }\n}\n",
+      "package.json": "{\n  \"name\": \"mcp-builder-fixture\",\n  \"version\": \"1.0.0\",\n  \"type\": \"module\",\n  \"scripts\": {\n    \"build\": \"tsc --noEmit\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^22.13.0\",\n    \"typescript\": \"^5.7.3\"\n  }\n}\n",
+      "tsconfig.json": "{\n  \"compilerOptions\": {\n    \"target\": \"ES2022\",\n    \"module\": \"NodeNext\",\n    \"moduleResolution\": \"NodeNext\",\n    \"strict\": true,\n    \"esModuleInterop\": true,\n    \"skipLibCheck\": true,\n    \"forceConsistentCasingInFileNames\": true,\n    \"declaration\": true\n  },\n  \"include\": [\"src/**/*\"]\n}\n"
+    },
+    "initialGitCommit": "Initial commit for mcp-builder benchmark fixture"
+  },
+  "limits": {
+    "maxTurns": 15,
+    "maxCostUSD": 1.0,
+    "maxWallClockTimeMs": 300000
+  },
+  "evaluation": {
+    "deterministicChecks": [
+      {
+        "id": "check-mcp-server-methods",
+        "name": "Verify McpServer request handler and capability methods",
+        "type": "file_content",
+        "filePath": "src/mcp/server.ts",
+        "fileContentPattern": "registerTool|handleRequest|getCapabilities",
+        "weight": 0.25
+      },
+      {
+        "id": "check-resource-manager-methods",
+        "name": "Verify McpResourceManager resource reading and subscription",
+        "type": "file_content",
+        "filePath": "src/mcp/resource-manager.ts",
+        "fileContentPattern": "registerResource|readResource|subscribe",
+        "weight": 0.25
+      },
+      {
+        "id": "check-jsonrpc-types",
+        "name": "Verify JSON-RPC 2.0 type structures",
+        "type": "file_content",
+        "filePath": "src/mcp/types.ts",
+        "fileContentPattern": "JsonRpcRequest|JsonRpcResponse|McpTool",
+        "weight": 0.25
+      },
+      {
+        "id": "check-server-capabilities-types",
+        "name": "Verify ServerCapabilities specification",
+        "type": "file_content",
+        "filePath": "src/mcp/types.ts",
+        "fileContentPattern": "ServerCapabilities|inputSchema",
+        "weight": 0.25
+      }
+    ],
+    "judgeRubrics": [
+      {
+        "name": "Model Context Protocol (MCP) Architectural Rigor",
+        "category": "composite",
+        "weight": 0.6,
+        "description": "Evaluates the agent's proficiency in building an MCP server conforming to JSON-RPC 2.0 specs, tool schema validation, dynamic resource subscription management, and error code accuracy.",
+        "criteria": {
+          "1": "Violates JSON-RPC 2.0 protocol format, ignores inputSchema validation, or fails to handle standard MCP lifecycle methods.",
+          "3": "Implements basic tools/list and tools/call handling, but lacks resource subscription management or standard JSON-RPC error codes.",
+          "5": "Exemplary MCP server architecture: full JSON-RPC 2.0 dispatching, robust JSON Schema parameter validation, URI-based resource subscriptions with change events, and modular transport adapters."
+        }
+      },
+      {
+        "name": "TypeScript Protocol Engineering",
+        "category": "general",
+        "weight": 0.4,
+        "description": "Evaluates TypeScript interface design, async handler patterns, and zero-any hygiene.",
+        "criteria": {
+          "1": "Broken types or frequent any casts.",
+          "3": "Standard types with basic error handling.",
+          "5": "Strict, production-grade TypeScript with precise discriminated union schemas and zero any."
+        }
+      }
+    ],
+    "passThreshold": 80
+  }
+}

@@ -51,13 +51,15 @@ console.log(`Stream accessible at: ${tunnel.publicUrl}`);
 
 ---
 
-## 4. Browser Terminal Features
+## 4. Browser Terminal & Real-Time Dashboard Features
 
-When connecting to the streaming URL, the web interface provides:
-- **60 FPS Canvas Rendering**: High-performance terminal rendering supporting full 24-bit TrueColor and font ligature rendering
-- **Live Tool Call Overlays**: Pop-up inspector for agent shell commands, file modifications, and API payloads
-- **Real-Time Telemetry Gauges**: Live graphs for memory RSS, CPU percentage, and active child process counts
-- **Multi-Spectator Broadcasting**: Supports multiple simultaneous viewers without adding overhead to the evaluation sandbox
+When connecting to the streaming URL or the standalone neo-brutalist dashboard, the interface provides:
+- **60 FPS Canvas Rendering**: High-performance terminal rendering supporting full 24-bit TrueColor and font ligature rendering.
+- **Side-by-Side Trajectory Diff Viewer**: Instant toggle between Unified and Side-by-Side split diff views with color-coded baseline vs. agent mutations.
+- **Real-Time WebSocket & SSE Streaming**: Connects directly to `ws://localhost:4000/tunnel` and `/api/sse` with automatic reconnection and instant log clearing.
+- **Live Throughput Meter**: Displays real-time event ingestion rate (`evt/s`), active frame counters, peak CPU utilization, and peak RSS memory.
+- **Live Tool Call Overlays**: Pop-up inspector for agent shell commands, file modifications, and API payloads.
+- **Multi-Spectator Broadcasting**: Supports multiple simultaneous viewers without adding overhead to the evaluation sandbox.
 
 ---
 

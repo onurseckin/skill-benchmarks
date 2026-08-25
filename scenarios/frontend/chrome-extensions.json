@@ -1,0 +1,88 @@
+{
+  "id": "chrome-extensions",
+  "name": "Chrome Manifest V3 Extension Service Worker and DeclarativeNetRequest Pipeline",
+  "category": "frontend",
+  "difficulty": "hard",
+  "targetSkill": "chrome-extensions",
+  "baselineModel": "claude-3-7-sonnet-20250219",
+  "description": "Chrome Extension Manifest V3 architecture scenario evaluating an agent's capability to build a modern MV3 extension with background Service Worker lifecycle management, declarativeNetRequest rule engine, message passing between content scripts and popup, chrome.storage session state, and CSP compliance.",
+  "instructions": "You are tasked with implementing the Chrome Manifest V3 extension infrastructure in `src/background/service-worker.ts`, `src/content/content-script.ts`, and `src/popup/popup.ts` adhering strictly to Manifest V3 APIs.\n\n### Task Objectives:\n1. **Background Service Worker (`ServiceWorkerController`)**:\n   - Implement event-driven lifecycle listeners for `chrome.runtime.onInstalled` and `chrome.tabs.onUpdated`.\n   - Manage dynamic network rules using `chrome.declarativeNetRequest.updateDynamicRules` to block/redirect malicious tracking endpoints.\n   - Implement asynchronous message routing via `chrome.runtime.onMessage.addListener` supporting `sendResponse` with async promises.\n\n2. **Content Script & DOM Mutation Pipeline (`ContentScriptController`)**:\n   - Implement safe DOM extraction and MutationObserver tracking without polluting global window scope.\n   - Handle two-way messaging with the background service worker using typed payload contracts.\n   - Gracefully handle service worker disconnections and reconnection retries.\n\n3. **Popup Interface State Manager (`PopupController`)**:\n   - Synchronize UI toggles with `chrome.storage.local` and `chrome.storage.session`.\n   - Implement real-time stats updating for blocked network requests.\n\n4. **Manifest and CSP Compliance**:\n   - Ensure `manifest.json` conforms to Manifest V3 schema without forbidden `eval` or remote script execution.",
+  "workspace": {
+    "fixtures": {
+      "manifest.json": "{\n  \"manifest_version\": 3,\n  \"name\": \"ShieldGuard MV3 Network & Privacy Suite\",\n  \"version\": \"1.0.0\",\n  \"description\": \"Deterministic Chrome MV3 extension with declarative net blocking and DOM isolation\",\n  \"permissions\": [\n    \"declarativeNetRequest\",\n    \"declarativeNetRequestWithHostAccess\",\n    \"storage\",\n    \"activeTab\",\n    \"scripting\"\n  ],\n  \"host_permissions\": [\n    \"*://*/*\"\n  ],\n  \"background\": {\n    \"service_worker\": \"dist/background/service-worker.js\",\n    \"type\": \"module\"\n  },\n  \"action\": {\n    \"default_popup\": \"popup.html\",\n    \"default_title\": \"ShieldGuard Control\"\n  },\n  \"content_scripts\": [\n    {\n      \"matches\": [\"<all_urls>\"],\n      \"js\": [\"dist/content/content-script.js\"],\n      \"run_at\": \"document_idle\"\n    }\n  ],\n  \"minimum_chrome_version\": \"116\"\n}\n",
+      "src/types/extension.ts": "export type ExtensionMessageType = \n  | \"GET_STATS\"\n  | \"UPDATE_RULE\"\n  | \"TOGGLE_BLOCKING\"\n  | \"DOM_TELEMETRY\"\n  | \"PING\";\n\nexport interface ExtensionMessage<T = unknown> {\n  readonly type: ExtensionMessageType;\n  readonly payload: T;\n  readonly senderId?: string;\n  readonly timestamp: number;\n}\n\nexport interface ExtensionResponse<T = unknown> {\n  readonly success: boolean;\n  readonly data?: T;\n  readonly error?: string;\n}\n\nexport interface DynamicRuleDefinition {\n  readonly ruleId: number;\n  readonly priority: number;\n  readonly urlFilter: string;\n  readonly action: \"block\" | \"allow\" | \"redirect\";\n  readonly redirectUrl?: string;\n  readonly domains?: readonly string[];\n}\n\nexport interface PrivacyStats {\n  readonly blockedRequestsCount: number;\n  readonly monitoredDomains: readonly string[];\n  readonly activeRulesCount: number;\n  readonly sessionStartedAt: number;\n}\n\nexport interface DomTelemetryPayload {\n  readonly url: string;\n  readonly trackerElementsFound: number;\n  readonly insecureFormsDetected: number;\n}\n",
+      "src/background/service-worker.ts": "import type {\n  ExtensionMessage,\n  ExtensionResponse,\n  DynamicRuleDefinition,\n  PrivacyStats,\n} from \"../types/extension.js\";\n\nexport class ServiceWorkerController {\n  private readonly activeRules: Map<number, DynamicRuleDefinition> = new Map();\n  private blockedCount = 0;\n\n  public async initialize(): Promise<void> {\n    throw new Error(\"initialize not implemented\");\n  }\n\n  public async handleMessage(\n    message: ExtensionMessage,\n    sender: chrome.runtime.MessageSender\n  ): Promise<ExtensionResponse> {\n    throw new Error(\"handleMessage not implemented\");\n  }\n\n  public async applyDynamicRules(rules: readonly DynamicRuleDefinition[]): Promise<void> {\n    throw new Error(\"applyDynamicRules not implemented\");\n  }\n\n  public async getPrivacyStats(): Promise<PrivacyStats> {\n    throw new Error(\"getPrivacyStats not implemented\");\n  }\n}\n",
+      "src/content/content-script.ts": "import type { ExtensionMessage, ExtensionResponse, DomTelemetryPayload } from \"../types/extension.js\";\n\nexport class ContentScriptController {\n  private observer: MutationObserver | null = null;\n\n  public initialize(): void {\n    throw new Error(\"initialize not implemented\");\n  }\n\n  public scanDomForTrackers(): DomTelemetryPayload {\n    throw new Error(\"scanDomForTrackers not implemented\");\n  }\n\n  public async sendTelemetryToBackground(payload: DomTelemetryPayload): Promise<ExtensionResponse> {\n    throw new Error(\"sendTelemetryToBackground not implemented\");\n  }\n\n  public destroy(): void {\n    if (this.observer) {\n      this.observer.disconnect();\n      this.observer = null;\n    }\n  }\n}\n",
+      "src/popup/popup.ts": "import type { PrivacyStats, ExtensionResponse } from \"../types/extension.js\";\n\nexport class PopupController {\n  public async loadStats(): Promise<PrivacyStats> {\n    throw new Error(\"loadStats not implemented\");\n  }\n\n  public async toggleProtection(enabled: boolean): Promise<ExtensionResponse> {\n    throw new Error(\"toggleProtection not implemented\");\n  }\n}\n",
+      "package.json": "{\n  \"name\": \"chrome-extensions-fixture\",\n  \"version\": \"1.0.0\",\n  \"type\": \"module\",\n  \"scripts\": {\n    \"build\": \"tsc --noEmit\"\n  },\n  \"devDependencies\": {\n    \"@types/chrome\": \"^0.0.280\",\n    \"@types/node\": \"^22.13.0\",\n    \"typescript\": \"^5.7.3\"\n  }\n}\n",
+      "tsconfig.json": "{\n  \"compilerOptions\": {\n    \"target\": \"ES2022\",\n    \"module\": \"NodeNext\",\n    \"moduleResolution\": \"NodeNext\",\n    \"strict\": true,\n    \"esModuleInterop\": true,\n    \"skipLibCheck\": true,\n    \"forceConsistentCasingInFileNames\": true,\n    \"declaration\": true\n  },\n  \"include\": [\"src/**/*\"]\n}\n"
+    },
+    "initialGitCommit": "Initial commit for chrome-extensions benchmark fixture"
+  },
+  "limits": {
+    "maxTurns": 15,
+    "maxCostUSD": 1.0,
+    "maxWallClockTimeMs": 300000
+  },
+  "evaluation": {
+    "deterministicChecks": [
+      {
+        "id": "check-manifest-mv3-version",
+        "name": "Verify Manifest V3 version specification",
+        "type": "file_content",
+        "filePath": "manifest.json",
+        "fileContentPattern": "\"manifest_version\":\\s*3",
+        "weight": 0.25
+      },
+      {
+        "id": "check-service-worker-methods",
+        "name": "Verify ServiceWorkerController dynamic rules and message handling",
+        "type": "file_content",
+        "filePath": "src/background/service-worker.ts",
+        "fileContentPattern": "applyDynamicRules|handleMessage|getPrivacyStats",
+        "weight": 0.25
+      },
+      {
+        "id": "check-content-script-telemetry",
+        "name": "Verify ContentScriptController DOM scanning and messaging",
+        "type": "file_content",
+        "filePath": "src/content/content-script.ts",
+        "fileContentPattern": "scanDomForTrackers|sendTelemetryToBackground",
+        "weight": 0.25
+      },
+      {
+        "id": "check-popup-controller-methods",
+        "name": "Verify PopupController stats loader and protection toggle",
+        "type": "file_content",
+        "filePath": "src/popup/popup.ts",
+        "fileContentPattern": "loadStats|toggleProtection",
+        "weight": 0.25
+      }
+    ],
+    "judgeRubrics": [
+      {
+        "name": "Manifest V3 Architectural Compliance",
+        "category": "frontend",
+        "weight": 0.6,
+        "description": "Evaluates adherence to Manifest V3 service worker lifecycle constraints, declarativeNetRequest rule management, asynchronous message passing, and secure storage isolation.",
+        "criteria": {
+          "1": "Uses deprecated Manifest V2 patterns (e.g. background pages, webRequestBlocking), lacks async message response support, or violates CSP.",
+          "3": "Implements basic Manifest V3 service worker and messaging, but does not handle declarativeNetRequest rule updates or storage synchronization correctly.",
+          "5": "Exemplary Manifest V3 architecture: fully event-driven ServiceWorkerController, declarativeNetRequest dynamic rule management, resilient ContentScript message pipeline, and robust popup state management."
+        }
+      },
+      {
+        "name": "TypeScript Type Safety & Modularity",
+        "category": "general",
+        "weight": 0.4,
+        "description": "Evaluates TypeScript interface clarity, message payload typing, and zero-any compliance.",
+        "criteria": {
+          "1": "Broken types or frequent use of any/unknown without discrimination.",
+          "3": "Working types with standard Chrome API types, but lacks complete readonly immutability.",
+          "5": "Clean, modular TypeScript architecture with strict discriminated unions for messages and zero any annotations."
+        }
+      }
+    ],
+    "passThreshold": 80
+  }
+}

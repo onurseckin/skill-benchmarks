@@ -1,0 +1,86 @@
+{
+  "id": "debug-optimize-lcp",
+  "name": "Largest Contentful Paint (LCP) Diagnostic Triage and Core Web Vitals Optimization",
+  "category": "optimization",
+  "difficulty": "hard",
+  "targetSkill": "debug-optimize-lcp",
+  "baselineModel": "claude-3-7-sonnet-20250219",
+  "description": "Core Web Vitals performance optimization benchmark evaluating an agent's capability to diagnose LCP sub-part breakdowns (TTFB, Resource Load Delay, Resource Load Duration, Element Render Delay), optimize critical path waterfalls, insert preload hints with fetchpriority=\"high\", inline critical CSS, and eliminate client-side render blocking.",
+  "instructions": "You are tasked with implementing the LCP Diagnostic and Optimization Engine in `src/performance/lcp-analyzer.ts` and `src/performance/optimizer.ts`.\n\n### Task Objectives:\n1. **LCP Sub-Part Breakdown (`LcpPerformanceAnalyzer`)**:\n   - Ingest `PerformanceNavigationTiming`, `PerformanceResourceTiming`, and `LargestContentfulPaint` entries.\n   - Calculate the 4 standard LCP sub-parts: (1) Time to First Byte (TTFB), (2) Resource Load Delay, (3) Resource Load Duration, (4) Element Render Delay.\n   - Identify critical bottlenecks (e.g. LCP image requested too late due to CSS background-image or client-side JavaScript rendering, render-blocking stylesheets, missing fetchpriority).\n\n2. **Critical Waterfall Optimization (`CriticalPathOptimizer`)**:\n   - Transform raw HTML documents by injecting `<link rel=\"preload\" as=\"image\" href=\"...\" fetchpriority=\"high\">` for discovered LCP image targets.\n   - Inline critical above-the-fold CSS and apply `media=\"print\" onload=\"this.media='all'\"` asynchronous patterns for non-critical stylesheets.\n   - Configure responsive `imagesrcset` and `imagesizes` preload attributes.\n\n3. **Core Web Vitals Metric Rating**:\n   - Classify LCP performance according to Google Web Vitals thresholds: Good (<= 2500ms), Needs Improvement (2500ms - 4000ms), Poor (> 4000ms).\n\n4. **Type Safety & Code Quality**:\n   - Provide strict TypeScript types with immutable readonly interfaces, proper validation, and zero any annotations.",
+  "workspace": {
+    "fixtures": {
+      "src/performance/types.ts": "export type WebVitalRating = \"good\" | \"needs-improvement\" | \"poor\";\n\nexport interface PerformanceTimingSample {\n  readonly responseStart: number;\n  readonly requestStart: number;\n  readonly domInteractive: number;\n  readonly domContentLoadedEventEnd: number;\n  readonly loadEventEnd: number;\n}\n\nexport interface LcpResourceTiming {\n  readonly url: string;\n  readonly startTime: number;\n  readonly responseEnd: number;\n  readonly transferSize: number;\n  readonly isPreloaded: boolean;\n  readonly hasHighFetchPriority: boolean;\n}\n\nexport interface LcpSubPartBreakdown {\n  readonly timeToFirstByteMs: number;\n  readonly resourceLoadDelayMs: number;\n  readonly resourceLoadDurationMs: number;\n  readonly elementRenderDelayMs: number;\n  readonly totalLcpMs: number;\n  readonly rating: WebVitalRating;\n}\n\nexport interface LcpDiagnosticReport {\n  readonly url: string;\n  readonly lcpElementSelector: string;\n  readonly subParts: LcpSubPartBreakdown;\n  readonly criticalBottlenecks: readonly string[];\n  readonly actionableRecommendations: readonly string[];\n}\n\nexport interface OptimizationResult {\n  readonly transformedHtml: string;\n  readonly injectedPreloadsCount: number;\n  readonly inlinedCssBytes: number;\n  readonly estimatedLcpSavingsMs: number;\n}\n",
+      "src/performance/lcp-analyzer.ts": "import type {\n  PerformanceTimingSample,\n  LcpResourceTiming,\n  LcpDiagnosticReport,\n  LcpSubPartBreakdown,\n} from \"./types.js\";\n\nexport class LcpPerformanceAnalyzer {\n  public analyzeLcp(\n    navTiming: PerformanceTimingSample,\n    lcpResource: LcpResourceTiming | null,\n    lcpTimestamp: number,\n    elementSelector: string,\n    pageUrl: string\n  ): LcpDiagnosticReport {\n    throw new Error(\"analyzeLcp not implemented\");\n  }\n\n  public computeSubParts(\n    navTiming: PerformanceTimingSample,\n    lcpResource: LcpResourceTiming | null,\n    lcpTimestamp: number\n  ): LcpSubPartBreakdown {\n    throw new Error(\"computeSubParts not implemented\");\n  }\n}\n",
+      "src/performance/optimizer.ts": "import type { LcpDiagnosticReport, OptimizationResult } from \"./types.js\";\n\nexport class CriticalPathOptimizer {\n  public optimizeHtml(\n    rawHtml: string,\n    report: LcpDiagnosticReport,\n    criticalCss?: string\n  ): OptimizationResult {\n    throw new Error(\"optimizeHtml not implemented\");\n  }\n}\n",
+      "package.json": "{\n  \"name\": \"debug-optimize-lcp-fixture\",\n  \"version\": \"1.0.0\",\n  \"type\": \"module\",\n  \"scripts\": {\n    \"build\": \"tsc --noEmit\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^22.13.0\",\n    \"typescript\": \"^5.7.3\"\n  }\n}\n",
+      "tsconfig.json": "{\n  \"compilerOptions\": {\n    \"target\": \"ES2022\",\n    \"module\": \"NodeNext\",\n    \"moduleResolution\": \"NodeNext\",\n    \"strict\": true,\n    \"esModuleInterop\": true,\n    \"skipLibCheck\": true,\n    \"forceConsistentCasingInFileNames\": true,\n    \"declaration\": true\n  },\n  \"include\": [\"src/**/*\"]\n}\n"
+    },
+    "initialGitCommit": "Initial commit for debug-optimize-lcp benchmark fixture"
+  },
+  "limits": {
+    "maxTurns": 15,
+    "maxCostUSD": 1.0,
+    "maxWallClockTimeMs": 300000
+  },
+  "evaluation": {
+    "deterministicChecks": [
+      {
+        "id": "check-lcp-analyzer-methods",
+        "name": "Verify LcpPerformanceAnalyzer analysis and sub-part computation",
+        "type": "file_content",
+        "filePath": "src/performance/lcp-analyzer.ts",
+        "fileContentPattern": "analyzeLcp|computeSubParts",
+        "weight": 0.25
+      },
+      {
+        "id": "check-optimizer-methods",
+        "name": "Verify CriticalPathOptimizer HTML transformation",
+        "type": "file_content",
+        "filePath": "src/performance/optimizer.ts",
+        "fileContentPattern": "optimizeHtml",
+        "weight": 0.25
+      },
+      {
+        "id": "check-fetch-priority-high",
+        "name": "Verify high fetchpriority support in types and optimizer",
+        "type": "file_content",
+        "filePath": "src/performance/types.ts",
+        "fileContentPattern": "hasHighFetchPriority|resourceLoadDelayMs",
+        "weight": 0.25
+      },
+      {
+        "id": "check-web-vitals-ratings",
+        "name": "Verify standard Web Vitals rating classifications",
+        "type": "file_content",
+        "filePath": "src/performance/types.ts",
+        "fileContentPattern": "\"good\"\\s*\\|\\s*\"needs-improvement\"\\s*\\|\\s*\"poor\"",
+        "weight": 0.25
+      }
+    ],
+    "judgeRubrics": [
+      {
+        "name": "Core Web Vitals Diagnostic & Optimization Precision",
+        "category": "optimization",
+        "weight": 0.6,
+        "description": "Evaluates the agent's accuracy in decomposing LCP into its 4 sub-parts (TTFB, Resource Load Delay, Resource Load Duration, Element Render Delay) and synthesizing critical HTML optimizations (preload hints, fetchpriority, critical CSS inlining).",
+        "criteria": {
+          "1": "Incorrect mathematical decomposition of LCP sub-parts, ignores TTFB, or fails to emit valid preload tags.",
+          "3": "Calculates basic LCP timings and injects preload tags, but does not handle cases without external image resources or misses Element Render Delay.",
+          "5": "Flawless Core Web Vitals diagnostic engine: accurate 4-part sub-part breakdown, rigorous bottleneck root cause detection, and high-impact HTML optimization transformations."
+        }
+      },
+      {
+        "name": "TypeScript Hygiene & Architecture",
+        "category": "general",
+        "weight": 0.4,
+        "description": "Evaluates TypeScript interface design, numerical precision handling, and zero-any cleanliness.",
+        "criteria": {
+          "1": "Broken types or unchecked NaN/undefined calculations.",
+          "3": "Working types with standard structure.",
+          "5": "Robust TypeScript design with strict immutable data types and comprehensive edge-case handling."
+        }
+      }
+    ],
+    "passThreshold": 80
+  }
+}

@@ -184,10 +184,12 @@ export function generateWebReplayHtml(session: ReplaySession, options: WebPlayer
       const container = document.getElementById('tab-content');
       let html = '';
       if (activeTab === 'overview') {
+        const vel = (f.elapsedMs > 0 && f.totalTokens !== undefined) ? (f.totalTokens / (f.elapsedMs / 1000)).toFixed(1) : "0.0";
         html = '<h3 style="font-size:14px;color:var(--primary);margin-bottom:8px">Frame #' + (currentIndex + 1) + ' &bull; Turn #' + f.turnIndex + '</h3>' +
                '<p style="margin-bottom:6px"><strong>Event Type:</strong> ' + f.eventType + '</p>' +
                '<p style="margin-bottom:6px"><strong>Summary:</strong> ' + f.summary + '</p>' +
                '<p style="margin-bottom:6px"><strong>Elapsed Time:</strong> ' + f.elapsedMs + ' ms</p>' +
+               '<p style="margin-bottom:6px"><strong>Velocity:</strong> ' + vel + ' tokens/sec</p>' +
                (f.totalCostUSD !== undefined ? '<p><strong>Cumulative Cost:</strong> $' + f.totalCostUSD.toFixed(4) + '</p>' : '');
       } else if (activeTab === 'tool') {
         if (f.toolCall) {
@@ -208,9 +210,9 @@ export function generateWebReplayHtml(session: ReplaySession, options: WebPlayer
         }
       } else if (activeTab === 'diff') {
         if (f.diff) {
-          html = '<h3 style="font-size:14px;color:var(--yellow);margin-bottom:8px">File Mutation: ' + f.diff.path + ' (' + f.diff.changeType + ')</h3>' +
+          html = '<h3 style="font-size:14px;color:var(--yellow);margin-bottom:8px">File Mutation (Side-by-Side): ' + f.diff.path + ' (' + f.diff.changeType + ')</h3>' +
                  '<p style="margin-bottom:6px;color:var(--green)">+' + f.diff.insertions + ' <span style="color:var(--red)">-' + f.diff.deletions + '</span></p>' +
-                 '<div class="code-block">' + (f.diff.diffHunk || 'No hunk content') + '</div>';
+                 '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><div class="code-block" style="border-left:3px solid var(--red)"><strong>BEFORE</strong><br/>' + (f.diff.diffHunk || 'No baseline') + '</div><div class="code-block" style="border-left:3px solid var(--green)"><strong>AFTER</strong><br/>' + (f.diff.diffHunk || 'No mutation') + '</div></div>';
         } else {
           html = '<p style="color:var(--subtext)">No workspace mutations in this frame.</p>';
         }

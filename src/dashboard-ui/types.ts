@@ -182,11 +182,19 @@ export interface MetricBadgeModel {
 
 export type DiffLineType = "add" | "del" | "ctx" | "header";
 
+export type DiffViewMode = "unified" | "split";
+
 export interface DiffLineModel {
   readonly type: DiffLineType;
   readonly content: string;
   readonly oldLineNumber?: number;
   readonly newLineNumber?: number;
+}
+
+export interface SideBySideDiffRow {
+  readonly left?: DiffLineModel;
+  readonly right?: DiffLineModel;
+  readonly type: "added" | "deleted" | "modified" | "unchanged" | "header";
 }
 
 export interface DiffViewModel {
@@ -195,7 +203,22 @@ export interface DiffViewModel {
   readonly insertions: number;
   readonly deletions: number;
   readonly lines: readonly DiffLineModel[];
+  readonly rows?: readonly SideBySideDiffRow[];
   readonly isBinary?: boolean;
+}
+
+export interface TokenVelocityPoint {
+  readonly turn: number;
+  readonly elapsedMs: number;
+  readonly tokensPerSec: number;
+  readonly cumulativeTokens: number;
+}
+
+export interface LatencyPercentiles {
+  readonly p50: number;
+  readonly p90: number;
+  readonly p99: number;
+  readonly max: number;
 }
 
 export interface KpiCardModel {
