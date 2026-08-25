@@ -155,7 +155,7 @@ export function parseCliArgs(argv: readonly string[]): CliParsedArgs {
     dryRun: toBool(flags["dryRun"]),
     live: toOptionalBool(flags["live"]),
     mock: toOptionalBool(flags["mock"]),
-    outputDir: toStr(flags["outputDir"]),
+    outputDir: typeof flags["outputDir"] === "string" ? flags["outputDir"] : undefined,
     timeoutSeconds: toNum(flags["timeoutSeconds"]),
     maxTurns: toNum(flags["maxTurns"]), maxCostUSD: toNum(flags["maxCostUSD"]),
     dbPath: toStr(flags["dbPath"]), outputFormat: toStr(flags["format"]) as CliOutputFormat | undefined,

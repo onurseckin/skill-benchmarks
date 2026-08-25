@@ -13,6 +13,9 @@ import type {
 import type {
   RunRecord,
 } from "../reporting/types.js";
+import type {
+  BenchmarkRuntimeConfig,
+} from "../shared/benchmark-runtime-config.js";
 
 export type SweepExecutionStatus =
   | "pending"
@@ -193,6 +196,7 @@ export interface CheckpointState {
 }
 
 export interface MatrixSweepConfig {
+  readonly runtimeConfig: BenchmarkRuntimeConfig;
   readonly sweepId?: string;
   readonly scenarioIds: readonly string[];
   readonly skillIds: readonly string[];
