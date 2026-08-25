@@ -258,7 +258,7 @@ async function readPublishedOwner(path: string, namespaceDirectory: string): Pro
 async function readOwnerFile(path: string): Promise<Omit<OwnedFile, "candidatePath"> | undefined> {
   let handle: FileHandle | undefined;
   try {
-    handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+    handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
     const initial = await handle.stat();
     if (!initial.isFile() || initial.size <= 0 || initial.size > maximumLockBytes) return undefined;
     const raw = await handle.readFile("utf8");
