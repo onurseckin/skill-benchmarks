@@ -235,14 +235,16 @@ export class MatrixSweepEngine implements IMatrixSweepEngine {
               terminationReason: "success", completed: true, turns: 2, turnHistory: [], toolHistory: [], messages: [],
               finalOutput: "Dry run completed", totalDurationMs: durationMs,
               totalTokens: { inputTokens: 500, outputTokens: 200, cacheCreationInputTokens: 0, cacheReadInputTokens: 0, totalTokens: 700 },
-              totalCostUSD: 0.0025, consecutiveToolErrors: 0,
+              totalCostUSD: 0, consecutiveToolErrors: 0,
               startedAt: new Date(Date.now() - durationMs).toISOString(), finishedAt: new Date().toISOString(),
             };
           } else {
             const scenarioDef = scenarioLoader.loadScenario(cell.scenarioId);
             const provider = cell.modelEntry.provider ?? createProviderAdapter({
-              providerId: (cell.providerId as "anthropic" | "google" | "openai" | "ollama" | "custom") || "anthropic",
+              providerId: config.runtimeConfig.requestedProviderId ?? (cell.providerId as "anthropic" | "google" | "openai" | "ollama" | "custom"),
               defaultModel: cell.modelId,
+              executionMode: config.runtimeConfig.executionMode,
+              runId: cell.runId,
             });
             scenarioResult = await runnerEngine.run({
               runId: cell.runId, scenarioId: cell.scenarioId, skillIds: [cell.skillId], modelId: cell.modelId,

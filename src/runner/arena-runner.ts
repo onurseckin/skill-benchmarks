@@ -96,7 +96,7 @@ export class ArenaRunner {
       finalOutput: `Synthetic solution produced by ${modelId} for ${scenarioId}`,
       totalDurationMs: durationMs,
       totalTokens: { inputTokens: 1200, outputTokens: 450, cacheCreationInputTokens: 0, cacheReadInputTokens: 0, totalTokens: 1650 },
-      totalCostUSD: 0.0055, consecutiveToolErrors: 0,
+      totalCostUSD: 0, consecutiveToolErrors: 0,
       startedAt: new Date(Date.now() - durationMs).toISOString(), finishedAt: new Date().toISOString(),
     };
   }
