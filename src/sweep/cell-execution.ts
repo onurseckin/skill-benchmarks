@@ -45,6 +45,7 @@ export async function executeSweepCell(input: CellExecutionInput): Promise<Matri
 
   try {
     await prepareRunArtifactLayout(artifactLayout);
+    assertEmbeddedAdapterMatchesMode(cell, executionMode);
     const scenarioDefinition = scenarioLoader.loadScenario(cell.scenarioId);
     evidenceCategory = scenarioDefinition.category;
     const contextualEvidence = { ...evidenceContext, category: evidenceCategory };
@@ -84,14 +85,12 @@ export async function executeSweepCell(input: CellExecutionInput): Promise<Matri
             scenarioId: cell.scenarioId,
             skillIds: [cell.skillId],
             modelId: cell.modelId,
-            provider: config.runtimeConfig.requestedProviderId === undefined && cell.modelEntry.provider !== undefined
-              ? cell.modelEntry.provider
-              : createProviderAdapter({
-                providerId: cell.providerId as "anthropic" | "google" | "openai" | "ollama" | "custom",
-                defaultModel: cell.modelId,
-                executionMode: cell.executionMode,
-                runId: cell.runId,
-              }),
+            provider: createProviderAdapter({
+              providerId: cell.providerId as "anthropic" | "google" | "openai" | "ollama" | "custom",
+              defaultModel: cell.modelId,
+              executionMode: cell.executionMode,
+              runId: cell.runId,
+            }),
             prompt: scenarioDefinition.instructions,
             workspace,
             container,
@@ -157,16 +156,17 @@ interface PersistTerminalCellInput {
 }
 
 async function persistTerminalCell(input: PersistTerminalCellInput): Promise<MatrixCellResult> {
-  const terminationReason = input.terminationReason ?? input.scenarioResult?.terminationReason ?? "error";
+  const scenarioResult = normalizeScenarioResult(input.context, input.scenarioResult);
+  const terminationReason = input.terminationReason ?? scenarioResult?.terminationReason ?? "error";
   const terminal = {
     status: mapTerminalStatus(terminationReason),
     terminationReason,
-    completedAt: input.scenarioResult?.finishedAt ?? new Date().toISOString(),
+    completedAt: scenarioResult?.finishedAt ?? new Date().toISOString(),
   } as const;
-  const runRecord = createTerminalRunRecord(input.context, terminal, input.scenarioResult);
+  const runRecord = createTerminalRunRecord(input.context, terminal, scenarioResult);
   input.telemetryDb.saveRunRecord(runRecord);
   try {
-    await writeRunResult(input.artifactLayout, input.context, terminal, input.scenarioResult);
+    await writeRunResult(input.artifactLayout, input.context, terminal, scenarioResult);
   } catch {
   }
   const executionCompleted = terminal.status === "completed";
@@ -176,13 +176,26 @@ async function persistTerminalCell(input: PersistTerminalCellInput): Promise<Mat
     attemptCount: input.attemptCount,
     startedAt: input.context.startedAt,
     completedAt: terminal.completedAt,
-    durationMs: input.scenarioResult?.totalDurationMs ?? Date.now() - (input.startedMs ?? Date.now()),
-    scenarioResult: input.scenarioResult,
+    durationMs: scenarioResult?.totalDurationMs ?? Date.now() - (input.startedMs ?? Date.now()),
+    scenarioResult,
     runRecord,
     error: executionCompleted ? undefined : summarizeTerminalFailure(terminationReason),
     retryable: false,
     executionCompleted,
     passedBenchmark: runRecord.passedBenchmark,
+  };
+}
+
+function normalizeScenarioResult(
+  context: Parameters<typeof createTerminalRunRecord>[0],
+  result: ScenarioResult | undefined
+): ScenarioResult | undefined {
+  if (result === undefined) return undefined;
+  return {
+    ...result,
+    executionMode: context.executionMode,
+    simulated: context.simulated,
+    totalCostUSD: context.executionMode === "fake" ? 0 : result.totalCostUSD,
   };
 }
 
@@ -217,5 +230,14 @@ function createCellArtifactLayout(cell: MatrixCellDescriptor) {
   } catch {
     const fallbackRunId = createSafeArtifactPathSegment(`${cell.cellId}-${cell.runId}`, "failed-run");
     return createRunArtifactLayout(cell.outputRoot, fallbackRunId);
+  }
+}
+
+function assertEmbeddedAdapterMatchesMode(cell: MatrixCellDescriptor, executionMode: "fake" | "live"): void {
+  const embeddedAdapter = cell.modelEntry.provider;
+  if (embeddedAdapter === undefined) return;
+  const expectedSimulated = executionMode === "fake";
+  if (embeddedAdapter.executionMode !== executionMode || embeddedAdapter.simulated !== expectedSimulated) {
+    throw new TypeError("Embedded provider mode does not match resolved benchmark mode");
   }
 }

@@ -83,6 +83,7 @@ export interface ModelMatrixEntry {
 
 export interface MatrixCellIdentifier {
   readonly cellId: string;
+  readonly matrixOccurrenceIndex: number;
   readonly scenarioId: string;
   readonly skillId: string;
   readonly modelId: string;

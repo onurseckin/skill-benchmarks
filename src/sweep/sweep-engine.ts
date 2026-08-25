@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { mkdir } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import type {
   MatrixSweepConfig,
   MatrixSweepSummary,
@@ -20,7 +21,8 @@ import type { ExecutionLimits } from "../runner/types.js";
 import { createSafeArtifactPathSegment } from "../shared/artifact-sanitization.js";
 import { executeSweepCell } from "./cell-execution.js";
 export class MatrixSweepEngine implements IMatrixSweepEngine {
-  public readonly sweepId: string;
+  public sweepId: string;
+  private readonly constructorSweepId?: string;
   public status: SweepExecutionStatus = "pending";
   private readonly listeners: Set<SweepEventListener> = new Set();
   private abortController = new AbortController();
@@ -37,7 +39,8 @@ export class MatrixSweepEngine implements IMatrixSweepEngine {
   private totalCellDurationMs = 0;
   private startTimeMs = 0;
   constructor(sweepId?: string) {
-    this.sweepId = createSafeArtifactPathSegment(sweepId ?? `sweep-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, "sweep");
+    this.constructorSweepId = sweepId === undefined ? undefined : createSafeArtifactPathSegment(sweepId, "sweep");
+    this.sweepId = this.constructorSweepId ?? createSafeArtifactPathSegment(`sweep-${Date.now()}-${randomUUID()}`, "sweep");
   }
   on(listener: SweepEventListener): () => void {
     this.listeners.add(listener);
@@ -104,29 +107,45 @@ export class MatrixSweepEngine implements IMatrixSweepEngine {
       ...config.defaultExecutionLimits,
     };
     const cells: MatrixCellDescriptor[] = [];
+    const cellIds = new Set<string>();
+    const runIds = new Set<string>();
+    let matrixOccurrenceIndex = 0;
     const thinkingLevels = config.thinkingLevels !== undefined && config.thinkingLevels.length > 0
       ? config.thinkingLevels
       : [undefined];
-    for (const scenarioId of config.scenarioIds) {
-      for (const skillId of config.skillIds) {
-        for (const modelEntry of config.models) {
-          for (const thinkingLevel of thinkingLevels) {
+    for (const [scenarioIndex, scenarioId] of config.scenarioIds.entries()) {
+      for (const [skillIndex, skillId] of config.skillIds.entries()) {
+        for (const [modelIndex, modelEntry] of config.models.entries()) {
+          for (const [thinkingIndex, thinkingLevel] of thinkingLevels.entries()) {
             for (let rep = 0; rep < reps; rep++) {
               const effectiveThinking = thinkingLevel !== undefined ? thinkingLevel : modelEntry.thinkingLevel;
-              const thinkSuffix = effectiveThinking !== undefined ? `_th_${effectiveThinking}` : "";
-              const artifactModelId = createSafeArtifactPathSegment(modelEntry.modelId, "model");
-              const cellId = `${scenarioId}_${skillId}_${artifactModelId}${thinkSuffix}_rep${rep}`;
+              const effectiveProviderId = config.runtimeConfig.requestedProviderId ?? modelEntry.providerId;
+              const executionMode = config.dryRun ? "fake" : config.runtimeConfig.executionMode;
+              const identityTuple = [
+                scenarioId, skillId, modelEntry.modelId, effectiveProviderId,
+                executionMode, effectiveThinking ?? null,
+                modelEntry.thinkingBudget ?? null, modelEntry.temperature ?? null,
+                scenarioIndex, skillIndex, modelIndex, thinkingIndex, rep, matrixOccurrenceIndex,
+              ];
+              const cellId = createSafeArtifactPathSegment(JSON.stringify(["cell", ...identityTuple]), "cell");
+              const runId = createSafeArtifactPathSegment(JSON.stringify(["run", this.sweepId, cellId, matrixOccurrenceIndex]), "run");
+              if (cellIds.has(cellId) || runIds.has(runId)) {
+                throw new TypeError("Matrix occurrence identity collision");
+              }
+              cellIds.add(cellId);
+              runIds.add(runId);
               cells.push({
-                cellId, scenarioId, skillId,
-                modelId: modelEntry.modelId, providerId: config.runtimeConfig.requestedProviderId ?? modelEntry.providerId,
-                executionMode: config.runtimeConfig.executionMode,
+                cellId, matrixOccurrenceIndex, scenarioId, skillId,
+                modelId: modelEntry.modelId, providerId: effectiveProviderId,
+                executionMode,
                 outputRoot: config.runtimeConfig.outputRoot,
                 thinkingLevel: effectiveThinking,
                 thinkingBudget: modelEntry.thinkingBudget,
-                repetitionIndex: rep, runId: createSafeArtifactPathSegment(`run-${this.sweepId}-${cellId}`, "run"),
+                repetitionIndex: rep, runId,
                 modelEntry, limits, temperature: modelEntry.temperature,
                 tags: modelEntry.tags, metadata: modelEntry.metadata,
               });
+              matrixOccurrenceIndex += 1;
             }
           }
         }
@@ -135,6 +154,7 @@ export class MatrixSweepEngine implements IMatrixSweepEngine {
     return cells;
   }
   async run(config: MatrixSweepConfig): Promise<MatrixSweepSummary> {
+    this.applyConfiguredSweepIdentity(config.sweepId);
     const startedAt = new Date().toISOString();
     this.startTimeMs = Date.now();
     this.status = "running";
@@ -280,5 +300,14 @@ export class MatrixSweepEngine implements IMatrixSweepEngine {
     } finally {
       telemetryDb.close();
     }
+  }
+
+  private applyConfiguredSweepIdentity(configuredSweepId: string | undefined): void {
+    if (configuredSweepId === undefined) return;
+    const resolvedSweepId = createSafeArtifactPathSegment(configuredSweepId, "sweep");
+    if (this.constructorSweepId !== undefined && this.constructorSweepId !== resolvedSweepId) {
+      throw new TypeError("Conflicting sweep identities");
+    }
+    this.sweepId = resolvedSweepId;
   }
 }
