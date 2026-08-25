@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-const credentialPattern = /(?:authorization\s*:\s*bearer\s+\S+|bearer\s+\S+|(?:api[_-]?key|token|secret|password)\s*[=:]\s*\S+|sk-[a-zA-Z0-9_-]+)/i;
+const credentialPattern = /(?:authorization\s*:\s*bearer\s+\S+|bearer\s+\S+|(?:api[_-]?key|token|secret|password)\s*[=:]\s*\S+|["']?[a-z0-9_-]*(?:key|token)["']?\s*[=:]\s*\S+|sk-[a-zA-Z0-9_-]+)/i;
 const errorKeyPattern = /^(?:error|exception|stack|failure)|(?:Error|Exception|Stack|Failure)$/;
 const safePathSegmentPattern = /^[a-zA-Z0-9_.-]+$/;
 
@@ -14,6 +14,8 @@ export function sanitizeBenchmarkArtifactValue(value: unknown): unknown {
 }
 
 export function sanitizeBenchmarkArtifactText(value: string): string {
+  const sanitizedJson = sanitizeJsonArtifactText(value);
+  if (sanitizedJson !== undefined) return sanitizedJson;
   return credentialPattern.test(value) ? "redacted sensitive content" : value;
 }
 
@@ -30,15 +32,28 @@ function sanitizeArtifactProperty(key: string, value: unknown): unknown {
   return sanitizeBenchmarkArtifactValue(value);
 }
 
+function sanitizeJsonArtifactText(value: string): string | undefined {
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (parsed !== null && typeof parsed === "object") {
+      return JSON.stringify(sanitizeBenchmarkArtifactValue(parsed));
+    }
+  } catch {
+  }
+  return undefined;
+}
+
 function isSensitiveArtifactPropertyKey(key: string): boolean {
-  const normalizedKey = key.toLowerCase().replace(/[^a-z0-9]/g, "");
-  return normalizedKey.includes("authorization")
-    || normalizedKey.includes("apikey")
-    || normalizedKey.includes("secret")
-    || normalizedKey.includes("password")
-    || normalizedKey.includes("credential")
-    || normalizedKey.includes("authtoken")
-    || normalizedKey.includes("accesstoken")
-    || normalizedKey.includes("refreshtoken")
-    || normalizedKey.endsWith("token") && !normalizedKey.includes("totaltoken");
+  const keyTokens = key.replace(/([a-z0-9])([A-Z])/g, "$1 $2").toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+  return keyTokens.some((token) => (
+    token === "authorization"
+    || token === "cookie"
+    || token === "secret"
+    || token === "password"
+    || token === "credential"
+    || token === "private"
+    || token === "api"
+    || token === "key"
+    || token === "token"
+  ));
 }
