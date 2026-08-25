@@ -68,6 +68,7 @@ export async function runArenaCommand(args: CliParsedArgs): Promise<CliCommandRe
     initialRatingA,
     initialRatingB,
     dryRun,
+    telemetryDb: db,
   });
 
   const deltaStrA = battleResult.deltaA >= 0 ? `+${battleResult.deltaA}` : `${battleResult.deltaA}`;
@@ -98,6 +99,8 @@ export async function runArenaCommand(args: CliParsedArgs): Promise<CliCommandRe
     writeFileSync(dest, JSON.stringify(battleResult, null, 2), "utf8");
     console.log(`  ${formatBadge("success", "EXPORT")} Battle artifact saved to ${cyan(dest)}`);
   }
+
+  db.close();
 
   return {
     success: true,

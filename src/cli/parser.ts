@@ -134,6 +134,9 @@ export function parseCliArgs(argv: readonly string[]): CliParsedArgs {
     i++;
   }
 
+  if (!foundCommand && toArr(flags["arena"]).length >= 2 && !Boolean(flags["help"]) && !Boolean(flags["version"])) {
+    command = "arena";
+  }
   if (Boolean(flags["help"]) && command !== "version") command = "help";
   if (Boolean(flags["version"])) command = "version";
 

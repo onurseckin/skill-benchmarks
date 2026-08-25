@@ -75,5 +75,7 @@ export {
   ArenaRunner,
   type ArenaBattleMatchConfig,
   type ArenaBattleResult,
+  type ArenaTournamentConfig,
+  type ArenaTournamentResult,
 } from "./arena-runner.js";
 

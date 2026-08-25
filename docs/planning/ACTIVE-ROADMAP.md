@@ -13,7 +13,7 @@ This document outlines the strategic product vision, future capability expansion
 |  Lane 1: Zero-Friction Mock/Live Provider Switch (Instant Offline & Live Frontier Execution)     |
 |  Lane 2: 100% Skill Coverage (All 29 Skills in skill-list.md Implemented as Benchmarks) [100%]  |
 |  Lane 3: High-Density Interactive Terminal TUI & Live ASCII Replay Scrubber [SHIPPED]           |
-|  Lane 4: Side-by-Side Multi-Model Arena Battle Mode with Automated Bradley-Terry Elo Updates    |
+|  Lane 4: Side-by-Side Multi-Model Arena Battle Mode with Automated Bradley-Terry Elo Updates [SHIPPED]
 |  Lane 5: Standalone Shareable HTML/SVG Neo-Brutalist Report Card & Trajectory Diff Viewer [SHIPPED]
 +==================================================================================================+
 ```
@@ -67,9 +67,10 @@ This document outlines the strategic product vision, future capability expansion
 - ✅ **Multi-Thinking Matrix Sweeps**: Full support for `--matrix-thinking none,low,medium,high,max`, `--dry-run`, and `--category` filtering.
 - **Live API Transition**: Set `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `GEMINI_API_KEY` (or toggle `--live` / `SKILL_BENCHMARKS_MOCK=false`) to execute live inference against Claude 3.7 Sonnet, OpenAI o3-mini/o1, and Gemini 2.0 Pro.
 
-### 4. Arena Battle Engine (`src/arena/`)
-- Run head-to-head model matches on the same scenario in isolated Docker sandboxes.
-- Real-time judge consensus scoring and live leaderboard Elo re-ranking with Bradley-Terry updates.
+### 4. Side-by-Side Arena Battle Engine (`src/runner/arena-runner.ts`, `src/arena/`)
+- ✅ **Head-to-Head Model Battles**: Implemented `ArenaRunner` with isolated Docker sandbox execution, blind position-swapped judge evaluations, confidence scoring, and position bias detection.
+- ✅ **Automated Bradley-Terry Elo Updates**: Instant dynamic rating adjustments with K-factor scaling and SQLite database persistence across matches.
+- ✅ **CLI Integration**: Full support for `--arena <modelA>,<modelB>` flag across `bin/skill-benchmarks` and `arena` / `run` commands.
 
 ---
 

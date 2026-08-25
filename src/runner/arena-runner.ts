@@ -5,13 +5,10 @@ import { ScenarioLoader } from "./scenario-loader.js";
 import { createProviderAdapter } from "../providers/factory.js";
 import { BlindPairwiseEloEngine } from "../eval/pairwise-elo.js";
 import { getOrCreateModelDefinition } from "../models/index.js";
-import type {
-  ExecutionLimits,
-  ScenarioResult,
-  ScenarioDefinition,
-} from "./types.js";
+import type { ExecutionLimits, ScenarioResult, ScenarioDefinition } from "./types.js";
 import type { IContainerPoolManager, IContainerInstance } from "../infrastructure/container/types.js";
-import type { PairwiseCandidate, PairwiseEloMatch } from "../eval/types.js";
+import type { PairwiseCandidate } from "../eval/types.js";
+import type { TelemetryDatabase } from "../reporting/db.js";
 
 export interface ArenaBattleMatchConfig {
   readonly matchId?: string;
@@ -23,6 +20,7 @@ export interface ArenaBattleMatchConfig {
   readonly providerB?: string;
   readonly judgeModelId?: string;
   readonly judgeProviderId?: string;
+  readonly juryModelIds?: readonly string[];
   readonly limits?: Partial<ExecutionLimits>;
   readonly containerPool?: IContainerPoolManager;
   readonly dryRun?: boolean;
@@ -33,6 +31,8 @@ export interface ArenaBattleMatchConfig {
   readonly temperatureB?: number;
   readonly thinkingA?: "none" | "low" | "medium" | "high" | "max";
   readonly thinkingB?: "none" | "low" | "medium" | "high" | "max";
+  readonly dbPath?: string;
+  readonly telemetryDb?: TelemetryDatabase;
 }
 
 export interface ArenaBattleResult {
@@ -59,6 +59,26 @@ export interface ArenaBattleResult {
   readonly timestamp: string;
 }
 
+export interface ArenaTournamentConfig {
+  readonly modelIds: readonly string[];
+  readonly scenarioIds: readonly string[];
+  readonly skillId?: string;
+  readonly judgeModelId?: string;
+  readonly judgeProviderId?: string;
+  readonly kFactor?: number;
+  readonly initialRating?: number;
+  readonly dryRun?: boolean;
+  readonly containerPool?: IContainerPoolManager;
+}
+
+export interface ArenaTournamentResult {
+  readonly matches: readonly ArenaBattleResult[];
+  readonly ratings: Readonly<Record<string, number>>;
+  readonly winStats: Readonly<Record<string, { readonly wins: number; readonly losses: number; readonly draws: number; readonly winRate: number }>>;
+  readonly totalMatches: number;
+  readonly totalDurationMs: number;
+}
+
 export class ArenaRunner {
   private readonly scenarioLoader: ScenarioLoader;
   private readonly runnerEngine: ScenarioRunnerEngine;
@@ -68,37 +88,15 @@ export class ArenaRunner {
     this.runnerEngine = runnerEngine ?? new ScenarioRunnerEngine();
   }
 
-  private buildSyntheticResult(
-    runId: string,
-    scenarioId: string,
-    skillId: string,
-    modelId: string,
-    durationMs: number
-  ): ScenarioResult {
+  private buildSyntheticResult(runId: string, scenarioId: string, skillId: string, modelId: string, durationMs: number): ScenarioResult {
     return {
-      runId,
-      scenarioId,
-      skillIds: [skillId],
-      modelId,
-      terminationReason: "success",
-      completed: true,
-      turns: 3,
-      turnHistory: [],
-      toolHistory: [],
-      messages: [],
+      runId, scenarioId, skillIds: [skillId], modelId,
+      terminationReason: "success", completed: true, turns: 3, turnHistory: [], toolHistory: [], messages: [],
       finalOutput: `Synthetic solution produced by ${modelId} for ${scenarioId}`,
       totalDurationMs: durationMs,
-      totalTokens: {
-        inputTokens: 1200,
-        outputTokens: 450,
-        cacheCreationInputTokens: 0,
-        cacheReadInputTokens: 0,
-        totalTokens: 1650,
-      },
-      totalCostUSD: 0.0055,
-      consecutiveToolErrors: 0,
-      startedAt: new Date(Date.now() - durationMs).toISOString(),
-      finishedAt: new Date().toISOString(),
+      totalTokens: { inputTokens: 1200, outputTokens: 450, cacheCreationInputTokens: 0, cacheReadInputTokens: 0, totalTokens: 1650 },
+      totalCostUSD: 0.0055, consecutiveToolErrors: 0,
+      startedAt: new Date(Date.now() - durationMs).toISOString(), finishedAt: new Date().toISOString(),
     };
   }
 
@@ -149,15 +147,8 @@ export class ArenaRunner {
       });
 
       const result = await this.runnerEngine.run({
-        runId,
-        scenarioId: scenario.id,
-        skillIds: [skillId],
-        modelId,
-        provider,
-        prompt: scenario.instructions,
-        container,
-        limits,
-        temperature,
+        runId, scenarioId: scenario.id, skillIds: [skillId], modelId, provider,
+        prompt: scenario.instructions, container, limits, temperature,
         thinkingLevel: thinkingLevel ?? def.defaultThinkingLevel,
       });
 
@@ -167,15 +158,9 @@ export class ArenaRunner {
           diff += t.output + "\n";
         }
       }
-      if (!diff) {
-        diff = result.finalOutput;
-      }
-
-      return { result, diff };
+      return { result, diff: diff || result.finalOutput };
     } finally {
-      if (container && containerPool) {
-        await containerPool.release(container);
-      }
+      if (container && containerPool) await containerPool.release(container);
     }
   }
 
@@ -186,12 +171,8 @@ export class ArenaRunner {
     const skillId = config.skillId ?? scenario.targetSkill ?? "generic-agent";
 
     const limits: ExecutionLimits = {
-      maxTurns: 10,
-      maxWallClockTimeMs: 120000,
-      maxCostUSD: 1.0,
-      maxConsecutiveToolFailures: 3,
-      toolTimeoutMs: 30000,
-      maxOutputSizeBytes: 1024 * 1024,
+      maxTurns: 10, maxWallClockTimeMs: 120000, maxCostUSD: 1.0,
+      maxConsecutiveToolFailures: 3, toolTimeoutMs: 30000, maxOutputSizeBytes: 1024 * 1024,
       ...config.limits,
     };
 
@@ -199,50 +180,17 @@ export class ArenaRunner {
     const runIdB = `arena-${matchId}-B-${config.modelB}`;
 
     const [trialA, trialB] = await Promise.all([
-      this.executeModelTrial(
-        runIdA,
-        scenario,
-        skillId,
-        config.modelA,
-        config.providerA,
-        config.temperatureA,
-        config.thinkingA,
-        limits,
-        config.containerPool,
-        config.dryRun
-      ),
-      this.executeModelTrial(
-        runIdB,
-        scenario,
-        skillId,
-        config.modelB,
-        config.providerB,
-        config.temperatureB,
-        config.thinkingB,
-        limits,
-        config.containerPool,
-        config.dryRun
-      ),
+      this.executeModelTrial(runIdA, scenario, skillId, config.modelA, config.providerA, config.temperatureA, config.thinkingA, limits, config.containerPool, config.dryRun),
+      this.executeModelTrial(runIdB, scenario, skillId, config.modelB, config.providerB, config.temperatureB, config.thinkingB, limits, config.containerPool, config.dryRun),
     ]);
 
     const candidateA: PairwiseCandidate = {
-      candidateId: config.modelA,
-      modelId: config.modelA,
-      runId: runIdA,
-      skillId,
-      gitDiff: trialA.diff,
-      finalMessage: trialA.result.finalOutput,
-      executionOutput: trialA.result.finalOutput,
+      candidateId: config.modelA, modelId: config.modelA, runId: runIdA, skillId,
+      gitDiff: trialA.diff, finalMessage: trialA.result.finalOutput, executionOutput: trialA.result.finalOutput,
     };
-
     const candidateB: PairwiseCandidate = {
-      candidateId: config.modelB,
-      modelId: config.modelB,
-      runId: runIdB,
-      skillId,
-      gitDiff: trialB.diff,
-      finalMessage: trialB.result.finalOutput,
-      executionOutput: trialB.result.finalOutput,
+      candidateId: config.modelB, modelId: config.modelB, runId: runIdB, skillId,
+      gitDiff: trialB.diff, finalMessage: trialB.result.finalOutput, executionOutput: trialB.result.finalOutput,
     };
 
     const judgeModel = config.judgeModelId ?? "claude-3-7-sonnet";
@@ -253,58 +201,84 @@ export class ArenaRunner {
       defaultModel: judgeModel,
     });
 
-    const eloEngine = new BlindPairwiseEloEngine(config.kFactor ?? 32, 1500);
-    const match = await eloEngine.compareBlind(
-      candidateA,
-      candidateB,
-      scenario.instructions,
-      judgeProvider,
-      { temperature: 0.0 },
-      config.scenarioId
-    );
+    const kFactor = config.kFactor ?? 32;
+    const eloEngine = new BlindPairwiseEloEngine(kFactor, 1500);
+    const match = await eloEngine.compareBlind(candidateA, candidateB, scenario.instructions, judgeProvider, { temperature: 0.0 }, config.scenarioId);
 
-    let winner: "model_a" | "model_b" | "tie" = "tie";
-    let scoreA = 0.5;
-    let scoreB = 0.5;
-
-    if (match.finalWinner === "candidate_a") {
-      winner = "model_a";
-      scoreA = 1.0;
-      scoreB = 0.0;
-    } else if (match.finalWinner === "candidate_b") {
-      winner = "model_b";
-      scoreA = 0.0;
-      scoreB = 1.0;
-    }
+    const winner: "model_a" | "model_b" | "tie" = match.finalWinner === "candidate_a" ? "model_a" : match.finalWinner === "candidate_b" ? "model_b" : "tie";
+    const scoreA = winner === "model_a" ? 1.0 : winner === "model_b" ? 0.0 : 0.5;
+    const scoreB = 1.0 - scoreA;
 
     const preRatingA = config.initialRatingA ?? 1500;
     const preRatingB = config.initialRatingB ?? 1500;
-    const { newRatingA, newRatingB } = eloEngine.updateElo(preRatingA, preRatingB, scoreA);
+    const confidence = match.confidenceScore ?? 1.0;
+    const expectedA = eloEngine.calculateExpectedScore(preRatingA, preRatingB);
+    const expectedB = 1 - expectedA;
+    const postRatingA = Math.round(preRatingA + kFactor * (scoreA - expectedA) * confidence);
+    const postRatingB = Math.round(preRatingB + kFactor * (scoreB - expectedB) * confidence);
 
-    const totalDurationMs = Math.round(performance.now() - startTime);
+    if (config.telemetryDb && !config.dryRun) {
+      const outcomeScore: 1 | 0.5 | 0 = winner === "model_a" ? 1 : winner === "model_b" ? 0 : 0.5;
+      config.telemetryDb.updateEloScore(config.modelA, config.modelB, outcomeScore, kFactor);
+    }
 
     return {
-      matchId,
-      scenarioId: config.scenarioId,
-      skillId,
-      modelA: config.modelA,
-      modelB: config.modelB,
-      resultA: trialA.result,
-      resultB: trialB.result,
-      winner,
-      scoreA,
-      scoreB,
-      preRatingA,
-      preRatingB,
-      postRatingA: Math.round(newRatingA),
-      postRatingB: Math.round(newRatingB),
-      deltaA: Math.round(newRatingA - preRatingA),
-      deltaB: Math.round(newRatingB - preRatingB),
-      rationale: match.rationale,
-      confidenceScore: match.confidenceScore ?? 1.0,
+      matchId, scenarioId: config.scenarioId, skillId, modelA: config.modelA, modelB: config.modelB,
+      resultA: trialA.result, resultB: trialB.result, winner, scoreA, scoreB,
+      preRatingA, preRatingB, postRatingA, postRatingB,
+      deltaA: postRatingA - preRatingA, deltaB: postRatingB - preRatingB,
+      rationale: match.rationale, confidenceScore: confidence,
       positionBiasDetected: match.positionBiasDetected,
-      totalDurationMs,
+      totalDurationMs: Math.round(performance.now() - startTime),
       timestamp: new Date().toISOString(),
+    };
+  }
+
+  public async runTournament(config: ArenaTournamentConfig): Promise<ArenaTournamentResult> {
+    const startTime = performance.now();
+    const ratings: Record<string, number> = {};
+    const winStats: Record<string, { wins: number; losses: number; draws: number; winRate: number }> = {};
+    const initRating = config.initialRating ?? 1500;
+
+    for (const m of config.modelIds) {
+      ratings[m] = initRating;
+      winStats[m] = { wins: 0, losses: 0, draws: 0, winRate: 0 };
+    }
+
+    const matches: ArenaBattleResult[] = [];
+    for (const scenarioId of config.scenarioIds) {
+      for (let i = 0; i < config.modelIds.length; i++) {
+        for (let j = i + 1; j < config.modelIds.length; j++) {
+          const modelA = config.modelIds[i]!;
+          const modelB = config.modelIds[j]!;
+          const result = await this.runBattle({
+            scenarioId, skillId: config.skillId, modelA, modelB,
+            judgeModelId: config.judgeModelId, judgeProviderId: config.judgeProviderId,
+            kFactor: config.kFactor, initialRatingA: ratings[modelA], initialRatingB: ratings[modelB],
+            dryRun: config.dryRun, containerPool: config.containerPool,
+          });
+          matches.push(result);
+          ratings[modelA] = result.postRatingA;
+          ratings[modelB] = result.postRatingB;
+
+          const statA = winStats[modelA]!;
+          const statB = winStats[modelB]!;
+          if (result.winner === "model_a") { statA.wins += 1; statB.losses += 1; }
+          else if (result.winner === "model_b") { statB.wins += 1; statA.losses += 1; }
+          else { statA.draws += 1; statB.draws += 1; }
+        }
+      }
+    }
+
+    for (const m of config.modelIds) {
+      const s = winStats[m]!;
+      const total = s.wins + s.losses + s.draws;
+      s.winRate = total > 0 ? Number(((s.wins + 0.5 * s.draws) / total).toFixed(4)) : 0;
+    }
+
+    return {
+      matches, ratings, winStats, totalMatches: matches.length,
+      totalDurationMs: Math.round(performance.now() - startTime),
     };
   }
 }
