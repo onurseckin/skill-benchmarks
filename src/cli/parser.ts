@@ -16,6 +16,7 @@ const SPECS: readonly (readonly [string, FlagValueKind, readonly string[]])[] = 
   ["maxTurns", "number", ["max-turns", "maxTurns"]], ["maxCostUSD", "number", ["max-cost", "maxCost", "max-cost-usd", "maxCostUSD"]],
   ["dbPath", "string", ["db", "database", "db-path", "dbPath"]], ["format", "string", ["f", "format"]],
   ["outputPath", "string", ["o", "output", "out", "output-path", "outputPath"]], ["verbose", "boolean", ["v", "verbose"]],
+  ["outputDir", "string", ["output-dir", "outputDir"]],
   ["judgeModelId", "string", ["judge-model", "judgeModel", "judge-model-id", "judgeModelId"]],
   ["judgeProviderId", "string", ["judge-provider", "judgeProvider", "judge-provider-id", "judgeProviderId"]],
   ["skipJudge", "boolean", ["skip-judge", "skipJudge"]], ["cleanSandbox", "boolean", ["clean-sandbox", "cleanSandbox"]],
@@ -42,21 +43,21 @@ const SPECS: readonly (readonly [string, FlagValueKind, readonly string[]])[] = 
   ["exportCard", "string", ["export-card", "exportCard", "card", "report-card", "reportCard"]],
   ["cardOutputPath", "string", ["card-output", "cardOutputPath", "card-out", "cardOut"]],
 ];
-
 const FLAG_MAP = new Map<string, FlagSpec>();
 for (const [canonical, kind, aliases] of SPECS) {
   const spec = { canonical, kind, aliases };
   for (const alias of aliases) { FLAG_MAP.set(alias, spec); FLAG_MAP.set(alias.toLowerCase(), spec); }
 }
-
 const KNOWN_COMMANDS = new Set<CliCommandName>([
   "run", "bench", "arena", "tournament", "report", "sync", "list", "replay", "fuzz", "help", "version",
 ]);
-
 function toBool(v: unknown): boolean {
   if (typeof v === "boolean") return v;
   if (typeof v === "string") return ["true", "1", "yes"].includes(v.trim().toLowerCase());
   return Boolean(v);
+}
+function toOptionalBool(v: unknown): boolean | undefined {
+  return v === undefined ? undefined : toBool(v);
 }
 function toNum(v: unknown): number | undefined {
   if (typeof v === "number" && !Number.isNaN(v)) return v;
@@ -71,7 +72,6 @@ function toArr(v: unknown): readonly string[] {
   if (typeof v === "string") return v.split(",").map((s) => s.trim()).filter(Boolean);
   return [];
 }
-
 function assignFlag(flags: Record<string, string | boolean | number | string[]>, rawKey: string, val: string | boolean): void {
   const isNo = rawKey.startsWith("no-");
   const baseKey = isNo ? rawKey.slice(3) : rawKey;
@@ -153,8 +153,9 @@ export function parseCliArgs(argv: readonly string[]): CliParsedArgs {
     matrixThinking: toArr(flags["matrixThinking"]) as BenchmarkRunOptions["matrixThinking"],
     arena: toArr(flags["arena"]).length > 0 ? toArr(flags["arena"]) : undefined,
     dryRun: toBool(flags["dryRun"]),
-    live: toBool(flags["live"]),
-    mock: toBool(flags["mock"]),
+    live: toOptionalBool(flags["live"]),
+    mock: toOptionalBool(flags["mock"]),
+    outputDir: toStr(flags["outputDir"]),
     timeoutSeconds: toNum(flags["timeoutSeconds"]),
     maxTurns: toNum(flags["maxTurns"]), maxCostUSD: toNum(flags["maxCostUSD"]),
     dbPath: toStr(flags["dbPath"]), outputFormat: toStr(flags["format"]) as CliOutputFormat | undefined,

@@ -33,6 +33,7 @@ export interface BenchmarkRunOptions {
   readonly dryRun?: boolean;
   readonly live?: boolean;
   readonly mock?: boolean;
+  readonly outputDir?: string;
   readonly timeoutSeconds?: number;
   readonly maxTurns?: number;
   readonly maxCostUSD?: number;

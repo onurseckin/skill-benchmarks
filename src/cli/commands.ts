@@ -28,12 +28,19 @@ import type { FuzzingStrategy, MutationSeverity } from "../fuzzer/types.js";
 import { TournamentScheduler } from "../runner/tournament-scheduler.js";
 import { getOrCreateModelDefinition } from "../models/index.js";
 import { runArenaCommand } from "./arena-command.js";
+import { resolveBenchmarkRuntimeConfig } from "../shared/index.js";
 
 export { runArenaCommand };
 
 export async function runBenchmarkCommand(args: CliParsedArgs): Promise<CliCommandResult> {
   const startTime = Date.now();
   const options = args.benchmarkOptions !== undefined ? args.benchmarkOptions : ({} as BenchmarkRunOptions);
+  const runtimeConfig = resolveBenchmarkRuntimeConfig({
+    mock: options.mock,
+    live: options.live,
+    outputDir: options.outputDir,
+    providerId: options.providerId,
+  });
   if (options.arena && options.arena.length >= 2) {
     return runArenaCommand(args);
   }
@@ -74,7 +81,7 @@ export async function runBenchmarkCommand(args: CliParsedArgs): Promise<CliComma
     };
   });
 
-  const summary = await engine.run({
+  const sweepConfig = {
     scenarioIds,
     skillIds,
     models,
@@ -88,7 +95,9 @@ export async function runBenchmarkCommand(args: CliParsedArgs): Promise<CliComma
     },
     concurrency: { maxGlobalConcurrency: options.concurrency ?? 2 },
     telemetryDbPath: dbPath,
-  });
+    runtimeConfig,
+  };
+  const summary = await engine.run(sweepConfig);
 
   const totalRuns = summary.completedCount + summary.failedCount;
   console.log(formatSectionHeader(`Sweep Complete: ${summary.completedCount}/${totalRuns} passed in ${(summary.totalDurationMs / 1000).toFixed(1)}s`));
