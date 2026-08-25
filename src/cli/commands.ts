@@ -63,7 +63,8 @@ export async function runBenchmarkCommand(args: CliParsedArgs): Promise<CliComma
   const engine = new MatrixSweepEngine();
   engine.on((event) => {
     if (event.type === "cell:complete") {
-      console.log(`  ${formatBadge("success", "PASS")} ${cyan(event.cellId ?? "")} | ${event.message}`);
+      const passedBenchmark = event.payload?.passedBenchmark === true;
+      console.log(`  ${formatBadge(passedBenchmark ? "success" : "info", passedBenchmark ? "PASS" : "COMPLETE")} ${cyan(event.cellId ?? "")} | ${event.message}`);
     } else if (event.type === "cell:error") {
       console.log(`  ${formatBadge("error", "FAIL")} ${cyan(event.cellId ?? "")} | ${event.message}`);
     }
@@ -100,7 +101,7 @@ export async function runBenchmarkCommand(args: CliParsedArgs): Promise<CliComma
   const summary = await engine.run(sweepConfig);
 
   const totalRuns = summary.completedCount + summary.failedCount;
-  console.log(formatSectionHeader(`Sweep Complete: ${summary.completedCount}/${totalRuns} passed in ${(summary.totalDurationMs / 1000).toFixed(1)}s`));
+  console.log(formatSectionHeader(`Sweep Complete: ${summary.completedCount}/${totalRuns} completed in ${(summary.totalDurationMs / 1000).toFixed(1)}s`));
   return { success: summary.failedCount === 0, exitCode: summary.failedCount === 0 ? 0 : 1, durationMs: Date.now() - startTime, data: summary };
 }
 

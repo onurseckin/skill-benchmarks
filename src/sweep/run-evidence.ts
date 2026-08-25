@@ -21,7 +21,6 @@ export interface TerminalRunEvidence {
   readonly status: RunStatus;
   readonly terminationReason: RunTerminationReason;
   readonly completedAt: string;
-  readonly error?: string;
 }
 
 export async function writeRunManifest(
@@ -100,6 +99,12 @@ export function createTerminalRunRecord(
 
 export function countToolErrors(result: ScenarioResult): number {
   return result.toolHistory.filter((record) => record.isError).length;
+}
+
+export function summarizeTerminalFailure(reason: RunTerminationReason): string {
+  if (reason === "timeout") return "execution timed out";
+  if (reason === "aborted") return "execution aborted";
+  return "execution failed";
 }
 
 async function writeAtomicJson(path: string, value: unknown): Promise<void> {

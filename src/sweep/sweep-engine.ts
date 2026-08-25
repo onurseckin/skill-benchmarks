@@ -16,12 +16,8 @@ import { CheckpointLedger } from "./checkpoint.js";
 import { ScenarioRunnerEngine } from "../runner/runner-engine.js";
 import { ScenarioLoader } from "../runner/scenario-loader.js";
 import { TelemetryDatabase } from "../reporting/db.js";
-import { createProviderAdapter } from "../providers/factory.js";
-import type { ScenarioResult, ExecutionLimits } from "../runner/types.js";
-import type { IContainerInstance } from "../infrastructure/container/types.js";
-import { createDisposableWorkspace } from "../infrastructure/workspace/disposable-workspace.js";
-import { createRunArtifactLayout, prepareRunArtifactLayout } from "../infrastructure/workspace/run-artifact-layout.js";
-import { createTerminalRunRecord, mapTerminalStatus, writeRunManifest, writeRunResult } from "./run-evidence.js";
+import type { ExecutionLimits } from "../runner/types.js";
+import { executeSweepCell } from "./cell-execution.js";
 export class MatrixSweepEngine implements IMatrixSweepEngine {
   public readonly sweepId: string;
   public status: SweepExecutionStatus = "pending";
@@ -120,7 +116,7 @@ export class MatrixSweepEngine implements IMatrixSweepEngine {
               const cellId = `${scenarioId}_${skillId}_${modelEntry.modelId}${thinkSuffix}_rep${rep}`;
               cells.push({
                 cellId, scenarioId, skillId,
-                modelId: modelEntry.modelId, providerId: modelEntry.providerId,
+                modelId: modelEntry.modelId, providerId: config.runtimeConfig.requestedProviderId ?? modelEntry.providerId,
                 executionMode: config.runtimeConfig.executionMode,
                 outputRoot: config.runtimeConfig.outputRoot,
                 thinkingLevel: effectiveThinking,
@@ -173,10 +169,32 @@ export class MatrixSweepEngine implements IMatrixSweepEngine {
     const cellQueue = [...allPlannedCells];
     const modelInFlight = new Map<string, number>();
     const providerInFlight = new Map<string, number>();
+    const recordCellResult = async (result: MatrixCellResult): Promise<MatrixCellResult> => {
+      results.push(result);
+      this.totalCellDurationMs += result.durationMs;
+      if (result.executionCompleted) {
+        await checkpointLedger.recordCellSuccess(result);
+        this.completedCount += 1;
+        this.totalTokensConsumed += result.scenarioResult?.totalTokens.totalTokens ?? 0;
+        this.totalCostUSD += result.scenarioResult?.totalCostUSD ?? 0;
+        this.emitEvent({
+          type: "cell:complete",
+          cellId: result.cell.cellId,
+          message: `Cell ${result.cell.cellId} completed in ${result.durationMs}ms`,
+          payload: { durationMs: result.durationMs, costUSD: result.scenarioResult?.totalCostUSD ?? 0, passedBenchmark: result.passedBenchmark },
+        });
+      } else {
+        await checkpointLedger.recordCellFailure(result);
+        this.failedCount += 1;
+        this.emitEvent({ type: "cell:error", cellId: result.cell.cellId, message: `Cell ${result.cell.cellId} ${result.error ?? "execution failed"}` });
+        if (config.stopOnFirstFailure && !this.abortController.signal.aborted) await this.abort("Stopped on first failure");
+      }
+      return result;
+    };
     const executeCell = async (cell: MatrixCellDescriptor): Promise<MatrixCellResult> => {
       if (checkpointLedger.isCellCompleted(cell.cellId)) {
         this.skippedCount += 1;
-        const res: MatrixCellResult = { cell, status: "skipped", attemptCount: 0, durationMs: 0, retryable: false };
+        const res: MatrixCellResult = { cell, status: "skipped", attemptCount: 0, durationMs: 0, executionCompleted: false, passedBenchmark: false, retryable: false };
         results.push(res);
         this.emitEvent({ type: "cell:skip", cellId: cell.cellId, message: `Skipping ${cell.cellId}` });
         return res;
@@ -185,148 +203,16 @@ export class MatrixSweepEngine implements IMatrixSweepEngine {
       modelInFlight.set(cell.modelId, (modelInFlight.get(cell.modelId) ?? 0) + 1);
       providerInFlight.set(cell.providerId, (providerInFlight.get(cell.providerId) ?? 0) + 1);
       this.emitEvent({ type: "cell:start", cellId: cell.cellId, message: `Running ${cell.cellId}` });
-      const maxRetries = config.maxRetriesPerCell ?? 2;
-      let attempt = 0;
-      let lastError: string | undefined;
-      let durationMs = 0;
-      let scenarioResult: ScenarioResult | undefined;
-      let container: IContainerInstance | undefined;
       const limiter = rateLimiterManager.getLimiter(cell.providerId, cell.modelId);
-      const cellStartTime = Date.now();
-      const scenarioDefinition = scenarioLoader.loadScenario(cell.scenarioId);
-      const artifactLayout = await prepareRunArtifactLayout(
-        createRunArtifactLayout(cell.outputRoot, cell.runId)
-      );
-      const evidenceContext = {
-        runId: cell.runId,
-        scenarioId: cell.scenarioId,
-        category: scenarioDefinition.category,
-        skillId: cell.skillId,
-        modelId: cell.modelId,
-        providerId: cell.providerId,
-        executionMode: cell.executionMode,
-        simulated: cell.executionMode === "fake",
-        startedAt: new Date(cellStartTime).toISOString(),
-      } as const;
-      await writeRunManifest(artifactLayout, evidenceContext);
-      const workspace = await createDisposableWorkspace({
-        outputRoot: cell.outputRoot,
-        runId: cell.runId,
-        scenarioId: cell.scenarioId,
-        fixtures: scenarioDefinition.workspace?.fixtures ?? {},
-      });
-      while (attempt <= maxRetries) {
-        attempt += 1;
-        try {
-          if (this.isPaused) await this.pausePromise;
-          if (this.abortController.signal.aborted) throw new Error("Sweep aborted");
-          await limiter.acquire(2000, this.abortController.signal);
-          if (config.containerPool) {
-            container = await config.containerPool.acquire({
-              imageTag: "skill-benchmarks-sandbox:latest",
-              runId: cell.runId, scenarioId: cell.scenarioId,
-              resourceLimits: { cpus: 2, memoryMb: 4096, pidsLimit: 512 },
-              networkMode: "sb-bridge-isolated",
-              workspaceVolumeName: `sb-vol-${cell.runId}`,
-              artifactHostPath: artifactLayout.runDirectory,
-              timeouts: { commandTimeoutMs: cell.limits.toolTimeoutMs, turnTimeoutMs: 60000, totalScenarioTimeoutMs: cell.limits.maxWallClockTimeMs },
-              labels: { "io.skill-benchmarks.sweep-id": this.sweepId },
-            });
-          }
-          if (config.dryRun) {
-            durationMs = 50 + Math.floor(Math.random() * 50);
-            scenarioResult = {
-              runId: cell.runId, scenarioId: cell.scenarioId, skillIds: [cell.skillId], modelId: cell.modelId,
-              executionMode: "fake", simulated: true,
-              terminationReason: "success", completed: true, turns: 2, turnHistory: [], toolHistory: [], messages: [],
-              finalOutput: "Dry run completed", totalDurationMs: durationMs,
-              totalTokens: { inputTokens: 500, outputTokens: 200, cacheCreationInputTokens: 0, cacheReadInputTokens: 0, totalTokens: 700 },
-              totalCostUSD: 0, consecutiveToolErrors: 0,
-              startedAt: new Date(Date.now() - durationMs).toISOString(), finishedAt: new Date().toISOString(),
-            };
-          } else {
-            const provider = cell.modelEntry.provider ?? createProviderAdapter({
-              providerId: config.runtimeConfig.requestedProviderId ?? (cell.providerId as "anthropic" | "google" | "openai" | "ollama" | "custom"),
-              defaultModel: cell.modelId,
-              executionMode: config.runtimeConfig.executionMode,
-              runId: cell.runId,
-            });
-            scenarioResult = await runnerEngine.run({
-              runId: cell.runId, scenarioId: cell.scenarioId, skillIds: [cell.skillId], modelId: cell.modelId,
-              provider, prompt: scenarioDefinition.instructions,
-              workspace,
-              container, limits: cell.limits, temperature: cell.temperature,
-              thinkingLevel: cell.thinkingLevel,
-              thinkingBudget: cell.thinkingBudget,
-              reasoningEffort: cell.modelEntry.reasoningEffort,
-            });
-            durationMs = scenarioResult.totalDurationMs;
-          }
-          limiter.recordConsumption(scenarioResult.totalTokens.totalTokens);
-          if (!scenarioResult.completed) {
-            lastError = scenarioResult.errorMessage ?? scenarioResult.terminationReason;
-            break;
-          }
-          const terminal = {
-            status: mapTerminalStatus(scenarioResult.terminationReason),
-            terminationReason: scenarioResult.terminationReason,
-            completedAt: scenarioResult.finishedAt,
-          } as const;
-          const runRecord = createTerminalRunRecord(evidenceContext, terminal, scenarioResult);
-          telemetryDb.saveRunRecord(runRecord);
-          await writeRunResult(artifactLayout, evidenceContext, terminal, scenarioResult);
-          const cellResult: MatrixCellResult = {
-            cell, status: "completed", attemptCount: attempt,
-            startedAt: new Date(cellStartTime).toISOString(), completedAt: new Date().toISOString(),
-            durationMs, scenarioResult, runRecord, retryable: false,
-          };
-          await checkpointLedger.recordCellSuccess(cellResult);
-          this.completedCount += 1;
-          this.totalTokensConsumed += scenarioResult.totalTokens.totalTokens;
-          this.totalCostUSD += scenarioResult.totalCostUSD;
-          this.totalCellDurationMs += durationMs;
-          results.push(cellResult);
-          this.emitEvent({
-            type: "cell:complete", cellId: cell.cellId,
-            message: `Cell ${cell.cellId} completed in ${durationMs}ms`,
-            payload: { durationMs, costUSD: scenarioResult.totalCostUSD },
-          });
-          return cellResult;
-        } catch (err) {
-          lastError = (err as Error).message;
-          if (attempt <= maxRetries && !this.abortController.signal.aborted) {
-            this.emitEvent({ type: "cell:retry", cellId: cell.cellId, message: `Retrying ${cell.cellId}: ${lastError}` });
-            await limiter.reportRateLimitViolation();
-          }
-        } finally {
-          if (container && config.containerPool) {
-            await config.containerPool.release(container);
-            container = undefined;
-          }
-        }
-      }
-      const terminationReason = scenarioResult?.terminationReason
-        ?? (this.abortController.signal.aborted ? "aborted" : "error");
-      const terminal = {
-        status: mapTerminalStatus(terminationReason),
-        terminationReason,
-        completedAt: scenarioResult?.finishedAt ?? new Date().toISOString(),
-        ...(lastError === undefined ? {} : { error: lastError }),
-      } as const;
-      const runRecord = createTerminalRunRecord(evidenceContext, terminal, scenarioResult);
-      telemetryDb.saveRunRecord(runRecord);
-      await writeRunResult(artifactLayout, evidenceContext, terminal, scenarioResult);
-      this.failedCount += 1;
-      const failedResult: MatrixCellResult = {
-        cell, status: "failed", attemptCount: attempt,
-        durationMs: scenarioResult?.totalDurationMs ?? Date.now() - cellStartTime,
-        scenarioResult, runRecord, error: lastError, retryable: false,
-      };
-      await checkpointLedger.recordCellFailure(failedResult);
-      results.push(failedResult);
-      this.emitEvent({ type: "cell:error", cellId: cell.cellId, message: `Cell ${cell.cellId} failed: ${lastError}` });
-      if (config.stopOnFirstFailure) await this.abort(`Stopped on first failure: ${lastError}`);
-      return failedResult;
+      return recordCellResult(await executeSweepCell({
+        cell,
+        config,
+        scenarioLoader,
+        runnerEngine,
+        telemetryDb,
+        limiter,
+        aborted: () => this.abortController.signal.aborted,
+      }));
     };
     const workerPool: Promise<void>[] = [];
     const runWorker = async (): Promise<void> => {
@@ -357,6 +243,14 @@ export class MatrixSweepEngine implements IMatrixSweepEngine {
     const activeWorkers = Math.min(maxGlobal, allPlannedCells.length);
     for (let i = 0; i < activeWorkers; i++) workerPool.push(runWorker());
     await Promise.all(workerPool);
+    while (cellQueue.length > 0) {
+      const queuedCell = cellQueue.shift();
+      if (queuedCell === undefined) continue;
+      await executeCell(queuedCell);
+      this.inFlightCount = Math.max(0, this.inFlightCount - 1);
+      modelInFlight.set(queuedCell.modelId, Math.max(0, (modelInFlight.get(queuedCell.modelId) ?? 1) - 1));
+      providerInFlight.set(queuedCell.providerId, Math.max(0, (providerInFlight.get(queuedCell.providerId) ?? 1) - 1));
+    }
     const completedAt = new Date().toISOString();
     const totalDurationMs = Date.now() - this.startTimeMs;
     this.status = this.abortController.signal.aborted ? "aborted" : this.failedCount > 0 ? "failed" : "completed";
@@ -377,7 +271,7 @@ export class MatrixSweepEngine implements IMatrixSweepEngine {
     };
     this.emitEvent({
       type: "sweep:complete",
-      message: `Sweep ${this.sweepId} completed: ${this.completedCount} passed, ${this.failedCount} failed in ${totalDurationMs}ms`,
+      message: `Sweep ${this.sweepId} completed: ${this.completedCount} executed, ${this.failedCount} failed in ${totalDurationMs}ms`,
       payload: { totalCostUSD: summary.totalCostUSD, totalDurationMs },
     });
       return summary;

@@ -110,6 +110,8 @@ export interface MatrixCellResult {
   readonly startedAt?: string;
   readonly completedAt?: string;
   readonly durationMs: number;
+  readonly executionCompleted: boolean;
+  readonly passedBenchmark: boolean;
   readonly scenarioResult?: ScenarioResult;
   readonly runRecord?: RunRecord;
   readonly error?: string;
