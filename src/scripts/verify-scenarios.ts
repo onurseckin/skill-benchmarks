@@ -1,37 +1,39 @@
-import { readFileSync } from "node:fs";
+import { readdirSync } from "node:fs";
 import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { ScenarioLoader } from "../runner/scenario-loader.js";
 
+const scenariosDirectory = fileURLToPath(new URL("../../scenarios/", import.meta.url));
+
+function collectScenarioFiles(directory: string): readonly string[] {
+  const files: string[] = [];
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const entryPath = resolve(directory, entry.name);
+    if (entry.isDirectory()) files.push(...collectScenarioFiles(entryPath));
+    else if (entry.isFile() && entry.name.endsWith(".json") && entry.name !== "catalog.json") files.push(entryPath);
+  }
+  return files;
+}
+
 function verifyScenarios(): void {
-  const catalogPath = resolve(process.cwd(), "scenarios/catalog.json");
-  const catalogContent = readFileSync(catalogPath, "utf8");
-  const parsed = JSON.parse(catalogContent) as {
-    totalScenarios: number;
-    categories: readonly string[];
-  };
-
-  if (parsed.totalScenarios < 13) {
-    process.stderr.write(`Expected at least 13 scenarios, found ${parsed.totalScenarios}\n`);
-    process.exit(1);
+  const loader = new ScenarioLoader(scenariosDirectory);
+  const catalog = loader.loadCatalog();
+  const scenarios = loader.loadAllScenarios();
+  const actualFiles = new Set(collectScenarioFiles(scenariosDirectory));
+  const declaredFiles = new Set(catalog.scenarios.map((entry) => {
+    const relativePath = entry.path.startsWith("scenarios/")
+      ? entry.path.slice("scenarios/".length)
+      : entry.path;
+    return resolve(scenariosDirectory, relativePath);
+  }));
+  if (catalog.totalScenarios !== catalog.scenarios.length
+    || scenarios.length !== catalog.scenarios.length
+    || actualFiles.size !== catalog.scenarios.length
+    || declaredFiles.size !== catalog.scenarios.length
+    || [...actualFiles].some((filePath) => !declaredFiles.has(filePath))) {
+    throw new TypeError("Scenario catalog file inventory does not match its declaration");
   }
-
-  const requiredCategories = ["composite", "security", "optimization", "debugging", "frontend", "coding"];
-  for (const cat of requiredCategories) {
-    if (!parsed.categories.includes(cat)) {
-      process.stderr.write(`Missing required category: ${cat}\n`);
-      process.exit(1);
-    }
-  }
-
-  const loader = new ScenarioLoader();
-  const all = loader.loadAllScenarios();
-  if (all.length < 13) {
-    process.stderr.write(`Loader failed to load 13 scenarios, loaded ${all.length}\n`);
-    process.exit(1);
-  }
-
-  process.stdout.write("All 13 benchmark scenarios verified successfully.\n");
-  process.exit(0);
+  process.stdout.write(`All ${scenarios.length} benchmark scenarios verified successfully.\n`);
 }
 
 verifyScenarios();

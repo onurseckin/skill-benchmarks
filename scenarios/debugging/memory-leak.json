@@ -1,5 +1,5 @@
 {
-  "id": "debugging-memory-leak",
+  "id": "memory-leak",
   "name": "Node.js Stream Backpressure and Event Listener Leak Diagnosis",
   "category": "debugging",
   "difficulty": "hard",

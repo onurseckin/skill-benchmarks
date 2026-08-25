@@ -1,5 +1,5 @@
-import { readdir, readFile, writeFile, mkdir, stat } from "node:fs/promises";
-import { join, resolve, dirname } from "node:path";
+import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { resolve, dirname } from "node:path";
 import type {
   SkillCategory,
   CanonicalSkillDomain,
@@ -8,61 +8,23 @@ import type {
   CatalogEntry,
   SkillFilterOptions,
   SkillPromptFormatOptions,
-  SkillSourceType,
 } from "./types";
 import { CANONICAL_SKILLS } from "./canonical";
 import { parseCatalogMarkdown, parseInstallsCount } from "./catalog-parser";
 import { formatSkillPrompt, formatSkillsForAgentContext } from "./formatter";
 import { parseSkillFile } from "./parser";
 import { validateSkillManifest } from "./validator";
+import {
+  calculateSkillScore,
+  collectSkillFilePaths,
+  createCatalogEntry,
+  normalizeSkillId,
+  requireSubstantiveSkillManifest,
+} from "./registry-support.js";
 
 export { CANONICAL_SKILLS } from "./canonical";
 export { parseCatalogMarkdown, parseInstallsCount } from "./catalog-parser";
 export { formatSkillPrompt, formatSkillsForAgentContext } from "./formatter";
-
-function normalizeSkillId(id: string): string {
-  return id.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "-");
-}
-
-async function collectSkillFilePaths(dirPath: string): Promise<string[]> {
-  const result: string[] = [];
-  try {
-    const dirStats = await stat(dirPath);
-    if (dirStats.isFile()) {
-      if (dirPath.endsWith(".md") || dirPath.endsWith(".json")) result.push(dirPath);
-      return result;
-    }
-    const entries = await readdir(dirPath, { withFileTypes: true });
-    for (const e of entries) {
-      if (e.name === ".git" || e.name === "node_modules" || e.name === ".benchmarks" || e.name === "dist") continue;
-      const full = join(dirPath, e.name);
-      if (e.isDirectory()) result.push(...(await collectSkillFilePaths(full)));
-      else if (e.isFile() && (e.name === "SKILL.md" || e.name === "skill.md" || e.name.endsWith(".skill.md") || e.name === "skill.json")) result.push(full);
-    }
-  } catch {
-    return result;
-  }
-  return result;
-}
-
-function calculateSkillScore(m: SkillManifest, tokens: readonly string[]): number {
-  let score = 0;
-  const name = m.name.toLowerCase();
-  const desc = m.description.toLowerCase();
-  const cat = m.category.toLowerCase();
-  const tags = m.tags.map((t) => t.toLowerCase());
-  for (const tok of tokens) {
-    if (name === tok) score += 20;
-    else if (name.includes(tok)) score += 10;
-    if (tags.includes(tok)) score += 6;
-    else if (tags.some((t) => t.includes(tok))) score += 3;
-    if (cat.includes(tok)) score += 4;
-    if (desc.includes(tok)) score += 2;
-    if (m.rules.some((r) => r.title.toLowerCase().includes(tok) || r.description.toLowerCase().includes(tok))) score += 1;
-    if (m.tools.some((t) => t.name.toLowerCase().includes(tok) || t.description.toLowerCase().includes(tok))) score += 1;
-  }
-  return score;
-}
 
 export class SkillRegistry {
   private readonly skills: Map<string, SkillManifest> = new Map();
@@ -155,25 +117,7 @@ export class SkillRegistry {
     this.index(this.categoryIndex, manifest.category, id);
     for (const tag of manifest.tags) this.index(this.tagIndex, tag, id);
     const existing = this.catalog.get(id);
-    const resolvedSource = data?.source !== undefined ? data.source : existing?.source !== undefined ? existing.source : manifest.repository !== undefined ? manifest.repository : manifest.name;
-    const resolvedType: SkillSourceType = data?.sourceType !== undefined ? data.sourceType : existing?.sourceType !== undefined ? existing.sourceType : "local";
-    const resolvedInstalls = data?.installs !== undefined ? data.installs : existing?.installs !== undefined ? existing.installs : 0;
-    const resolvedDisplay = data?.installsDisplay !== undefined ? data.installsDisplay : existing?.installsDisplay;
-    const entry: CatalogEntry = {
-      id,
-      name: manifest.name,
-      category: manifest.category,
-      source: resolvedSource,
-      sourceType: resolvedType,
-      description: manifest.description,
-      version: manifest.version,
-      tags: manifest.tags,
-      manifest,
-      status: "valid",
-      installs: resolvedInstalls,
-      installsDisplay: resolvedDisplay,
-      updatedAt: new Date().toISOString(),
-    };
+    const entry = createCatalogEntry(id, manifest, data, existing);
     this.catalog.set(id, entry);
     return entry;
   }
@@ -254,6 +198,10 @@ export class SkillRegistry {
     return this.getSkill(id) !== undefined || this.canonical.has(normalizeSkillId(id));
   }
 
+  requireSkill(id: string): SkillManifest {
+    return requireSubstantiveSkillManifest(this.getSkill(id));
+  }
+
   getSkillsByCategory(category: SkillCategory): readonly SkillManifest[] {
     const idSet = this.categoryIndex.get(category.toLowerCase());
     if (idSet === undefined) return [];
@@ -330,9 +278,7 @@ export class SkillRegistry {
     this.tagIndex.clear();
   }
 
-  size(): number {
-    return this.skills.size;
-  }
+  size(): number { return this.skills.size; }
 }
 
 export const defaultSkillRegistry = new SkillRegistry();

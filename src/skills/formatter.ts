@@ -1,6 +1,7 @@
-import type { SkillManifest, SkillPromptFormatOptions, SkillRule } from "./types";
-import type { SkillRegistry } from "./registry";
-import { defaultSkillRegistry } from "./registry";
+import type { SkillManifest, SkillPromptFormatOptions, SkillRule } from "./types.js";
+import type { SkillRegistry } from "./registry.js";
+import { defaultSkillRegistry } from "./registry.js";
+import { requireSubstantiveSkillManifest } from "./registry-support.js";
 
 function formatRulesSection(prefix: string, title: string, rules: readonly SkillRule[], limit: number, withEx: boolean): string[] {
   if (rules.length === 0 || limit <= 0) return [];
@@ -23,8 +24,9 @@ export function formatSkillPrompt(
   registry?: SkillRegistry
 ): string {
   const reg = registry ?? defaultSkillRegistry;
-  const m = typeof manifestOrId === "string" ? reg?.getSkill(manifestOrId) : manifestOrId;
-  if (m === undefined) return `### Skill: ${manifestOrId}\n\nSkill definition not found in registry.\n`;
+  const m = typeof manifestOrId === "string"
+    ? reg.requireSkill(manifestOrId)
+    : requireSubstantiveSkillManifest(manifestOrId);
 
   const prefix = options !== undefined && options.headerPrefix !== undefined ? options.headerPrefix : "###";
   const subPrefix = `${prefix}#`;

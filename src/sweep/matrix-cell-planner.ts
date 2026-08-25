@@ -1,10 +1,11 @@
 import type { ExecutionLimits } from "../runner/types.js";
 import { createSafeArtifactPathSegment } from "../shared/artifact-sanitization.js";
+import { createImmutableExecutionLimits, createImmutableModelEntry } from "./immutable-plan-data.js";
 import type { MatrixCellDescriptor, MatrixSweepConfig } from "./types.js";
 
 export function generateMatrixCells(sweepId: string, config: MatrixSweepConfig): readonly MatrixCellDescriptor[] {
   const reps = config.repetitions ?? 1;
-  const limits: ExecutionLimits = {
+  const limits: ExecutionLimits = createImmutableExecutionLimits({
     maxTurns: 10,
     maxWallClockTimeMs: 120000,
     maxCostUSD: 0.5,
@@ -12,17 +13,20 @@ export function generateMatrixCells(sweepId: string, config: MatrixSweepConfig):
     toolTimeoutMs: 30000,
     maxOutputSizeBytes: 1024 * 1024,
     ...config.defaultExecutionLimits,
-  };
+  });
+  const scenarioIds = [...config.scenarioIds];
+  const skillIds = [...config.skillIds];
+  const models = config.models.map(createImmutableModelEntry);
   const cells: MatrixCellDescriptor[] = [];
   const cellIds = new Set<string>();
   const runIds = new Set<string>();
   let matrixOccurrenceIndex = 0;
   const thinkingLevels = config.thinkingLevels !== undefined && config.thinkingLevels.length > 0
-    ? config.thinkingLevels
+    ? [...config.thinkingLevels]
     : [undefined];
-  for (const [scenarioIndex, scenarioId] of config.scenarioIds.entries()) {
-    for (const [skillIndex, skillId] of config.skillIds.entries()) {
-      for (const [modelIndex, modelEntry] of config.models.entries()) {
+  for (const [scenarioIndex, scenarioId] of scenarioIds.entries()) {
+    for (const [skillIndex, skillId] of skillIds.entries()) {
+      for (const [modelIndex, modelEntry] of models.entries()) {
         for (const [thinkingIndex, thinkingLevel] of thinkingLevels.entries()) {
           for (let repetitionIndex = 0; repetitionIndex < reps; repetitionIndex += 1) {
             const effectiveThinking = thinkingLevel ?? modelEntry.thinkingLevel;
@@ -39,7 +43,7 @@ export function generateMatrixCells(sweepId: string, config: MatrixSweepConfig):
             if (cellIds.has(cellId) || runIds.has(runId)) throw new TypeError("Matrix occurrence identity collision");
             cellIds.add(cellId);
             runIds.add(runId);
-            cells.push({
+            cells.push(Object.freeze({
               sweepId,
               cellId,
               matrixOccurrenceIndex,
@@ -58,12 +62,12 @@ export function generateMatrixCells(sweepId: string, config: MatrixSweepConfig):
               temperature: modelEntry.temperature,
               tags: modelEntry.tags,
               metadata: modelEntry.metadata,
-            });
+            }));
             matrixOccurrenceIndex += 1;
           }
         }
       }
     }
   }
-  return cells;
+  return Object.freeze(cells);
 }

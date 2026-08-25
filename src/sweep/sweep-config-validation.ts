@@ -1,7 +1,29 @@
 import type { ExecutionLimits } from "../runner/types.js";
+import { ScenarioCatalogError, ScenarioLoader } from "../runner/scenario-loader.js";
+import { getModelDefinition } from "../models/model-registry.js";
+import { defaultSkillRegistry } from "../skills/registry.js";
 import type { ConcurrencyControls, MatrixSweepConfig, RateLimitConfig } from "./types.js";
 
 const invalidSweepConfigurationMessage = "Sweep configuration contains an invalid value";
+
+export type BenchmarkAdmissionErrorCode =
+  | "empty_matrix"
+  | "duplicate_selector"
+  | "scenario_catalog_invalid"
+  | "scenario_unresolved"
+  | "skill_unresolved"
+  | "model_unresolved"
+  | "provider_model_mismatch";
+
+export class BenchmarkAdmissionError extends TypeError {
+  readonly code: BenchmarkAdmissionErrorCode;
+
+  constructor(code: BenchmarkAdmissionErrorCode) {
+    super("Benchmark request could not be admitted");
+    this.name = "BenchmarkAdmissionError";
+    this.code = code;
+  }
+}
 
 export function validateMatrixSweepConfig(config: MatrixSweepConfig): void {
   if (config === null || typeof config !== "object" || config.runtimeConfig === null
@@ -50,6 +72,47 @@ export function validateMatrixSweepConfig(config: MatrixSweepConfig): void {
     if (!Array.isArray(config.thinkingLevels)) invalid();
     for (const level of config.thinkingLevels) requireEnum(level, ["none", "low", "medium", "high", "max"]);
   }
+  validateAdmissionSelectors(config);
+}
+
+function validateAdmissionSelectors(config: MatrixSweepConfig): void {
+  requireNonEmptyUniqueSelectors(config.scenarioIds);
+  requireNonEmptyUniqueSelectors(config.skillIds);
+  if (config.models.length === 0) admissionError("empty_matrix");
+  const modelIds = new Set<string>();
+  for (const model of config.models) {
+    if (modelIds.has(model.modelId)) admissionError("duplicate_selector");
+    modelIds.add(model.modelId);
+    const definition = getModelDefinition(model.modelId);
+    if (definition === undefined) admissionError("model_unresolved");
+    if (definition.provider !== model.providerId
+      || (config.runtimeConfig.requestedProviderId !== undefined
+        && config.runtimeConfig.requestedProviderId !== definition.provider)) {
+      admissionError("provider_model_mismatch");
+    }
+  }
+  const scenarioLoader = new ScenarioLoader();
+  try {
+    scenarioLoader.loadCatalog();
+    for (const scenarioId of config.scenarioIds) scenarioLoader.loadScenario(scenarioId);
+  } catch (error) {
+    if (error instanceof ScenarioCatalogError && error.code === "scenario_unresolved") {
+      admissionError("scenario_unresolved");
+    }
+    admissionError("scenario_catalog_invalid");
+  }
+  for (const skillId of config.skillIds) {
+    try {
+      defaultSkillRegistry.requireSkill(skillId);
+    } catch {
+      admissionError("skill_unresolved");
+    }
+  }
+}
+
+function requireNonEmptyUniqueSelectors(values: readonly string[]): void {
+  if (values.length === 0) admissionError("empty_matrix");
+  if (new Set(values).size !== values.length) admissionError("duplicate_selector");
 }
 
 function validatePartialRateLimit(value: Partial<RateLimitConfig>): void {
@@ -168,4 +231,8 @@ function requireEnum<T extends string>(value: T, allowed: readonly T[]): void {
 
 function invalid(): never {
   throw new TypeError(invalidSweepConfigurationMessage);
+}
+
+function admissionError(code: BenchmarkAdmissionErrorCode): never {
+  throw new BenchmarkAdmissionError(code);
 }

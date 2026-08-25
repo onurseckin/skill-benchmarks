@@ -1,7 +1,7 @@
 import { writeFileSync, readFileSync, existsSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { resolve } from "node:path";
 import type {
-  CliParsedArgs, CliCommandResult, BenchmarkRunOptions,
+  CliParsedArgs, CliCommandResult,
   TournamentOptions, ReportOptions, SyncOptions, ListOptions,
   ReplayCliOptions, FuzzCliOptions,
 } from "./types.js";
@@ -18,7 +18,6 @@ import {
   aggregateAllSkills, buildLeaderboardEntries,
   buildCategoryLeaderboards, extractCostEfficiencyPointsFromRuns,
 } from "../reporting/aggregator.js";
-import { MatrixSweepEngine } from "../sweep/index.js";
 import { ReplayEngine } from "../replay/replay-engine.js";
 import { TuiReplayPlayer } from "../replay/tui-player.js";
 import { exportWebReplayHtml } from "../replay/web-player.js";
@@ -26,84 +25,10 @@ import type { ReplaySession } from "../replay/types.js";
 import { FuzzerEngine } from "../fuzzer/fuzzer-engine.js";
 import type { FuzzingStrategy, MutationSeverity } from "../fuzzer/types.js";
 import { TournamentScheduler } from "../runner/tournament-scheduler.js";
-import { getOrCreateModelDefinition } from "../models/index.js";
 import { runArenaCommand } from "./arena-command.js";
-import { resolveBenchmarkRuntimeConfig } from "../shared/index.js";
 
 export { runArenaCommand };
-
-export async function runBenchmarkCommand(args: CliParsedArgs): Promise<CliCommandResult> {
-  const startTime = Date.now();
-  const options = args.benchmarkOptions !== undefined ? args.benchmarkOptions : ({} as BenchmarkRunOptions);
-  const runtimeConfig = resolveBenchmarkRuntimeConfig({
-    mock: options.mock,
-    live: options.live,
-    outputDir: options.outputDir,
-    providerId: options.providerId,
-  });
-  if (options.arena && options.arena.length >= 2) {
-    return runArenaCommand(args);
-  }
-  const scenarioLoader = new ScenarioLoader();
-  let scenarioIds = options.scenarioIds.length > 0 ? [...options.scenarioIds] : [];
-  if (scenarioIds.length === 0) {
-    if (options.category) {
-      const filtered = scenarioLoader.queryScenarios({ category: options.category });
-      scenarioIds = filtered.length > 0 ? filtered.map((s) => s.id) : ["git-worktrees"];
-    } else {
-      scenarioIds = ["git-worktrees"];
-    }
-  }
-  const skillIds = options.skillIds.length > 0 ? options.skillIds : ["using-git-worktrees"];
-  const modelIds = options.modelIds.length > 0 ? options.modelIds : ["claude-3-7-sonnet"];
-  const dbPath = options.dbPath ?? join(runtimeConfig.outputRoot, "db", "benchmarks.sqlite");
-
-  console.log(formatSectionHeader(`Executing Skill Benchmark Matrix: ${scenarioIds.length} scenario(s) x ${skillIds.length} skill(s) x ${modelIds.length} model(s)`));
-
-  const engine = new MatrixSweepEngine();
-  engine.on((event) => {
-    if (event.type === "cell:complete") {
-      const passedBenchmark = event.payload?.passedBenchmark === true;
-      console.log(`  ${formatBadge(passedBenchmark ? "success" : "info", passedBenchmark ? "PASS" : "COMPLETE")} ${cyan(event.cellId ?? "")} | ${event.message}`);
-    } else if (event.type === "cell:error") {
-      console.log(`  ${formatBadge("error", "FAIL")} ${cyan(event.cellId ?? "")} | ${event.message}`);
-    }
-  });
-
-  const models = modelIds.map((m) => {
-    const def = getOrCreateModelDefinition(m);
-    return {
-      modelId: m,
-      providerId: def.provider,
-      temperature: options.temperature,
-      thinkingLevel: options.thinking ?? def.defaultThinkingLevel,
-      thinkingBudget: options.thinkingBudget,
-      reasoningEffort: options.reasoning,
-    };
-  });
-
-  const sweepConfig = {
-    scenarioIds,
-    skillIds,
-    models,
-    thinkingLevels: options.matrixThinking,
-    repetitions: options.repetitions ?? 1,
-    dryRun: options.dryRun,
-    defaultExecutionLimits: {
-      ...(options.maxTurns === undefined ? {} : { maxTurns: options.maxTurns }),
-      ...(options.maxCostUSD === undefined ? {} : { maxCostUSD: options.maxCostUSD }),
-      ...(options.timeoutSeconds === undefined ? {} : { maxWallClockTimeMs: options.timeoutSeconds * 1000 }),
-    },
-    concurrency: { maxGlobalConcurrency: options.concurrency ?? 4 },
-    telemetryDbPath: dbPath,
-    runtimeConfig,
-  };
-  const summary = await engine.run(sweepConfig);
-
-  const terminalLabel = summary.status === "completed" ? "Complete" : summary.status === "aborted" ? "Aborted" : "Failed";
-  console.log(formatSectionHeader(`Sweep ${terminalLabel}: ${summary.completedCount}/${summary.completedCount + summary.failedCount} completed in ${(summary.totalDurationMs / 1000).toFixed(1)}s`));
-  return { success: summary.status === "completed" && summary.failedCount === 0, exitCode: summary.status === "completed" && summary.failedCount === 0 ? 0 : 1, durationMs: Date.now() - startTime, data: summary };
-}
+export { runBenchmarkCommand } from "./commands/run-command.js";
 
 export async function runTournamentCommand(args: CliParsedArgs): Promise<CliCommandResult> {
   const startTime = Date.now();
