@@ -11,5 +11,6 @@ export * from "./arena/index.js";
 export * from "./analytics/index.js";
 export * from "./tunnel/index.js";
 export * from "./chaos/index.js";
+export * from "./judge/index.js";
 export { runCli };
 export default runCli;

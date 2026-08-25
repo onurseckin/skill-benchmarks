@@ -2,8 +2,13 @@ import { readdirSync, statSync, readFileSync, existsSync } from "node:fs";
 import { join, extname } from "node:path";
 import { execSync } from "node:child_process";
 import { startStreamTunnel } from "../tunnel/index.js";
+import { createJudgeArena } from "../judge/index.js";
+import { BudgetController, OptimizerEngine } from "../optimizer/index.js";
 
 void startStreamTunnel;
+void createJudgeArena;
+void BudgetController;
+void OptimizerEngine;
 
 interface Violation {
   readonly file: string;
