@@ -11,7 +11,7 @@ import type {
   TelemetryEventRecord,
 } from "./types.js";
 import type { ExecutionMode } from "../shared/execution-mode.js";
-import { sanitizeBenchmarkArtifactValue } from "../shared/artifact-sanitization.js";
+import { BenchmarkArtifactValueStreamSanitizer, sanitizeBenchmarkArtifactValue } from "../shared/artifact-sanitization.js";
 import { claimTerminalRunIdentity, TerminalRunIdentityConflictError } from "./run-identity.js";
 export { TerminalRunIdentityConflictError } from "./run-identity.js";
 interface RunRow {
@@ -129,6 +129,7 @@ function computeConfidenceInterval(wins: number, ties: number, matches: number):
 
 export class TelemetryDatabase {
   private readonly db: Database;
+  private readonly telemetrySanitizer = new BenchmarkArtifactValueStreamSanitizer();
 
   public constructor(dbPath: string = ":memory:", options?: { readonly readonly?: boolean }) {
     this.db = options?.readonly === true ? new Database(dbPath, { readonly: true }) : new Database(dbPath);
@@ -260,7 +261,7 @@ export class TelemetryDatabase {
     `);
     const insertTransaction = this.db.transaction((records: ReadonlyArray<TelemetryEventRecord>) => {
       for (const event of records) {
-        const sanitizedEvent = sanitizeBenchmarkArtifactValue(event) as TelemetryEventRecord;
+        const sanitizedEvent = this.telemetrySanitizer.sanitize(event) as TelemetryEventRecord;
         stmt.run(
           sanitizedEvent.runId, sanitizedEvent.scenarioId, sanitizedEvent.skillId ?? null, sanitizedEvent.modelId,
           sanitizedEvent.timestampUs, sanitizedEvent.eventType, sanitizedEvent.sequenceNumber ?? null,

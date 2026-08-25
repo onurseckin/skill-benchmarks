@@ -1,24 +1,146 @@
 import { createHash } from "node:crypto";
 
-const credentialPattern = /(?:authorization\s*:\s*(?:basic|bearer)\s+\S+|bearer\s+[a-zA-Z0-9_.-]{12,}|(?:api[_-]?key|token|secret|password)\s*[=:]\s*\S+|["']?[a-z0-9_-]*(?:key|token)["']?\s*[=:]\s*\S+|sk-[a-zA-Z0-9_-]+)/i;
+const redactedSensitiveContent = "redacted sensitive content";
+const credentialPattern = /(?:authorization\s*:\s*bearer\s+\S+|bearer\s+[a-zA-Z0-9_.-]{12,}|(?:api[_-]?key|token|secret|password)\s*[=:]\s*\S+|["']?[a-z0-9_-]*(?:key|token)["']?\s*[=:]\s*\S+|sk-[a-zA-Z0-9_-]+)/i;
+const completeBasicAuthorizationPattern = /authorization\s*:\s*basic\s+\S+/gi;
+const completeBasicAuthorizationAtEndPattern = /authorization\s*:\s*basic\s+\S+$/i;
+const incompleteBasicAuthorizationPattern = /authorization\s*:\s*basic\s*$/i;
+const incompleteAuthorizationPattern = /authorization\s*:\s*$/i;
 const errorKeyPattern = /^(?:error|exception|stack|failure)|(?:Error|Exception|Stack|Failure)$/;
 const safePathSegmentPattern = /^[a-zA-Z0-9_.-]+$/;
+const sequenceBudget = 8;
+
+type AuthorizationSequenceStage = "idle" | "scheme" | "credential";
+type ArtifactStringRole = "content" | "descriptor" | "neutral" | "sequence";
+
+class BasicAuthorizationSequenceNormalizer {
+  private stage: AuthorizationSequenceStage = "idle";
+  private remainingBudget = 0;
+  private credentialMayContinue = false;
+
+  public sanitizeValue(value: unknown, propertyKey?: string): unknown {
+    if (typeof value === "string") return this.sanitizeText(value, classifyArtifactStringRole(propertyKey));
+    if (Array.isArray(value)) return value.map((child) => this.sanitizeValue(child));
+    if (value === null || typeof value !== "object") return value;
+    return Object.fromEntries(Object.entries(value).map(([key, child]) => [key, this.sanitizeValue(child, key)]));
+  }
+
+  public sanitizeText(value: string, role: ArtifactStringRole = "sequence"): string {
+    const completeRedaction = value.replace(completeBasicAuthorizationPattern, redactedSensitiveContent);
+    if (completeRedaction !== value) {
+      this.credentialMayContinue = completeBasicAuthorizationAtEndPattern.test(value);
+      this.reset();
+      return completeRedaction;
+    }
+    if (incompleteBasicAuthorizationPattern.test(value)) {
+      this.expect("credential");
+      return value.replace(incompleteBasicAuthorizationPattern, redactedSensitiveContent);
+    }
+    if (incompleteAuthorizationPattern.test(value)) {
+      this.expect("scheme");
+      return value.replace(incompleteAuthorizationPattern, redactedSensitiveContent);
+    }
+
+    const normalized = value.trim().toLowerCase();
+    if (this.stage === "scheme") return this.sanitizeExpectedScheme(value, normalized, role);
+    if (this.stage === "credential") return this.sanitizeExpectedCredential(value, role);
+    if (normalized === "authorization") {
+      this.expect("scheme");
+      return redactedSensitiveContent;
+    }
+    if (role === "descriptor" && normalized === "basic") {
+      this.expect("credential");
+      return redactedSensitiveContent;
+    }
+    return value;
+  }
+
+  private sanitizeExpectedScheme(value: string, normalized: string, role: ArtifactStringRole): string {
+    if (/^basic\s+\S+$/i.test(value.trim())) {
+      this.reset();
+      return redactedSensitiveContent;
+    }
+    if (normalized === "basic") {
+      this.expect("credential");
+      return redactedSensitiveContent;
+    }
+    this.consumeBudget();
+    if (role === "content" || role === "sequence") this.reset();
+    return value;
+  }
+
+  private sanitizeExpectedCredential(value: string, role: ArtifactStringRole): string {
+    if ((role === "content" || role === "sequence") && /\S/.test(value)) {
+      this.credentialMayContinue = !/\S\s/.test(value);
+      this.reset();
+      return value.replace(/^(\s*)\S+/, `$1${redactedSensitiveContent}`);
+    }
+    this.consumeBudget();
+    return value;
+  }
+
+  private expect(stage: Exclude<AuthorizationSequenceStage, "idle">): void {
+    this.stage = stage;
+    this.remainingBudget = sequenceBudget;
+  }
+
+  private consumeBudget(): void {
+    this.remainingBudget -= 1;
+    if (this.remainingBudget <= 0) this.reset();
+  }
+
+  private reset(): void {
+    this.stage = "idle";
+    this.remainingBudget = 0;
+  }
+
+  public takeCredentialContinuation(): boolean {
+    const credentialMayContinue = this.credentialMayContinue;
+    this.credentialMayContinue = false;
+    return credentialMayContinue;
+  }
+}
+
+export class BenchmarkArtifactTextStreamSanitizer {
+  private readonly normalizer = new BasicAuthorizationSequenceNormalizer();
+  private credentialContinuation = false;
+
+  public sanitize(value: string): string {
+    if (this.credentialContinuation) return this.sanitizeCredentialContinuation(value);
+    const sanitized = sanitizeNormalizedArtifactText(this.normalizer.sanitizeText(value));
+    this.credentialContinuation = this.normalizer.takeCredentialContinuation();
+    return sanitized;
+  }
+
+  private sanitizeCredentialContinuation(value: string): string {
+    if (value.length === 0) return value;
+    if (/^\s/.test(value)) {
+      this.credentialContinuation = false;
+      return this.sanitize(value);
+    }
+    const suffixStart = value.search(/\s/);
+    if (suffixStart < 0) return redactedSensitiveContent;
+    this.credentialContinuation = false;
+    return redactedSensitiveContent + this.sanitize(value.slice(suffixStart));
+  }
+}
+
+export class BenchmarkArtifactValueStreamSanitizer {
+  private readonly normalizer = new BasicAuthorizationSequenceNormalizer();
+
+  public sanitize(value: unknown): unknown {
+    return sanitizeNormalizedArtifactValue(this.normalizer.sanitizeValue(value));
+  }
+}
 
 export function sanitizeBenchmarkArtifactValue(value: unknown): unknown {
-  if (typeof value === "string") return sanitizeBenchmarkArtifactText(value);
-  if (Array.isArray(value)) return sanitizeArtifactArray(value);
-  if (value === null || typeof value !== "object") return value;
-  const entries = Object.entries(value);
-  if (containsBasicAuthorizationScheme(entries)) return redactArtifactStringValues(value);
-  return Object.fromEntries(entries
-    .filter(([key]) => !isSensitiveArtifactPropertyKey(key))
-    .map(([key, child]) => [key, sanitizeArtifactProperty(key, child)]));
+  const normalized = new BasicAuthorizationSequenceNormalizer().sanitizeValue(value);
+  return sanitizeNormalizedArtifactValue(normalized);
 }
 
 export function sanitizeBenchmarkArtifactText(value: string): string {
-  const sanitizedJson = sanitizeJsonArtifactText(value);
-  if (sanitizedJson !== undefined) return sanitizedJson;
-  return credentialPattern.test(value) ? "redacted sensitive content" : value;
+  const normalized = new BasicAuthorizationSequenceNormalizer().sanitizeText(value);
+  return sanitizeNormalizedArtifactText(normalized);
 }
 
 export function createSafeArtifactPathSegment(value: string, fallback: string): string {
@@ -29,44 +151,41 @@ export function createSafeArtifactPathSegment(value: string, fallback: string): 
   return `${prefix.length > 0 ? prefix : fallback}-${digest}`;
 }
 
+function sanitizeNormalizedArtifactValue(value: unknown): unknown {
+  if (typeof value === "string") return sanitizeNormalizedArtifactText(value);
+  if (Array.isArray(value)) return value.map(sanitizeNormalizedArtifactValue);
+  if (value === null || typeof value !== "object") return value;
+  return Object.fromEntries(Object.entries(value)
+    .filter(([key]) => !isSensitiveArtifactPropertyKey(key))
+    .map(([key, child]) => [key, sanitizeArtifactProperty(key, child)]));
+}
+
+function sanitizeNormalizedArtifactText(value: string): string {
+  const sanitizedJson = sanitizeJsonArtifactText(value);
+  if (sanitizedJson !== undefined) return sanitizedJson;
+  return credentialPattern.test(value) ? redactedSensitiveContent : value;
+}
+
 function sanitizeArtifactProperty(key: string, value: unknown): unknown {
   if (errorKeyPattern.test(key) && typeof value === "string") return "execution failed";
-  if (isHeaderCollectionKey(key) && Array.isArray(value)) return sanitizeHeaderCollection(value);
-  return sanitizeBenchmarkArtifactValue(value);
-}
-
-function sanitizeArtifactArray(value: readonly unknown[]): readonly unknown[] {
-  return value.map(sanitizeBenchmarkArtifactValue);
-}
-
-function sanitizeHeaderCollection(value: readonly unknown[]): readonly unknown[] {
-  const strings = value.filter((item): item is string => typeof item === "string");
-  const hasAuthorizationHeader = strings.some((item) => item.trim().toLowerCase() === "authorization");
-  const hasBasicScheme = strings.some((item) => /^basic(?:\s+\S+)?$/i.test(item.trim()));
-  if (hasAuthorizationHeader && hasBasicScheme) return value.map(redactArtifactStringValues);
-  return sanitizeArtifactArray(value);
-}
-
-function containsBasicAuthorizationScheme(entries: readonly (readonly [string, unknown])[]): boolean {
-  return entries.some(([key, value]) => normalizeArtifactKey(key) === "scheme" && typeof value === "string" && value.trim().toLowerCase() === "basic");
-}
-
-function redactArtifactStringValues(value: unknown): unknown {
-  if (typeof value === "string") return "redacted sensitive content";
-  if (Array.isArray(value)) return value.map(redactArtifactStringValues);
-  if (value === null || typeof value !== "object") return value;
-  return Object.fromEntries(Object.entries(value).map(([key, child]) => [key, redactArtifactStringValues(child)]));
+  return sanitizeNormalizedArtifactValue(value);
 }
 
 function sanitizeJsonArtifactText(value: string): string | undefined {
   try {
     const parsed = JSON.parse(value) as unknown;
-    if (parsed !== null && typeof parsed === "object") {
-      return JSON.stringify(sanitizeBenchmarkArtifactValue(parsed));
-    }
+    if (parsed !== null && typeof parsed === "object") return JSON.stringify(sanitizeBenchmarkArtifactValue(parsed));
   } catch {
   }
   return undefined;
+}
+
+function classifyArtifactStringRole(propertyKey?: string): ArtifactStringRole {
+  if (propertyKey === undefined) return "sequence";
+  const normalized = normalizeArtifactKey(propertyKey);
+  if (["content", "credential", "data", "message", "output", "text", "value", "chunk"].includes(normalized)) return "content";
+  if (["header", "headers", "key", "label", "name", "role", "scheme", "type"].includes(normalized)) return "descriptor";
+  return "neutral";
 }
 
 function isSensitiveArtifactPropertyKey(key: string): boolean {
@@ -82,11 +201,6 @@ function isSensitiveArtifactPropertyKey(key: string): boolean {
     || token === "key"
     || token === "token"
   ));
-}
-
-function isHeaderCollectionKey(key: string): boolean {
-  const normalized = normalizeArtifactKey(key);
-  return normalized === "header" || normalized === "headers";
 }
 
 function normalizeArtifactKey(key: string): string {

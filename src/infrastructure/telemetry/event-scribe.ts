@@ -5,7 +5,7 @@ import type {
   TelemetryEventType,
   ResourceProfileSample,
 } from "./types.js";
-import { sanitizeBenchmarkArtifactText, sanitizeBenchmarkArtifactValue } from "../../shared/artifact-sanitization.js";
+import { BenchmarkArtifactTextStreamSanitizer, BenchmarkArtifactValueStreamSanitizer } from "../../shared/artifact-sanitization.js";
 
 export const DEFAULT_MAX_OUTPUT_BYTES_PER_COMMAND = 5 * 1024 * 1024;
 export const DEFAULT_BATCH_SIZE = 50;
@@ -72,6 +72,8 @@ export class EventScribe {
   private flushTimer: ReturnType<typeof setInterval> | null = null;
   private isClosed: boolean = false;
   private writeLock: Promise<void> = Promise.resolve();
+  private readonly textSanitizer = new BenchmarkArtifactTextStreamSanitizer();
+  private readonly valueSanitizer = new BenchmarkArtifactValueStreamSanitizer();
 
   constructor(options: EventScribeOptions) {
     this.runId = options.runId;
@@ -105,7 +107,7 @@ export class EventScribe {
     payload: Readonly<Record<string, unknown>> = {}
   ): TelemetryEvent {
     this.sequenceNumber += 1;
-    const sanitizedPayload = sanitizeBenchmarkArtifactValue(payload) as Readonly<Record<string, unknown>>;
+    const sanitizedPayload = this.valueSanitizer.sanitize(payload) as Readonly<Record<string, unknown>>;
     const event = createTelemetryEvent(this.runId, this.sequenceNumber, type, sanitizedPayload);
     this.eventBuffer.push(JSON.stringify(event) + "\n");
     if (this.eventBuffer.length >= this.batchSize) void this.flush();
@@ -177,7 +179,7 @@ export class EventScribe {
       this.commandTruncated.add(commandId);
     }
 
-    const textToWrite = sanitizeBenchmarkArtifactText(bufferToWrite.toString("utf-8"));
+    const textToWrite = this.textSanitizer.sanitize(bufferToWrite.toString("utf-8"));
     const newTotal = currentCount + bytesToWrite;
     this.commandByteCounts.set(commandId, newTotal);
 
@@ -253,7 +255,7 @@ export class EventScribe {
       this.commandTruncated.add(commandId);
     }
 
-    const textToWrite = sanitizeBenchmarkArtifactText(bufferToWrite.toString("utf-8"));
+    const textToWrite = this.textSanitizer.sanitize(bufferToWrite.toString("utf-8"));
     const newTotal = currentCount + bytesToWrite;
     this.commandByteCounts.set(commandId, newTotal);
 

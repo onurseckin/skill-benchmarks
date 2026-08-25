@@ -17,6 +17,8 @@ export type {
 } from "./benchmark-runtime-config.js";
 
 export {
+  BenchmarkArtifactTextStreamSanitizer,
+  BenchmarkArtifactValueStreamSanitizer,
   createSafeArtifactPathSegment,
   sanitizeBenchmarkArtifactText,
   sanitizeBenchmarkArtifactValue,

@@ -314,21 +314,11 @@ export function formatBadge(status: StatusBadgeStatus, customText?: string): str
 
 export function formatError(error: unknown, verbose: boolean = false): string {
   const prefix = red(bold("Error:"));
-  if (error instanceof Error) {
-    const mainMessage = `${prefix} ${red(error.message)}`;
-    if (verbose && error.stack !== undefined && error.stack.length > 0) {
-      return `${mainMessage}\n${dim(error.stack)}`;
-    }
-    return mainMessage;
-  }
-  if (typeof error === "string") {
-    return `${prefix} ${red(error)}`;
-  }
-  if (error !== null && typeof error === "object" && "message" in error) {
-    const msg = String((error as { readonly message?: unknown }).message ?? "");
-    return `${prefix} ${red(msg)}`;
-  }
-  return `${prefix} ${red(String(error))}`;
+  const summary = error instanceof TypeError
+    ? "Command input or configuration is invalid. Verify flags, paths, and required local files."
+    : "Command failed. Verify local configuration and retry.";
+  const guidance = verbose ? `\n${dim("Raw exception details are not printed on public CLI surfaces.")}` : "";
+  return `${prefix} ${red(summary)}${guidance}`;
 }
 
 export function formatKeyValueList(pairs: readonly (readonly [string, string])[]): string {
