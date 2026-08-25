@@ -220,23 +220,6 @@ export interface CostEfficiencyPoint {
   readonly durationMs: number;
 }
 
-export interface RunQueryFilter {
-  readonly scenarioId?: string;
-  readonly skillId?: string;
-  readonly modelId?: string;
-  readonly providerId?: string;
-  readonly category?: string;
-  readonly status?: RunStatus;
-  readonly eligibilityStatus?: "eligible" | "ineligible" | "unknown";
-  readonly passedBenchmark?: boolean;
-  readonly minScore?: number;
-  readonly maxScore?: number;
-  readonly fromDate?: string;
-  readonly toDate?: string;
-  readonly limit?: number;
-  readonly offset?: number;
-}
-
 export interface EloRatingRecord {
   readonly skillId: string;
   readonly rating: number;
@@ -247,18 +230,6 @@ export interface EloRatingRecord {
   readonly winRate: number;
   readonly confidenceInterval95: readonly [number, number];
   readonly lastUpdated: string;
-}
-
-export interface HistoricalTrendPoint {
-  readonly timestamp: string;
-  readonly commitSha?: string;
-  readonly skillVersion?: string;
-  readonly passRate: number;
-  readonly averageScore: number;
-  readonly meanDurationMs: number;
-  readonly averageCostUSD?: number;
-  readonly eloRating?: number;
-  readonly sampleCount: number;
 }
 
 export interface NeoBrutalistDashboardConfig {

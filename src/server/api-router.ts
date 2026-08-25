@@ -1,22 +1,11 @@
 import type { TelemetryDatabase } from "../reporting/db.js";
-import type {
-  LeaderboardEntry,
-  EligibleRunRecord,
-  RunQueryFilter,
-  RunRecord,
-  RunStatus,
-  SkillBenchmarkSummary,
-  TelemetryEventRecord,
-} from "../reporting/types.js";
-import { aggregateAllSkills, buildLeaderboardEntries as createLeaderboardEntries } from "../reporting/aggregator.js";
-import { generateHtmlDashboard } from "../reporting/html-dashboard.js";
+import type { RunRecord, TelemetryEventRecord } from "../reporting/types.js";
 import { generateWebReplayHtml } from "../replay/web-player.js";
 import { createRunArtifactLayout } from "../infrastructure/workspace/run-artifact-layout.js";
 import { loadReplaySession } from "../replay/event-session-loader.js";
 import { ReplayEvidenceInvalidError, ReplayEvidenceUnavailableError } from "../replay/errors.js";
 import type { ReplayEvidenceIdentity, ReplaySession } from "../replay/types.js";
 import type {
-  ApiResponse,
   HttpMethod,
   LiveTelemetryPayload,
   RouteContext,
@@ -26,36 +15,10 @@ import type {
   ServerState,
   SseEvent,
 } from "./types.js";
+import { defaultCorsHeaders, errorResponse, jsonResponse } from "./http-responses.js";
+import { registerReportRoutes } from "./report-routes.js";
 
-const DEFAULT_CORS: Readonly<Record<string, string>> = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, HEAD, PATCH",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With",
-};
-
-export function jsonResponse<T>(data: T, status = 200, headers?: Record<string, string>): Response {
-  const body: ApiResponse<T> = {
-    success: status >= 200 && status < 300,
-    data,
-    timestamp: new Date().toISOString(),
-  };
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "Content-Type": "application/json; charset=utf-8", ...DEFAULT_CORS, ...headers },
-  });
-}
-
-export function errorResponse(message: string, status = 400, headers?: Record<string, string>): Response {
-  const body: ApiResponse<never> = {
-    success: false,
-    error: message,
-    timestamp: new Date().toISOString(),
-  };
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "Content-Type": "application/json; charset=utf-8", ...DEFAULT_CORS, ...headers },
-  });
-}
+export { errorResponse, jsonResponse } from "./http-responses.js";
 
 export function parsePattern(pattern: string): { regex: RegExp; paramNames: string[] } {
   const paramNames: string[] = [];
@@ -103,7 +66,7 @@ export class ApiRouter {
     broadcast: (event: SseEvent, runIdFilter?: string) => void
   ): Promise<Response> {
     if (req.method === "OPTIONS") {
-      return new Response(null, { status: 204, headers: DEFAULT_CORS });
+      return new Response(null, { status: 204, headers: defaultCorsHeaders });
     }
 
     const url = new URL(req.url);
@@ -145,6 +108,7 @@ export class ApiRouter {
   }
 
   private registerBuiltInRoutes(): void {
+    registerReportRoutes(this);
     this.get("/api/health", (ctx) => {
       const mem = process.memoryUsage();
       return jsonResponse({
@@ -159,22 +123,9 @@ export class ApiRouter {
       });
     });
 
-    this.get("/api/runs", (ctx) => {
-      const filter = this.buildRunQueryFilter(ctx.query);
-      const runs = ctx.db.queryRuns(filter);
-      const limit = filter.limit ?? runs.length;
-      const offset = filter.offset ?? 0;
-      return jsonResponse({
-        runs,
-        total: runs.length,
-        page: limit > 0 ? Math.floor(offset / limit) + 1 : 1,
-        pageSize: limit,
-      });
-    });
-
     this.get("/api/runs/:id", (ctx) => {
       const id = ctx.params.id ?? "";
-      const run = ctx.db.queryRuns({ limit: 1000 }).find((r) => r.runId === id);
+      const run = ctx.db.getRunRecord(id);
       return run ? jsonResponse(run) : errorResponse(`Run record not found: ${id}`, 404);
     });
 
@@ -182,34 +133,6 @@ export class ApiRouter {
       const id = ctx.params.id ?? "";
       const replay = this.loadPersistedReplay(ctx, id);
       return replay instanceof Response ? replay : jsonResponse({ session: replay });
-    });
-
-    this.get("/api/leaderboard", (ctx) => {
-      const eloRatings = ctx.db.getEloLeaderboard();
-      const runs = ctx.db.queryEligibleRuns();
-      const entries = this.buildLeaderboardEntries(runs, eloRatings);
-      const cat = ctx.query.get("category");
-      const filtered = cat && cat !== "all" ? entries.filter((e) => e.category === cat) : entries;
-      return jsonResponse({ entries: filtered, eloRatings, total: filtered.length, lastUpdated: new Date().toISOString() });
-    });
-
-    this.get("/api/trends", (ctx) => {
-      const skillId = ctx.query.get("skillId") ?? undefined;
-      return jsonResponse({ skillId, trends: ctx.db.getHistoricalTrends(skillId) });
-    });
-
-    this.get("/api/summary", (ctx) => {
-      const runs = ctx.db.queryRuns();
-      const eligibleRuns = ctx.db.queryEligibleRuns();
-      const completed = runs.filter((r) => r.status === "completed").length;
-      const failed = runs.filter((r) => r.status === "failed" || r.status === "timed_out").length;
-      return jsonResponse({
-        totalRuns: runs.length,
-        completedRuns: completed,
-        failedRuns: failed,
-        topSkills: this.buildSkillSummaries(eligibleRuns).slice(0, 10),
-        recentRuns: runs.slice(-10).reverse(),
-      });
     });
 
     this.post("/api/telemetry/live", async (ctx) => {
@@ -235,42 +158,12 @@ export class ApiRouter {
       }
     });
 
-    this.get("/", (ctx) => {
-      const runs = ctx.db.queryEligibleRuns();
-      const entries = this.buildLeaderboardEntries(runs, ctx.db.getEloLeaderboard());
-      const summaries = this.buildSkillSummaries(runs);
-      const html = generateHtmlDashboard(summaries, entries, [], {
-        title: "Skill Benchmarks Live Dashboard",
-        totalRuns: runs.length,
-        lastUpdated: new Date().toISOString(),
-      });
-      return new Response(html, { headers: { "Content-Type": "text/html; charset=utf-8" } });
-    });
-
     this.get("/replay/:id", (ctx) => {
       const id = ctx.params.id ?? "";
       const replay = this.loadPersistedReplay(ctx, id);
       if (replay instanceof Response) return replay;
       return new Response(generateWebReplayHtml(replay), { headers: { "Content-Type": "text/html; charset=utf-8" } });
     });
-  }
-
-  private buildRunQueryFilter(query: URLSearchParams): RunQueryFilter {
-    const filter: Record<string, unknown> = {};
-    if (query.has("scenarioId")) filter.scenarioId = query.get("scenarioId")!;
-    if (query.has("skillId")) filter.skillId = query.get("skillId")!;
-    if (query.has("modelId")) filter.modelId = query.get("modelId")!;
-    if (query.has("providerId")) filter.providerId = query.get("providerId")!;
-    if (query.has("category")) filter.category = query.get("category")!;
-    if (query.has("status")) filter.status = query.get("status")! as RunStatus;
-    if (query.has("passedBenchmark")) filter.passedBenchmark = query.get("passedBenchmark") === "true";
-    if (query.has("minScore")) filter.minScore = parseFloat(query.get("minScore")!);
-    if (query.has("maxScore")) filter.maxScore = parseFloat(query.get("maxScore")!);
-    if (query.has("fromDate")) filter.fromDate = query.get("fromDate")!;
-    if (query.has("toDate")) filter.toDate = query.get("toDate")!;
-    if (query.has("limit")) filter.limit = parseInt(query.get("limit")!, 10);
-    if (query.has("offset")) filter.offset = parseInt(query.get("offset")!, 10);
-    return filter as RunQueryFilter;
   }
 
   private loadPersistedReplay(ctx: RouteContext, id: string): ReplaySession | Response {
@@ -297,16 +190,6 @@ export class ApiRouter {
     }
   }
 
-  private buildSkillSummaries(runs: readonly EligibleRunRecord[]): readonly SkillBenchmarkSummary[] {
-    return aggregateAllSkills(runs);
-  }
-
-  private buildLeaderboardEntries(
-    runs: readonly EligibleRunRecord[],
-    eloRatings: readonly { skillId: string; rating: number }[]
-  ): readonly LeaderboardEntry[] {
-    return createLeaderboardEntries(runs, undefined, eloRatings);
-  }
 }
 
 function createExpectedReplayIdentity(record: RunRecord): ReplayEvidenceIdentity {

@@ -1,104 +1,34 @@
-import { writeFileSync } from "node:fs";
-import type { EligibleRunRecord } from "./types.js";
-
-export interface BadgeOptions {
-  readonly label: string;
-  readonly value: string | number;
-  readonly color?: string;
-  readonly style?: "flat" | "neo";
-}
+import type { ReportLeaderboardEntry } from "./report-cohorts.js";
 
 export interface ReportCardOptions {
   readonly title?: string;
-  readonly includeChecks?: boolean;
 }
 
-function escapeXml(str: string): string {
-  return str
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&apos;");
+export function generateReportCardHtml(entry: ReportLeaderboardEntry, options: ReportCardOptions = {}): string {
+  requireCardEntry(entry);
+  const title = escapeXml(options.title ?? `Eligible benchmark: ${entry.skillId}`);
+  const cost = entry.verifiedActualCost === undefined
+    ? "VERIFIED ACTUAL COST UNAVAILABLE"
+    : `$${entry.verifiedActualCost.mean.toFixed(4)} (${entry.verifiedActualCost.sampleCount} samples)`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><style>body{background:rgb(0,0,0);color:rgb(255,255,255);font-family:ui-monospace,monospace;padding:24px}.card{max-width:760px;margin:auto;border:2px solid rgb(255,255,255);box-shadow:4px 4px rgb(255,255,255);padding:20px}.facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.fact{border:1px solid rgb(255,255,255);padding:12px}.label{color:rgb(170,170,170);font-size:11px}.value{font-size:20px;font-weight:800}</style></head><body><main class="card"><h1>${title}</h1><p>${escapeXml(entry.category)} · ${escapeXml(entry.skillId)}</p><div class="facts"><div class="fact"><div class="label">ELIGIBLE SAMPLES</div><div class="value">${entry.eligibleRunCount}</div></div><div class="fact"><div class="label">PASS RATE</div><div class="value">${entry.passRate.toFixed(1)}%</div></div><div class="fact"><div class="label">MEAN SCORE</div><div class="value">${entry.score.mean.toFixed(2)}</div></div><div class="fact"><div class="label">VERIFIED ACTUAL COST</div><div class="value">${cost}</div></div></div></main></body></html>`;
 }
 
-export function generateBenchmarkBadgeSvg(options: BadgeOptions): string {
-  const label = escapeXml(options.label.toUpperCase());
-  const value = escapeXml(String(options.value));
-  const style = options.style ?? "neo";
-  const labelWidth = Math.max(50, label.length * 8 + 16);
-  const valueWidth = Math.max(50, value.length * 8 + 16);
-  const totalWidth = labelWidth + valueWidth;
-  const height = 28;
+export function generateReportCardSvg(entry: ReportLeaderboardEntry): string {
+  requireCardEntry(entry);
+  const skill = escapeXml(entry.skillId);
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="160" viewBox="0 0 640 160"><rect width="640" height="160" fill="rgb(0,0,0)" stroke="rgb(255,255,255)" stroke-width="4"/><text x="24" y="42" fill="rgb(255,255,255)" font-family="monospace" font-size="22" font-weight="700">${skill}</text><text x="24" y="78" fill="rgb(170,170,170)" font-family="monospace" font-size="16">ELIGIBLE SAMPLES ${entry.eligibleRunCount}</text><text x="24" y="112" fill="rgb(255,255,255)" font-family="monospace" font-size="20">PASS ${entry.passRate.toFixed(1)}% · SCORE ${entry.score.mean.toFixed(2)}</text></svg>`;
+}
 
-  if (style === "neo") {
-    return `<svg xmlns="http://www.w3.org/2000/svg" width="${totalWidth + 4}" height="${height + 4}" viewBox="0 0 ${totalWidth + 4} ${height + 4}"><rect x="4" y="4" width="${totalWidth}" height="${height}" fill="#ffffff"/><rect x="0" y="0" width="${totalWidth}" height="${height}" fill="#000000" stroke="#ffffff" stroke-width="2"/><rect x="0" y="0" width="${labelWidth}" height="${height}" fill="#111111" stroke="#ffffff" stroke-width="2"/><text x="${labelWidth / 2}" y="18" fill="#888888" font-family="monospace" font-size="11" font-weight="900" text-anchor="middle">${label}</text><text x="${labelWidth + valueWidth / 2}" y="18" fill="#ffffff" font-family="monospace" font-size="11" font-weight="900" text-anchor="middle">${value}</text></svg>`;
+export function renderReportCard(entry: ReportLeaderboardEntry, format: "svg" | "html"): string {
+  return format === "svg" ? generateReportCardSvg(entry) : generateReportCardHtml(entry);
+}
+
+function requireCardEntry(entry: ReportLeaderboardEntry): void {
+  if (!Number.isSafeInteger(entry.eligibleRunCount) || entry.eligibleRunCount < 1 || entry.score.sampleCount < 1) {
+    throw new TypeError("Report card requires eligible benchmark evidence");
   }
-
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${totalWidth}" height="20" viewBox="0 0 ${totalWidth} 20"><rect width="${labelWidth}" height="20" fill="#555555"/><rect x="${labelWidth}" width="${valueWidth}" height="20" fill="#222222"/><text x="${labelWidth / 2}" y="14" fill="#ffffff" font-family="sans-serif" font-size="10" font-weight="700" text-anchor="middle">${label}</text><text x="${labelWidth + valueWidth / 2}" y="14" fill="#ffffff" font-family="sans-serif" font-size="10" font-weight="700" text-anchor="middle">${value}</text></svg>`;
 }
 
-export function generateReportCardHtml(
-  item: EligibleRunRecord,
-  options: ReportCardOptions = {}
-): string {
-  const title = escapeXml(options.title ?? `Benchmark Run: ${item.runId}`);
-  const score = item.compositeScore.toFixed(3);
-  const passRate = item.passedBenchmark ? "100.0%" : "0.0%";
-  const cost = item.actualCostUSD === undefined ? "UNVERIFIED" : `$${item.actualCostUSD.toFixed(4)}`;
-  const duration = `${(item.wallClockMs / 1000).toFixed(2)}s`;
-  const badgeSvg = generateBenchmarkBadgeSvg({ label: "SKILL-BENCHMARK", value: `${score} (${passRate})` });
-
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>${title}</title>
-  <style>
-    body { background: #000000; color: #ffffff; font-family: "JetBrains Mono", monospace; padding: 24px; margin: 0; }
-    .card-container { max-width: 800px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
-    .header-box { border: 2px solid #ffffff; box-shadow: 4px 4px 0px #ffffff; padding: 20px; background: #000000; display: flex; justify-content: space-between; align-items: center; }
-    .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
-    .kpi-cell { border: 2px solid #ffffff; box-shadow: 2px 2px 0px #ffffff; padding: 14px; background: #000000; }
-    .kpi-label { font-size: 10px; color: #888888; font-weight: 700; text-transform: uppercase; margin-bottom: 4px; }
-    .kpi-val { font-size: 22px; font-weight: 900; color: #ffffff; }
-  </style>
-</head>
-<body>
-  <main class="card-container">
-    <header class="header-box">
-      <div>
-        <h1 style="font-size:18px;font-weight:900;margin:0 0 6px;text-transform:uppercase">⚡ ${title}</h1>
-        <div style="font-size:11px;color:#888888">Scenario: ${escapeXml(item.scenarioId)} &bull; Skill: ${escapeXml(item.skillId)} &bull; Model: ${escapeXml(item.modelId)}</div>
-      </div>
-      <div>${badgeSvg}</div>
-    </header>
-    <section class="kpi-grid">
-      <div class="kpi-cell"><div class="kpi-label">SCORE</div><div class="kpi-val">${score}</div></div>
-      <div class="kpi-cell"><div class="kpi-label">PASS RATE</div><div class="kpi-val">${passRate}</div></div>
-      <div class="kpi-cell"><div class="kpi-label">DURATION</div><div class="kpi-val">${duration}</div></div>
-      <div class="kpi-cell"><div class="kpi-label">COST (USD)</div><div class="kpi-val">${cost}</div></div>
-    </section>
-  </main>
-</body>
-</html>`;
-}
-
-export function exportReportCard(
-  item: EligibleRunRecord,
-  format: "svg" | "html",
-  outputPath: string
-): void {
-  if (format === "svg") {
-    const score = item.compositeScore.toFixed(3);
-    const svg = generateBenchmarkBadgeSvg({
-      label: item.skillId,
-      value: score,
-    });
-    writeFileSync(outputPath, svg, "utf8");
-  } else {
-    const html = generateReportCardHtml(item);
-    writeFileSync(outputPath, html, "utf8");
-  }
+function escapeXml(value: string): string {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
 }

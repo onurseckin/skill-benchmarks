@@ -1,11 +1,12 @@
-import type { CliCommandName, CliOutputFormat, BenchmarkRunOptions, TournamentOptions, ReportOptions, SyncOptions, ListOptions, ReplayCliOptions, FuzzCliOptions, ArenaCliOptions, CliParsedArgs } from "./types.js";
+import type { CliCommandName, CliOutputFormat, BenchmarkRunOptions, TournamentOptions, SyncOptions, ListOptions, ReplayCliOptions, FuzzCliOptions, ArenaCliOptions, CliParsedArgs } from "./types.js";
 import { getReplayHelpText } from "./replay-help.js";
+import { parseReportOptions } from "./report-options.js";
 type FlagValueKind = "string" | "boolean" | "number" | "array";
 interface FlagSpec { readonly canonical: string; readonly kind: FlagValueKind; readonly aliases: readonly string[]; }
 const SPECS: readonly (readonly [string, FlagValueKind, readonly string[]])[] = [
   ["scenario", "array", ["s", "scenario", "scenarios"]], ["skill", "array", ["k", "skill", "skills"]],
-  ["model", "array", ["m", "model", "models"]], ["provider", "string", ["p", "provider"]],
-  ["category", "string", ["c", "category"]], ["tag", "array", ["t", "tag", "tags"]],
+  ["model", "array", ["m", "model", "models"]], ["provider", "array", ["p", "provider"]],
+  ["category", "array", ["c", "category"]], ["tag", "array", ["t", "tag", "tags"]],
   ["concurrency", "number", ["j", "concurrency"]], ["repetitions", "number", ["r", "repeats", "repetitions"]],
   ["temperature", "number", ["temperature"]], ["timeoutSeconds", "number", ["timeout", "timeout-seconds", "timeoutSeconds"]],
   ["maxTurns", "number", ["max-turns", "maxTurns"]], ["maxCostUSD", "number", ["max-cost", "maxCost", "max-cost-usd", "maxCostUSD"]],
@@ -37,6 +38,12 @@ const SPECS: readonly (readonly [string, FlagValueKind, readonly string[]])[] = 
   ["dryRun", "boolean", ["dry-run", "dryRun"]], ["mock", "boolean", ["mock"]],
   ["exportCard", "string", ["export-card", "exportCard", "card", "report-card", "reportCard"]],
   ["cardOutputPath", "string", ["card-output", "cardOutputPath", "card-out", "cardOut"]],
+  ["status", "array", ["status"]], ["executionMode", "array", ["execution-mode", "executionMode"]],
+  ["simulated", "string", ["simulated"]], ["authority", "string", ["authority"]],
+  ["cohort", "array", ["cohort"]], ["eligibility", "array", ["eligibility"]],
+  ["evaluationStatus", "array", ["evaluation-status", "evaluationStatus"]],
+  ["evidenceStatus", "array", ["evidence-status", "evidenceStatus"]],
+  ["fromDate", "string", ["from-date", "fromDate"]], ["toDate", "string", ["to-date", "toDate"]],
 ];
 const FLAG_MAP = new Map<string, FlagSpec>();
 for (const [canonical, kind, aliases] of SPECS) {
@@ -85,7 +92,6 @@ function assignFlag(flags: Record<string, string | boolean | number | string[]>,
     else flags[rawKey] = parsed;
   }
 }
-
 function parseToken(token: string): { key: string; value?: string } {
   if (token.startsWith("--") || token.startsWith("-")) {
     const prefixLen = token.startsWith("--") ? 2 : 1;
@@ -141,8 +147,8 @@ export function parseCliArgs(argv: readonly string[]): CliParsedArgs {
 
   const benchmarkOptions: BenchmarkRunOptions = {
     scenarioIds: toArr(flags["scenario"]).concat(positionals), skillIds: toArr(flags["skill"]),
-    modelIds: toArr(flags["model"]), providerId: toStr(flags["provider"]),
-    category: toStr(flags["category"]), tags: toArr(flags["tag"]),
+    modelIds: toArr(flags["model"]), providerId: toArr(flags["provider"]).slice(-1)[0],
+    category: toArr(flags["category"]).slice(-1)[0], tags: toArr(flags["tag"]),
     concurrency: toNum(flags["concurrency"]), repetitions: toNum(flags["repetitions"]),
     temperature: toNum(flags["temperature"]),
     thinking: toStr(flags["thinking"]) as BenchmarkRunOptions["thinking"],
@@ -193,24 +199,16 @@ export function parseCliArgs(argv: readonly string[]): CliParsedArgs {
     outputPath: toStr(flags["outputPath"]), verbose: toBool(flags["verbose"]), maxMatches: toNum(flags["maxMatches"]),
   };
 
-  const reportOptions: ReportOptions = {
-    format: toStr(flags["format"]) as CliOutputFormat | undefined, outputPath: toStr(flags["outputPath"]),
-    dbPath: toStr(flags["dbPath"]), category: toStr(flags["category"]),
-    skillId: toStr(flags["skill"]), modelId: toStr(flags["model"]),
-    controlSkillId: toStr(flags["controlSkillId"]), title: toStr(flags["title"]),
-    includeTrends: toBool(flags["includeTrends"]), includeCostEfficiency: toBool(flags["includeCostEfficiency"]),
-    exportCard: toStr(flags["exportCard"]) as "svg" | "html" | undefined,
-    cardOutputPath: toStr(flags["cardOutputPath"]),
-  };
+  const reportOptions = command === "report" ? parseReportOptions(flags, positionals, argv) : undefined;
 
   const syncOptions: SyncOptions = {
     catalogPath: toStr(flags["catalogPath"]), targetDir: toStr(flags["targetDir"]),
-    category: toStr(flags["category"]), force: toBool(flags["force"]),
+    category: toArr(flags["category"]).slice(-1)[0], force: toBool(flags["force"]),
     verifyOnly: toBool(flags["verifyOnly"]), verbose: toBool(flags["verbose"]),
   };
 
   const listOptions: ListOptions = {
-    target: (positionals[0] as ListOptions["target"]) ?? "all", category: toStr(flags["category"]),
+    target: (positionals[0] as ListOptions["target"]) ?? "all", category: toArr(flags["category"]).slice(-1)[0],
     tag: toStr(flags["tag"]), format: toStr(flags["format"]) as CliOutputFormat | undefined, catalogPath: toStr(flags["catalogPath"]),
   };
 
@@ -234,7 +232,7 @@ export function parseCliArgs(argv: readonly string[]): CliParsedArgs {
     benchmarkOptions: command === "run" || command === "bench" ? benchmarkOptions : undefined,
     arenaOptions: command === "arena" || arenaArr.length >= 2 ? arenaOptions : undefined,
     tournamentOptions: command === "tournament" ? tournamentOptions : undefined,
-    reportOptions: command === "report" ? reportOptions : undefined,
+    reportOptions,
     syncOptions: command === "sync" ? syncOptions : undefined,
     listOptions: command === "list" ? listOptions : undefined,
     replayOptions: command === "replay" ? replayOptions : undefined,
@@ -286,10 +284,17 @@ const TOURNAMENT_OPTS: readonly (readonly [string, string])[] = [
 ];
 const REPORT_OPTS: readonly (readonly [string, string])[] = [
   ["-f, --format <format>", "Report format: console, json, markdown, html"], ["-o, --output <path>", "Destination report file path"],
-  ["--db <path>", "Source SQLite database path"], ["-c, --category <name>", "Filter results by category"],
-  ["-k, --skill <id>", "Filter results by skill ID"], ["-m, --model <id>", "Filter results by model ID"],
-  ["--control-skill <id>", "Baseline control skill ID"], ["--title <text>", "Custom report title"],
+  ["--db <path>", "Source SQLite database path"], ["-s, --scenario <ids>", "Filter by scenario IDs"],
+  ["-c, --category <names>", "Filter by categories"], ["-k, --skill <ids>", "Filter by skill IDs"],
+  ["-m, --model <ids>", "Filter by model IDs"], ["-p, --provider <ids>", "Filter by provider IDs"],
+  ["--status <values>", "Filter by lifecycle statuses"], ["--execution-mode <values>", "Filter by fake or live execution"],
+  ["--simulated <bool>", "Filter by exact simulation provenance"], ["--authority <value>", "Filter by eligible or diagnostic authority"],
+  ["--cohort <values>", "Filter by benchmark cohorts"], ["--eligibility <values>", "Filter by eligibility statuses"],
+  ["--evaluation-status <values>", "Filter by evaluation statuses"], ["--evidence-status <values>", "Filter by evidence statuses"],
+  ["--from-date <timestamp>", "Inclusive earliest start timestamp"], ["--to-date <timestamp>", "Inclusive latest start timestamp"],
+  ["--title <text>", "Custom report title"],
   ["--include-trends", "Include historical trend data"], ["--include-cost", "Include cost-efficiency metrics"],
+  ["--export-card <format>", "Export one eligible skill card as svg or html"], ["--card-output <path>", "Report card output path"],
   ["-h, --help", "Show help for report command"],
 ];
 const SYNC_OPTS: readonly (readonly [string, string])[] = [
@@ -335,7 +340,7 @@ export function getHelpText(command?: CliCommandName): string {
   }
   if (command === "report") {
     return formatCmd(
-      "skill-bench report [options]", "Generate benchmark analytics, comparison, and trend reports.",
+      "skill-bench report [options]", "Generate evidence-backed cohort and eligibility reports.",
       REPORT_OPTS, ["skill-bench report -f markdown -o summary.md", "skill-bench report -f html -o dashboard.html"]
     );
   }

@@ -1,5 +1,7 @@
 export * from "./types.js";
 export * from "./aggregator.js";
+export * from "./report-cohorts.js";
+export * from "./report-statistics.js";
 export * from "./db.js";
 export * from "./dashboard-charts.js";
 export * from "./markdown-leaderboard.js";

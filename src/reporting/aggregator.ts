@@ -1,312 +1,221 @@
 import type {
-  CategoryLeaderboard,
-  CostEfficiencyPoint,
-  EloRatingRecord,
-  EligibleRunRecord,
-  LeaderboardEntry,
-  SkillBenchmarkSummary,
-  StatisticalMetrics,
-} from "./types.js";
+  ReportBuildOptions,
+  ReportCategoryLeaderboard,
+  ReportCostPoint,
+  ReportLatencyPercentiles,
+  ReportLeaderboardEntry,
+  ReportTrendPoint,
+  ReportVelocityPoint,
+} from "./report-cohorts.js";
+import {
+  calculateNearestRankPercentile,
+  calculateObservedStatistics,
+  calculateWilsonInterval,
+} from "./report-statistics.js";
+import type { EligibleRunRecord } from "./types.js";
+import type { VerifiedCostEvidence } from "../shared/benchmark-authority.js";
 
-function logGamma(x: number): number {
-  if (x < 0.5) return Math.log(Math.PI) - Math.log(Math.sin(Math.PI * x)) - logGamma(1 - x);
-  const z = x - 1;
-  const p = [0.99999999999980993, 676.5203681218851, -1259.1392167224028, 771.32342877765313, -176.61502916214059, 12.507343278686905, -0.138571095836526, 9.9843695780195716e-6, 1.5056327351493116e-7];
-  let a = p[0] ?? 1;
-  for (let i = 1; i < p.length; i++) a += (p[i] ?? 0) / (z + i);
-  const t = z + 7.5;
-  return 0.5 * Math.log(2 * Math.PI) + (z + 0.5) * Math.log(t) - t + Math.log(a);
+export interface ReportClaims {
+  readonly leaderboard: readonly ReportLeaderboardEntry[];
+  readonly categoryLeaderboards: readonly ReportCategoryLeaderboard[];
+  readonly trends?: readonly ReportTrendPoint[];
+  readonly costEfficiency?: readonly ReportCostPoint[];
+  readonly latencyPercentiles?: ReportLatencyPercentiles;
+  readonly tokenVelocity?: readonly ReportVelocityPoint[];
 }
 
-function betaInc(x: number, a: number, b: number): number {
-  if (x <= 0) return 0;
-  if (x >= 1) return 1;
-  if (x > (a + 1) / (a + b + 2)) return 1 - betaInc(1 - x, b, a);
-  const lnBeta = logGamma(a) + logGamma(b) - logGamma(a + b);
-  const front = Math.exp(a * Math.log(x) + b * Math.log(1 - x) - lnBeta) / a;
-  let d = 1 - ((a + b) * x) / (a + 1);
-  if (Math.abs(d) < 1e-30) d = 1e-30;
-  d = 1 / d;
-  let c = 1;
-  let f = d;
-  for (let m = 1; m <= 80; m++) {
-    const m2 = 2 * m;
-    let num = (m * (b - m) * x) / ((a + m2 - 1) * (a + m2));
-    d = 1 + num * d;
-    if (Math.abs(d) < 1e-30) d = 1e-30;
-    c = 1 + num / c;
-    if (Math.abs(c) < 1e-30) c = 1e-30;
-    d = 1 / d;
-    f *= d * c;
-    num = -((a + m) * (a + b + m) * x) / ((a + m2) * (a + m2 + 1));
-    d = 1 + num * d;
-    if (Math.abs(d) < 1e-30) d = 1e-30;
-    c = 1 + num / c;
-    if (Math.abs(c) < 1e-30) c = 1e-30;
-    d = 1 / d;
-    const delta = d * c;
-    f *= delta;
-    if (Math.abs(delta - 1) < 1e-12) break;
-  }
-  const res = front * f;
-  return Number.isNaN(res) ? 0 : Math.max(0, Math.min(1, res));
-}
-
-function erfc(x: number): number {
-  if (x < 0) return 2 - erfc(-x);
-  const t = 1 / (1 + 0.3275911 * x);
-  const poly = t * (0.254829592 + t * (-0.284496736 + t * (1.421413741 + t * (-1.453152027 + t * 1.061405429))));
-  return poly * Math.exp(-x * x);
-}
-
-export function computeStatisticalMetrics(values: readonly number[]): StatisticalMetrics {
-  const sampleCount = values.length;
-  if (sampleCount === 0) {
-    return { mean: 0, median: 0, min: 0, max: 0, standardDeviation: 0, confidenceInterval95: [0, 0], sampleCount: 0 };
-  }
-  const sum = values.reduce((acc, val) => acc + val, 0);
-  const mean = sum / sampleCount;
-  const sorted = [...values].sort((a, b) => a - b);
-  const mid = Math.floor(sampleCount / 2);
-  const median = sampleCount % 2 === 0 ? ((sorted[mid - 1] ?? 0) + (sorted[mid] ?? 0)) / 2 : (sorted[mid] ?? 0);
-  const min = sorted[0] ?? mean;
-  const max = sorted[sampleCount - 1] ?? mean;
-  if (sampleCount === 1) {
-    return { mean, median, min, max, standardDeviation: 0, confidenceInterval95: [mean, mean], sampleCount: 1 };
-  }
-  const sumSq = values.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0);
-  const variance = sumSq / (sampleCount - 1);
-  const standardDeviation = Math.sqrt(variance);
-  const margin = 1.96 * (standardDeviation / Math.sqrt(sampleCount));
-  return {
-    mean,
-    median,
-    min,
-    max,
-    standardDeviation,
-    confidenceInterval95: [mean - margin, mean + margin],
-    sampleCount,
-  };
-}
-
-export function computeWelchTTest(
-  sampleA: readonly number[],
-  sampleB: readonly number[]
-): { readonly tStatistic: number; readonly degreesOfFreedom: number; readonly pValue: number } {
-  const nA = sampleA.length;
-  const nB = sampleB.length;
-  if (nA < 2 || nB < 2) {
-    return { tStatistic: 0, degreesOfFreedom: Math.max(1, nA + nB - 2), pValue: 1 };
-  }
-  const meanA = sampleA.reduce((sum, v) => sum + v, 0) / nA;
-  const meanB = sampleB.reduce((sum, v) => sum + v, 0) / nB;
-  const varA = sampleA.reduce((sum, v) => sum + Math.pow(v - meanA, 2), 0) / (nA - 1);
-  const varB = sampleB.reduce((sum, v) => sum + Math.pow(v - meanB, 2), 0) / (nB - 1);
-  const vnA = varA / nA;
-  const vnB = varB / nB;
-  const se = Math.sqrt(vnA + vnB);
-  if (se === 0) return { tStatistic: 0, degreesOfFreedom: Math.max(1, nA + nB - 2), pValue: 1 };
-  const tStatistic = (meanA - meanB) / se;
-  const dfDenom = Math.pow(vnA, 2) / (nA - 1) + Math.pow(vnB, 2) / (nB - 1);
-  const degreesOfFreedom = dfDenom > 0 ? Math.pow(vnA + vnB, 2) / dfDenom : Math.max(1, nA + nB - 2);
-  const x = degreesOfFreedom / (degreesOfFreedom + Math.pow(tStatistic, 2));
-  const pValue = betaInc(x, degreesOfFreedom / 2, 0.5);
-  return { tStatistic, degreesOfFreedom, pValue };
-}
-
-export function computeTwoProportionZTest(
-  successesA: number,
-  totalA: number,
-  successesB: number,
-  totalB: number
-): { readonly zScore: number; readonly pValue: number } {
-  if (totalA <= 0 || totalB <= 0) return { zScore: 0, pValue: 1 };
-  const pA = successesA / totalA;
-  const pB = successesB / totalB;
-  const pooledP = (successesA + successesB) / (totalA + totalB);
-  if (pooledP <= 0 || pooledP >= 1) return { zScore: 0, pValue: 1 };
-  const se = Math.sqrt(pooledP * (1 - pooledP) * (1 / totalA + 1 / totalB));
-  if (se === 0) return { zScore: 0, pValue: 1 };
-  const zScore = (pA - pB) / se;
-  const rawP = erfc(Math.abs(zScore) / Math.SQRT2);
-  return { zScore, pValue: Number.isNaN(rawP) ? 1 : Math.max(0, Math.min(1, rawP)) };
-}
-
-export function aggregateSkillRuns(
+export function buildReportClaims(
   runs: readonly EligibleRunRecord[],
-  controlSkillId?: string,
-  controlRuns?: readonly EligibleRunRecord[]
-): SkillBenchmarkSummary {
-  const first = runs[0];
-  if (!first || runs.length === 0) {
-    throw new TypeError("Skill aggregation requires eligible benchmark evidence");
-  }
-
-  const skillId = first.skillId;
-  const category = first.category;
-  const totalRuns = runs.length;
-  const passedRuns = runs.filter((r) => r.passedBenchmark).length;
-  const passRate = (passedRuns / totalRuns) * 100;
-  const scores = runs.map((r) => r.compositeScore);
-  const durations = runs.map((r) => r.wallClockMs);
-  const costs = runs.flatMap((run) => run.actualCostUSD === undefined ? [] : [run.actualCostUSD]);
-  const cacheHitRatios = runs.map((r) => r.cacheHitRatio);
-
-  let scoreStats = computeStatisticalMetrics(scores);
-  let durationStats = computeStatisticalMetrics(durations);
-  let costStats = costs.length === 0 ? undefined : computeStatisticalMetrics(costs);
-  const averageCacheHitRatio = cacheHitRatios.length > 0 ? cacheHitRatios.reduce((a, b) => a + b, 0) / cacheHitRatios.length : 0;
-
-  let passRateImprovementOverControl: number | undefined;
-  let isStatisticallySignificant = false;
-
-  if (controlRuns && controlRuns.length > 0 && (!controlSkillId || skillId !== controlSkillId)) {
-    const controlTotal = controlRuns.length;
-    const controlPassed = controlRuns.filter((r) => r.passedBenchmark).length;
-    passRateImprovementOverControl = passRate - (controlPassed / controlTotal) * 100;
-
-    const zTest = computeTwoProportionZTest(passedRuns, totalRuns, controlPassed, controlTotal);
-    const scoreTest = computeWelchTTest(scores, controlRuns.map((r) => r.compositeScore));
-    const durationTest = computeWelchTTest(durations, controlRuns.map((r) => r.wallClockMs));
-    const controlCosts = controlRuns.flatMap((run) => run.actualCostUSD === undefined ? [] : [run.actualCostUSD]);
-    const costTest = computeWelchTTest(costs, controlCosts);
-
-    scoreStats = { ...scoreStats, pValueAgainstControl: scoreTest.pValue, isStatisticallySignificant: scoreTest.pValue < 0.05 };
-    durationStats = { ...durationStats, pValueAgainstControl: durationTest.pValue, isStatisticallySignificant: durationTest.pValue < 0.05 };
-    if (costStats !== undefined) costStats = { ...costStats, pValueAgainstControl: costTest.pValue, isStatisticallySignificant: costTest.pValue < 0.05 };
-    isStatisticallySignificant = zTest.pValue < 0.05 || scoreTest.pValue < 0.05;
-  } else if (controlSkillId && skillId === controlSkillId) {
-    passRateImprovementOverControl = 0;
-    isStatisticallySignificant = false;
-  }
-
-  return {
-    skillId,
-    category,
-    totalRuns,
-    passRate,
-    averageScore: scoreStats.mean,
-    meanDurationMs: durationStats.mean,
-    ...(costStats === undefined ? {} : { averageCostUSD: costStats.mean }),
-    averageCacheHitRatio,
-    eloRating: 1500,
-    scoreStats,
-    durationStats,
-    costStats,
-    passRateImprovementOverControl,
-    isStatisticallySignificant,
-  };
-}
-
-export function aggregateAllSkills(
-  runs: readonly EligibleRunRecord[],
-  controlSkillId?: string
-): ReadonlyArray<SkillBenchmarkSummary> {
-  const runsBySkill = new Map<string, EligibleRunRecord[]>();
-  for (const run of runs) {
-    const list = runsBySkill.get(run.skillId);
-    if (list) list.push(run);
-    else runsBySkill.set(run.skillId, [run]);
-  }
-  const controlRuns = controlSkillId ? runsBySkill.get(controlSkillId) : undefined;
-  const summaries: SkillBenchmarkSummary[] = [];
-  for (const [skillId, skillRuns] of runsBySkill.entries()) {
-    const isControl = Boolean(controlSkillId && skillId === controlSkillId);
-    summaries.push(aggregateSkillRuns(skillRuns, controlSkillId, isControl ? undefined : controlRuns));
-  }
-  return summaries.sort((a, b) => b.passRate !== a.passRate ? b.passRate - a.passRate : b.averageScore - a.averageScore);
-}
-
-export function buildLeaderboardEntries(
-  runs: readonly EligibleRunRecord[],
-  controlSkillId?: string,
-  eloRecords?: readonly Pick<EloRatingRecord, "skillId" | "rating">[]
-): ReadonlyArray<LeaderboardEntry> {
-  const summaries = aggregateAllSkills(runs, controlSkillId);
-  const eloMap = new Map<string, number>();
-  if (eloRecords) {
-    for (const rec of eloRecords) eloMap.set(rec.skillId, rec.rating);
-  }
-  const entries: LeaderboardEntry[] = summaries.map((s) => ({
-    rank: 0,
-    skillId: s.skillId,
-    category: s.category,
-    passRate: s.passRate,
-    passRateDeltaOverControl: s.passRateImprovementOverControl,
-    eloRating: eloMap.get(s.skillId) ?? s.eloRating,
-    averageScore: s.averageScore,
-    meanDurationSeconds: s.meanDurationMs / 1000,
-    ...(s.averageCostUSD === undefined ? {} : { averageCostUSD: s.averageCostUSD }),
-    cacheHitRatio: s.averageCacheHitRatio,
-    isStatisticallySignificant: s.isStatisticallySignificant ?? false,
-    totalRuns: s.totalRuns,
-  }));
-  entries.sort((a, b) => {
-    if (eloRecords && eloRecords.length > 0 && b.eloRating !== a.eloRating) return b.eloRating - a.eloRating;
-    if (b.passRate !== a.passRate) return b.passRate - a.passRate;
-    return b.averageScore - a.averageScore;
-  });
-  return entries.map((entry, index) => ({ ...entry, rank: index + 1 }));
-}
-
-export function buildCategoryLeaderboards(
-  entries: readonly LeaderboardEntry[]
-): ReadonlyArray<CategoryLeaderboard> {
-  const entriesByCategory = new Map<string, LeaderboardEntry[]>();
-  for (const entry of entries) {
-    const list = entriesByCategory.get(entry.category);
-    if (list) list.push(entry);
-    else entriesByCategory.set(entry.category, [entry]);
-  }
-  const result: CategoryLeaderboard[] = [];
-  for (const [category, catEntries] of entriesByCategory.entries()) {
-    const ranked = catEntries
-      .slice()
-      .sort((a, b) => b.eloRating !== a.eloRating ? b.eloRating - a.eloRating : b.passRate !== a.passRate ? b.passRate - a.passRate : b.averageScore - a.averageScore)
-      .map((entry, idx) => ({ ...entry, rank: idx + 1 }));
-    result.push({
-      category,
-      entries: ranked,
-      topSkillId: ranked[0]?.skillId ?? "",
-      totalRuns: ranked.reduce((sum, e) => sum + e.totalRuns, 0),
-      updatedAt: new Date().toISOString(),
+  options: ReportBuildOptions = {}
+): ReportClaims {
+  if (runs.length === 0) {
+    return Object.freeze({
+      leaderboard: Object.freeze([]),
+      categoryLeaderboards: Object.freeze([]),
+      ...(options.includeTrends ? { trends: Object.freeze([]) } : {}),
+      ...(options.includeCostEfficiency ? { costEfficiency: Object.freeze([]) } : {}),
     });
   }
-  return result.sort((a, b) => a.category.localeCompare(b.category));
+  requireEligibleObservations(runs);
+  const leaderboard = buildReportLeaderboard(runs);
+  const latencyPercentiles = buildLatencyPercentiles(runs);
+  const tokenVelocity = buildTokenVelocity(runs);
+  return Object.freeze({
+    leaderboard,
+    categoryLeaderboards: buildCategoryLeaderboards(leaderboard),
+    ...(options.includeTrends ? { trends: buildTrends(runs) } : {}),
+    ...(options.includeCostEfficiency ? { costEfficiency: buildCostEfficiency(runs) } : {}),
+    latencyPercentiles,
+    ...(tokenVelocity.length === 0 ? {} : { tokenVelocity }),
+  });
 }
 
-export function extractCostEfficiencyPointsFromRuns(
-  runs: readonly EligibleRunRecord[]
-): ReadonlyArray<CostEfficiencyPoint> {
-  const verifiedRuns = runs.filter(hasVerifiedActualCost);
-  const groups = new Map<string, VerifiedActualCostRun[]>();
-  for (const run of verifiedRuns) {
-    const key = `${run.skillId}:::${run.modelId}`;
-    const list = groups.get(key);
-    if (list) list.push(run);
-    else groups.set(key, [run]);
+export function buildReportLeaderboard(runs: readonly EligibleRunRecord[]): readonly ReportLeaderboardEntry[] {
+  const groups = groupRuns(runs, (run) => `${run.category}\u0000${run.skillId}`);
+  const unranked = [...groups.values()].map(buildLeaderboardEntry);
+  unranked.sort(compareLeaderboardEntries);
+  return Object.freeze(unranked.map((entry, index) => Object.freeze({ ...entry, rank: index + 1 })));
+}
+
+function buildLeaderboardEntry(runs: readonly EligibleRunRecord[]): Omit<ReportLeaderboardEntry, "rank"> {
+  const first = requireFirst(runs);
+  if (runs.some((run) => run.category !== first.category || run.skillId !== first.skillId)) {
+    throw new TypeError("Report leaderboard group identity is contradictory");
   }
-  const result: CostEfficiencyPoint[] = [];
-  for (const groupRuns of groups.values()) {
-    const first = groupRuns[0];
-    if (!first || groupRuns.length === 0) continue;
-    const totalRuns = groupRuns.length;
-    const passed = groupRuns.filter((r) => r.passedBenchmark).length;
-    result.push({
+  const passCount = runs.filter((run) => run.passedBenchmark).length;
+  const scores = calculateObservedStatistics(runs.map((run) => run.compositeScore));
+  const cacheSamples = runs.map((run) => run.cacheHitRatio).filter((value) => Number.isFinite(value) && value >= 0 && value <= 1);
+  const verifiedCostSamples = verifiedCosts(runs);
+  return Object.freeze({
+    category: first.category,
+    skillId: first.skillId,
+    scenarioIds: uniqueSorted(runs.map((run) => run.scenarioId)),
+    modelIds: uniqueSorted(runs.map((run) => run.modelId)),
+    providerIds: uniqueSorted(runs.map((run) => run.providerId)),
+    eligibleRunCount: runs.length,
+    passCount,
+    failedBenchmarkCount: runs.length - passCount,
+    passRate: passCount / runs.length * 100,
+    passRateConfidence95: calculateWilsonInterval(passCount, runs.length),
+    score: scores,
+    duration: Object.freeze({ mean: average(runs.map((run) => run.wallClockMs)), sampleCount: runs.length }),
+    ...(cacheSamples.length === 0 ? {} : { cacheHitRatio: Object.freeze({ mean: average(cacheSamples), sampleCount: cacheSamples.length }) }),
+    ...(verifiedCostSamples.length === 0 ? {} : { verifiedActualCost: Object.freeze({ mean: average(verifiedCostSamples), sampleCount: verifiedCostSamples.length }) }),
+  });
+}
+
+function buildCategoryLeaderboards(entries: readonly ReportLeaderboardEntry[]): readonly ReportCategoryLeaderboard[] {
+  const groups = groupValues(entries, (entry) => entry.category);
+  return Object.freeze([...groups.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([category, categoryEntries]) => {
+      const ranked = [...categoryEntries].sort(compareLeaderboardEntries)
+        .map((entry, index) => Object.freeze({ ...entry, rank: index + 1 }));
+      return Object.freeze({
+        category,
+        entries: Object.freeze(ranked),
+        totalEligibleRuns: ranked.reduce((sum, entry) => sum + entry.eligibleRunCount, 0),
+        ...(ranked[0] === undefined ? {} : { topSkillId: ranked[0].skillId }),
+      });
+    }));
+}
+
+function buildTrends(runs: readonly EligibleRunRecord[]): readonly ReportTrendPoint[] {
+  const groups = groupRuns(runs, (run) => run.completedAt.slice(0, 10));
+  return Object.freeze([...groups.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([date, group]) => {
+    const passCount = group.filter((run) => run.passedBenchmark).length;
+    const costSamples = verifiedCosts(group);
+    return Object.freeze({
+      date,
+      eligibleRunCount: group.length,
+      passCount,
+      passRate: passCount / group.length * 100,
+      score: Object.freeze({ mean: average(group.map((run) => run.compositeScore)), sampleCount: group.length }),
+      duration: Object.freeze({ mean: average(group.map((run) => run.wallClockMs)), sampleCount: group.length }),
+      ...(costSamples.length === 0 ? {} : { verifiedActualCost: Object.freeze({ mean: average(costSamples), sampleCount: costSamples.length }) }),
+    });
+  }));
+}
+
+function buildCostEfficiency(runs: readonly EligibleRunRecord[]): readonly ReportCostPoint[] {
+  const verified = runs.filter(hasVerifiedActualCost);
+  const groups = groupRuns(verified, (run) => `${run.category}\u0000${run.skillId}\u0000${run.modelId}`);
+  return Object.freeze([...groups.values()].map((group) => {
+    const first = requireFirst(group);
+    const passCount = group.filter((run) => run.passedBenchmark).length;
+    return Object.freeze({
+      category: first.category,
       skillId: first.skillId,
       modelId: first.modelId,
-      averageCostUSD: groupRuns.reduce((sum, run) => sum + run.actualCostUSD, 0) / totalRuns,
-      compositeScore: groupRuns.reduce((sum, r) => sum + r.compositeScore, 0) / totalRuns,
-      passRate: (passed / totalRuns) * 100,
-      tokensPerTask: groupRuns.reduce((sum, r) => sum + r.totalTokens, 0) / totalRuns,
-      durationMs: groupRuns.reduce((sum, r) => sum + r.wallClockMs, 0) / totalRuns,
+      averageVerifiedActualCostUSD: average(group.map((run) => run.actualCostUSD)),
+      averageScore: average(group.map((run) => run.compositeScore)),
+      passRate: passCount / group.length * 100,
+      sampleCount: group.length,
     });
-  }
-  return result.sort((a, b) => a.skillId !== b.skillId ? a.skillId.localeCompare(b.skillId) : a.modelId.localeCompare(b.modelId));
+  }).sort((left, right) => left.category.localeCompare(right.category) || left.skillId.localeCompare(right.skillId) || left.modelId.localeCompare(right.modelId)));
 }
 
-type VerifiedActualCostRun = EligibleRunRecord & { readonly actualCostUSD: number };
+function buildLatencyPercentiles(runs: readonly EligibleRunRecord[]): ReportLatencyPercentiles {
+  const durations = runs.map((run) => run.wallClockMs);
+  return Object.freeze({
+    method: "nearest_rank",
+    sampleCount: durations.length,
+    p50Ms: calculateNearestRankPercentile(durations, 0.5),
+    p90Ms: calculateNearestRankPercentile(durations, 0.9),
+    p99Ms: calculateNearestRankPercentile(durations, 0.99),
+  });
+}
 
-function hasVerifiedActualCost(run: EligibleRunRecord): run is VerifiedActualCostRun {
+function buildTokenVelocity(runs: readonly EligibleRunRecord[]): readonly ReportVelocityPoint[] {
+  const observations = runs.flatMap((run) => {
+    const durationMs = run.metrics?.timing.modelGenerationDurationMs;
+    if (durationMs === undefined || !Number.isFinite(durationMs) || durationMs <= 0 || !Number.isFinite(run.totalTokens)) return [];
+    return [{ run, tokensPerSecond: run.totalTokens / (durationMs / 1000) }];
+  });
+  const groups = groupValues(observations, ({ run }) => `${run.category}\u0000${run.skillId}\u0000${run.modelId}`);
+  return Object.freeze([...groups.values()].map((group) => {
+    const first = requireFirst(group);
+    return Object.freeze({
+      category: first.run.category,
+      skillId: first.run.skillId,
+      modelId: first.run.modelId,
+      meanTokensPerSecond: average(group.map((item) => item.tokensPerSecond)),
+      sampleCount: group.length,
+    });
+  }).sort((left, right) => left.category.localeCompare(right.category) || left.skillId.localeCompare(right.skillId) || left.modelId.localeCompare(right.modelId)));
+}
+
+function compareLeaderboardEntries(left: Omit<ReportLeaderboardEntry, "rank">, right: Omit<ReportLeaderboardEntry, "rank">): number {
+  return right.passRate - left.passRate
+    || right.score.mean - left.score.mean
+    || right.eligibleRunCount - left.eligibleRunCount
+    || left.category.localeCompare(right.category)
+    || left.skillId.localeCompare(right.skillId);
+}
+
+function requireEligibleObservations(runs: readonly EligibleRunRecord[]): void {
+  if (runs.some((run) => !Number.isFinite(run.compositeScore) || !Number.isFinite(run.wallClockMs))) {
+    throw new TypeError("Eligible report observations must be finite");
+  }
+}
+
+function verifiedCosts(runs: readonly EligibleRunRecord[]): readonly number[] {
+  return runs.filter(hasVerifiedActualCost).map((run) => run.actualCostUSD);
+}
+
+function hasVerifiedActualCost(run: EligibleRunRecord): run is EligibleRunRecord & {
+  readonly operationalCost: VerifiedCostEvidence;
+  readonly actualCostUSD: number;
+} {
   return run.operationalCost.status === "verified" && run.actualCostUSD !== undefined;
+}
+
+function average(values: readonly number[]): number {
+  if (values.length === 0 || values.some((value) => !Number.isFinite(value))) throw new TypeError("Report mean requires finite samples");
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function uniqueSorted(values: readonly string[]): readonly string[] {
+  return Object.freeze([...new Set(values)].sort());
+}
+
+function groupRuns<T extends EligibleRunRecord>(runs: readonly T[], key: (run: T) => string): Map<string, T[]> {
+  return groupValues(runs, key);
+}
+
+function groupValues<T>(values: readonly T[], key: (value: T) => string): Map<string, T[]> {
+  const groups = new Map<string, T[]>();
+  for (const value of values) {
+    const groupKey = key(value);
+    const group = groups.get(groupKey);
+    if (group === undefined) groups.set(groupKey, [value]);
+    else group.push(value);
+  }
+  return groups;
+}
+
+function requireFirst<T>(values: readonly T[]): T {
+  const first = values[0];
+  if (first === undefined) throw new TypeError("Report aggregation group is empty");
+  return first;
 }

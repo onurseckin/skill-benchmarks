@@ -3,14 +3,14 @@ import { assertBenchmarkAuthority, isEligibleRunRecord } from "../shared/benchma
 import type {
   EloRatingRecord,
   EligibleRunRecord,
-  HistoricalTrendPoint,
   RunManifest,
   RunMetricsSummary,
-  RunQueryFilter,
   RunRecord,
   RunStatus,
 } from "./types.js";
 import type { ExecutionMode } from "../shared/execution-mode.js";
+import type { RunQueryFilter } from "./report-cohorts.js";
+import { createPreparedRunQuery, recordMatchesRunQuery } from "./run-query.js";
 
 interface RunRow {
   readonly [key: string]: unknown;
@@ -74,12 +74,23 @@ export class ReportingQueryStore {
   }
 
   public queryRuns(filter?: RunQueryFilter): readonly RunRecord[] {
-    const { sql, bindings } = createRunQuery(filter);
-    return (this.database.prepare(sql).all(...bindings) as RunRow[]).map(mapRowToRunRecord);
+    const prepared = createPreparedRunQuery(filter);
+    const records = (this.database.prepare(prepared.sql).all(...prepared.bindings) as RunRow[]).map(mapRowToRunRecord);
+    if (records.some((record) => !recordMatchesRunQuery(record, prepared.filter))) {
+      throw new TypeError("Run query returned a record outside its filter");
+    }
+    return records;
+  }
+
+  public countRuns(filter?: RunQueryFilter): number {
+    const prepared = createPreparedRunQuery(filter, true);
+    const row = this.database.prepare(prepared.sql).get(...prepared.bindings) as { readonly count: number } | null;
+    if (row === null || !Number.isSafeInteger(row.count) || row.count < 0) throw new TypeError("Run count query failed");
+    return row.count;
   }
 
   public queryEligibleRuns(filter?: RunQueryFilter): readonly EligibleRunRecord[] {
-    const records = this.queryRuns({ ...filter, eligibilityStatus: "eligible" });
+    const records = this.queryRuns({ ...filter, authority: "eligible" });
     if (!records.every(isEligibleRunRecord)) throw new TypeError("Eligible run query returned contradictory evidence");
     return records;
   }
@@ -137,39 +148,6 @@ export class ReportingQueryStore {
     }));
   }
 
-  public getHistoricalTrends(skillId?: string): readonly HistoricalTrendPoint[] {
-    const records = this.queryEligibleRuns(skillId === undefined ? undefined : { skillId });
-    const eloRatings = new Map(this.getEloLeaderboard().map((entry) => [entry.skillId, entry.rating]));
-    const groups = new Map<string, EligibleRunRecord[]>();
-    for (const record of records) {
-      const commitSha = record.manifest?.environment.hostCommitSha ?? "";
-      const skillVersion = record.skillVersion ?? record.manifest?.skillVersion ?? "";
-      const day = record.startedAt.slice(0, 10);
-      const key = `${record.skillId}\u0000${commitSha}\u0000${skillVersion}\u0000${day}`;
-      const group = groups.get(key);
-      if (group === undefined) groups.set(key, [record]);
-      else group.push(record);
-    }
-    return [...groups.values()].map((group) => {
-      const first = group[0];
-      if (first === undefined) throw new TypeError("Historical trend group is empty");
-      const actualCosts = group.flatMap((record) => record.actualCostUSD === undefined ? [] : [record.actualCostUSD]);
-      const commitSha = first.manifest?.environment.hostCommitSha;
-      const skillVersion = first.skillVersion ?? first.manifest?.skillVersion;
-      const eloRating = eloRatings.get(first.skillId);
-      return {
-        timestamp: group.reduce((latest, record) => record.completedAt > latest ? record.completedAt : latest, first.completedAt),
-        ...(commitSha === undefined ? {} : { commitSha }),
-        ...(skillVersion === undefined ? {} : { skillVersion }),
-        passRate: group.filter((record) => record.passedBenchmark).length / group.length,
-        averageScore: group.reduce((sum, record) => sum + record.compositeScore, 0) / group.length,
-        meanDurationMs: group.reduce((sum, record) => sum + record.wallClockMs, 0) / group.length,
-        ...(actualCosts.length === 0 ? {} : { averageCostUSD: actualCosts.reduce((sum, cost) => sum + cost, 0) / actualCosts.length }),
-        ...(eloRating === undefined ? {} : { eloRating }),
-        sampleCount: group.length,
-      };
-    }).sort((left, right) => left.timestamp.localeCompare(right.timestamp));
-  }
 }
 
 function mapRowToRunRecord(row: RunRow): RunRecord {
@@ -288,32 +266,6 @@ function mapCommonFields(row: RunRow) {
     ...(manifest === undefined ? {} : { manifest }),
     ...(metrics === undefined ? {} : { metrics }),
   };
-}
-
-function createRunQuery(filter?: RunQueryFilter): { readonly sql: string; readonly bindings: (string | number)[] } {
-  const clauses: string[] = [];
-  const bindings: (string | number)[] = [];
-  const add = (column: string, value: string | number | undefined): void => {
-    if (value === undefined) return;
-    clauses.push(`${column} = ?`);
-    bindings.push(value);
-  };
-  add("scenario_id", filter?.scenarioId);
-  add("skill_id", filter?.skillId);
-  add("model_id", filter?.modelId);
-  add("provider_id", filter?.providerId);
-  add("category", filter?.category);
-  add("status", filter?.status);
-  add("eligibility_status", filter?.eligibilityStatus);
-  if (filter?.passedBenchmark !== undefined) add("passed_benchmark", filter.passedBenchmark ? 1 : 0);
-  if (filter?.minScore !== undefined) { clauses.push("composite_score >= ?"); bindings.push(filter.minScore); }
-  if (filter?.maxScore !== undefined) { clauses.push("composite_score <= ?"); bindings.push(filter.maxScore); }
-  if (filter?.fromDate !== undefined) { clauses.push("started_at >= ?"); bindings.push(filter.fromDate); }
-  if (filter?.toDate !== undefined) { clauses.push("started_at <= ?"); bindings.push(filter.toDate); }
-  let sql = `SELECT * FROM runs${clauses.length === 0 ? "" : ` WHERE ${clauses.join(" AND ")}`} ORDER BY started_at ASC`;
-  if (filter?.limit !== undefined) { sql += " LIMIT ?"; bindings.push(filter.limit); }
-  if (filter?.offset !== undefined) { sql += " OFFSET ?"; bindings.push(filter.offset); }
-  return { sql, bindings };
 }
 
 function computeConfidenceInterval(wins: number, ties: number, matches: number): readonly [number, number] {

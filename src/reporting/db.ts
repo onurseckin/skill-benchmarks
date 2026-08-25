@@ -5,10 +5,10 @@ import { ReportingRunStore } from "./run-store.js";
 import { initializeReportingSchema, validateReportingSchema } from "./schema.js";
 import type {
   EligibleRunRecord,
-  RunQueryFilter,
   RunRecord,
   TelemetryEventRecord,
 } from "./types.js";
+import type { RunQueryFilter } from "./report-cohorts.js";
 
 export { TerminalRunIdentityConflictError } from "./run-identity.js";
 
@@ -70,6 +70,10 @@ export class TelemetryDatabase {
     return this.queryStore.queryEligibleRuns(filter);
   }
 
+  public countRuns(filter?: RunQueryFilter): number {
+    return this.queryStore.countRuns(filter);
+  }
+
   public updateEloScore(
     candidate: EligibleRunRecord,
     opponent: EligibleRunRecord,
@@ -81,10 +85,6 @@ export class TelemetryDatabase {
 
   public getEloLeaderboard() {
     return this.queryStore.getEloLeaderboard();
-  }
-
-  public getHistoricalTrends(skillId?: string) {
-    return this.queryStore.getHistoricalTrends(skillId);
   }
 
   public close(): void {

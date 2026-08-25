@@ -1,3 +1,5 @@
+import type { ReportFilter } from "../reporting/report-cohorts.js";
+
 export type CliCommandName =
   | "run"
   | "bench"
@@ -67,14 +69,10 @@ export interface TournamentOptions {
   readonly maxMatches?: number;
 }
 
-export interface ReportOptions {
+export interface ReportOptions extends ReportFilter {
   readonly format?: CliOutputFormat;
   readonly outputPath?: string;
   readonly dbPath?: string;
-  readonly category?: string;
-  readonly skillId?: string;
-  readonly modelId?: string;
-  readonly controlSkillId?: string;
   readonly title?: string;
   readonly includeTrends?: boolean;
   readonly includeCostEfficiency?: boolean;

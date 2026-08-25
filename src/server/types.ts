@@ -1,14 +1,10 @@
 import type { TelemetryDatabase } from "../reporting/db.js";
 import type {
-  EloRatingRecord,
-  HistoricalTrendPoint,
-  LeaderboardEntry,
   RunMetricsSummary,
-  RunQueryFilter,
   RunRecord,
   RunStatus,
-  SkillBenchmarkSummary,
 } from "../reporting/types.js";
+import type { ReportSnapshot } from "../reporting/report-cohorts.js";
 import type {
   CgroupTelemetryPoint,
   DiffDelta,
@@ -92,33 +88,25 @@ export interface ApiResponse<T = unknown> {
 export interface ApiRunsResponse {
   readonly runs: readonly RunRecord[];
   readonly total: number;
-  readonly page?: number;
-  readonly pageSize?: number;
+  readonly offset: number;
+  readonly returnedRunCount: number;
+  readonly limit?: number;
 }
 
 export interface ApiReplayResponse {
   readonly session: ReplaySession;
 }
 
-export interface ApiLeaderboardResponse {
-  readonly entries: readonly LeaderboardEntry[];
-  readonly eloRatings: readonly EloRatingRecord[];
-  readonly total: number;
-  readonly lastUpdated: string;
-}
+export type ApiLeaderboardResponse = ReportSnapshot;
 
-export interface ApiSummaryResponse {
-  readonly totalRuns: number;
-  readonly completedRuns: number;
-  readonly failedRuns: number;
-  readonly topSkills: readonly SkillBenchmarkSummary[];
-  readonly recentRuns: readonly RunRecord[];
-}
+export type ApiSummaryResponse = ReportSnapshot & {
+  readonly summary: {
+    readonly lifecycleStatusCounts: ReportSnapshot["provenance"]["lifecycleStatusCounts"];
+    readonly eligibleLeaderboard: ReportSnapshot["leaderboard"];
+  };
+};
 
-export interface ApiTrendsResponse {
-  readonly skillId?: string;
-  readonly trends: readonly HistoricalTrendPoint[];
-}
+export type ApiTrendsResponse = ReportSnapshot & { readonly trends: NonNullable<ReportSnapshot["trends"]> };
 
 export interface ApiHealthResponse {
   readonly status: "healthy" | "degraded" | "unhealthy";
