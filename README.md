@@ -40,7 +40,6 @@ The default runtime root is `.benchmarks/`; `--output-dir` or `SKILL_BENCHMARKS_
 ```text
 .benchmarks/
 ├── db/benchmarks.sqlite
-├── exports/
 ├── runs/<run-id>/
 │   ├── manifest.json
 │   ├── result.json
@@ -48,7 +47,7 @@ The default runtime root is `.benchmarks/`; `--output-dir` or `SKILL_BENCHMARKS_
 └── sweeps/<sweep-id>/checkpoint.json
 ```
 
-Use the generated database explicitly when exporting a report:
+`.benchmarks/exports/` is optional and reserved for files written by `report --output`; it is not generated run evidence. Use the generated database explicitly when exporting a report:
 
 ```bash
 bun run cli -- report \
