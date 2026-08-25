@@ -11,7 +11,7 @@ The TUI Replay Player provides an interactive terminal scrubber for stepping thr
 You can launch the player directly against any recorded trajectory file (`.json` or `.jsonl`):
 
 ```bash
-bun run src/cli/index.ts replay data/trajectories/git-worktrees_using-git-worktrees_claude-3-7-sonnet.jsonl
+bun run cli -- replay data/trajectories/git-worktrees_using-git-worktrees_claude-3-7-sonnet.jsonl
 ```
 
 If launched without arguments, the player demonstrates a sample recorded trajectory.
@@ -97,10 +97,10 @@ You can also export recorded sessions to standalone Web replay HTML files or JSO
 
 ```bash
 # Export to standalone Web Replay HTML
-bun run src/cli/index.ts replay --web --output ./data/replay.html ./data/trajectory.jsonl
+bun run cli -- replay --web --output ./data/replay.html ./data/trajectory.jsonl
 
 # Export formatted JSON stream
-bun run src/cli/index.ts replay --format json --output ./data/replay.json ./data/trajectory.jsonl
+bun run cli -- replay --format json --output ./data/replay.json ./data/trajectory.jsonl
 ```
 
 ---
@@ -111,4 +111,3 @@ Learn how to stream live sandbox terminals over secure web tunnels:
 
 - [Previous: High-Throughput Matrix Sweeps](../running-benchmarks/matrix-sweeps.md)
 - [Next: Live Web Streaming & PTY Tunneling](web-streaming.md)
-

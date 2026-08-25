@@ -113,7 +113,7 @@ bun run src/scripts/verify-scenarios.ts
 3. Test run your scenario with a single trial:
 
 ```bash
-bun run src/cli/index.ts run \
+bun run cli -- run \
   --scenario custom-feature-flag \
   --skill clean-architecture \
   --model claude-3-7-sonnet
@@ -127,4 +127,3 @@ Return to the Table of Contents or run a matrix sweep with your new scenario:
 
 - [Previous: LLM Judge Arena & Multi-Agent Debates](../interactive-features/arena-debates.md)
 - [Table of Contents](../README.md)
-

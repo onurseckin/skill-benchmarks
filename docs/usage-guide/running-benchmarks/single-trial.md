@@ -24,7 +24,7 @@ Live execution must be selected with `--live` or `SKILL_BENCHMARKS_USE_MOCK=fals
 ```bash
 GEMINI_API_KEY="replace-with-a-real-key" bun run cli -- run \
   --live \
-  --provider gemini \
+  --provider google \
   --scenario git-worktrees \
   --skill using-git-worktrees \
   --model gemini-2-0-flash \

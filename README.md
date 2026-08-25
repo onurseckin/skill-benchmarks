@@ -20,7 +20,7 @@ Fake mode is the default. `--mock` makes that selection explicit. The fake provi
 
 ## Live execution
 
-Use `--live` only when you intend to contact a provider. It requires a nonblank credential for the selected provider before the benchmark begins.
+Use `--live` only when you intend to contact a provider. It requires a nonblank credential for the selected provider before any provider request.
 
 ```bash
 ANTHROPIC_API_KEY="replace-with-a-real-key" bun run cli -- run \

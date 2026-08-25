@@ -68,7 +68,7 @@ Where $K$ is the rating volatility factor (default: 32), $S_A$ is the actual mat
 Execute a direct head-to-head battle between two frontier models on a specific scenario:
 
 ```bash
-bun run src/cli/index.ts arena \
+bun run cli -- arena \
   --scenario git-worktrees \
   --model claude-3-7-sonnet,o3-mini \
   --judge-model claude-3-7-sonnet \
@@ -94,13 +94,13 @@ Head-to-Head Arena Battle: claude-3-7-sonnet (Elo: 1500) vs o3-mini (Elo: 1500) 
 Execute multi-round round-robin tournament pairings across multiple skills:
 
 ```bash
-bun run src/cli/index.ts tournament \
+bun run cli -- tournament \
   --scenario git-worktrees,memory-leak \
   --skill using-git-worktrees,generic-agent,systematic-debugging \
   --k-factor 32 \
   --initial-rating 1500 \
   --max-matches 30 \
-  --db-path data/benchmark-results.db
+  --db data/benchmark-results.db
 ```
 
 ---
@@ -111,10 +111,10 @@ Generate standalone SVG shield badges and self-contained HTML report cards for a
 
 ```bash
 # Export SVG badge for GitHub README
-bun run src/cli/index.ts report --export-card svg --card-output ./badges/claude-skill.svg
+bun run cli -- report --export-card svg --card-output ./badges/claude-skill.svg
 
 # Export standalone self-contained HTML report card
-bun run src/cli/index.ts report --export-card html --card-output ./reports/trial-card.html
+bun run cli -- report --export-card html --card-output ./reports/trial-card.html
 ```
 
 ---
@@ -125,4 +125,3 @@ Learn how to author custom benchmark scenarios:
 
 - [Previous: Live Web Streaming](web-streaming.md)
 - [Next: Authoring Custom Scenarios](../custom-scenarios/authoring-scenarios.md)
-

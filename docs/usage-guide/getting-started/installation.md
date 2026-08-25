@@ -103,7 +103,7 @@ bun run typecheck
 bun run src/scripts/quality-gate.ts
 
 # 3. List available scenarios and skills in the catalog
-bun run src/cli/index.ts list --target all
+bun run cli -- list --target all
 ```
 
 Expected output for the list command:
