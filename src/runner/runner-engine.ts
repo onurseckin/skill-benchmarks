@@ -41,7 +41,7 @@ export class ScenarioRunnerEngine {
   ): Promise<ScenarioResult> {
     const startedAt = new Date().toISOString();
     const startTimeMs = performance.now();
-    const basePath = config.workspace?.rootPath ?? ".benchmarks/runs/" + config.runId;
+    const basePath = config.artifactOutputDir ?? config.workspace?.rootPath ?? ".benchmarks/runs/" + config.runId;
     const artifactPaths = resolveArtifactPaths(basePath);
     const scribe = new EventScribe({ runId: config.runId, outputDir: artifactPaths.runDir });
 

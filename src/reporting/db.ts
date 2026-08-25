@@ -11,9 +11,9 @@ import type {
   TelemetryEventRecord,
 } from "./types.js";
 import type { ExecutionMode } from "../shared/execution-mode.js";
+import { sanitizeBenchmarkArtifactValue } from "../shared/artifact-sanitization.js";
 import { claimTerminalRunIdentity, TerminalRunIdentityConflictError } from "./run-identity.js";
 export { TerminalRunIdentityConflictError } from "./run-identity.js";
-
 interface RunRow {
   readonly sweep_id: string | null;
   readonly plan_fingerprint: string | null;
@@ -196,12 +196,12 @@ export class TelemetryDatabase {
   }
 
   public saveRunRecord(record: RunRecord): void {
-    const skillVersion = record.skillVersion ?? record.manifest?.skillVersion ?? null;
-    const commitSha = record.manifest?.environment?.hostCommitSha ?? null;
-    const manifestJson = record.manifest ? JSON.stringify(record.manifest) : null;
-    const metricsJson = record.metrics ? JSON.stringify(record.metrics) : null;
-    const evaluationJson = record.evaluation ? JSON.stringify(record.evaluation) : null;
-
+    const sanitizedRecord = sanitizeBenchmarkArtifactValue(record) as RunRecord;
+    const skillVersion = sanitizedRecord.skillVersion ?? sanitizedRecord.manifest?.skillVersion ?? null;
+    const commitSha = sanitizedRecord.manifest?.environment?.hostCommitSha ?? null;
+    const manifestJson = sanitizedRecord.manifest ? JSON.stringify(sanitizedRecord.manifest) : null;
+    const metricsJson = sanitizedRecord.metrics ? JSON.stringify(sanitizedRecord.metrics) : null;
+    const evaluationJson = sanitizedRecord.evaluation ? JSON.stringify(sanitizedRecord.evaluation) : null;
     const stmt = this.db.prepare(`
       INSERT INTO runs (
         run_id, sweep_id, plan_fingerprint, cell_id, matrix_occurrence_index,
@@ -217,20 +217,20 @@ export class TelemetryDatabase {
 
     try {
       stmt.run(
-        record.runId, record.sweepId ?? null, record.planFingerprint ?? null, record.cellId ?? null, record.matrixOccurrenceIndex ?? null,
-        record.scenarioId, record.category, record.skillId, skillVersion,
-        record.modelId, record.providerId, record.executionMode, record.simulated ? 1 : 0,
-        record.thinkingLevel ?? record.manifest?.modelParameters?.thinkingLevel ?? null,
-        record.thinkingBudgetTokens ?? record.manifest?.modelParameters?.thinkingBudgetTokens ?? null,
-        record.reasoningTokens ?? null,
-        record.status, record.terminationReason ?? null, record.compositeScore,
-        record.passedBenchmark ? 1 : 0, record.wallClockMs, record.totalTokens,
-        record.cacheHitRatio, record.totalCostUSD, record.totalTurns, record.errorCount, record.attemptCount ?? 0,
-        record.startedAt, record.completedAt, manifestJson, metricsJson, evaluationJson, commitSha
+        sanitizedRecord.runId, sanitizedRecord.sweepId ?? null, sanitizedRecord.planFingerprint ?? null, sanitizedRecord.cellId ?? null, sanitizedRecord.matrixOccurrenceIndex ?? null,
+        sanitizedRecord.scenarioId, sanitizedRecord.category, sanitizedRecord.skillId, skillVersion,
+        sanitizedRecord.modelId, sanitizedRecord.providerId, sanitizedRecord.executionMode, sanitizedRecord.simulated ? 1 : 0,
+        sanitizedRecord.thinkingLevel ?? sanitizedRecord.manifest?.modelParameters?.thinkingLevel ?? null,
+        sanitizedRecord.thinkingBudgetTokens ?? sanitizedRecord.manifest?.modelParameters?.thinkingBudgetTokens ?? null,
+        sanitizedRecord.reasoningTokens ?? null,
+        sanitizedRecord.status, sanitizedRecord.terminationReason ?? null, sanitizedRecord.compositeScore,
+        sanitizedRecord.passedBenchmark ? 1 : 0, sanitizedRecord.wallClockMs, sanitizedRecord.totalTokens,
+        sanitizedRecord.cacheHitRatio, sanitizedRecord.totalCostUSD, sanitizedRecord.totalTurns, sanitizedRecord.errorCount, sanitizedRecord.attemptCount ?? 0,
+        sanitizedRecord.startedAt, sanitizedRecord.completedAt, manifestJson, metricsJson, evaluationJson, commitSha
       );
       this.db.prepare("DELETE FROM run_claims WHERE run_id = ?").run(record.runId);
     } catch (error) {
-      if (this.getRunRecord(record.runId) !== undefined) throw new TerminalRunIdentityConflictError();
+      if (this.getRunRecord(sanitizedRecord.runId) !== undefined) throw new TerminalRunIdentityConflictError();
       throw error;
     }
   }
@@ -260,10 +260,11 @@ export class TelemetryDatabase {
     `);
     const insertTransaction = this.db.transaction((records: ReadonlyArray<TelemetryEventRecord>) => {
       for (const event of records) {
+        const sanitizedEvent = sanitizeBenchmarkArtifactValue(event) as TelemetryEventRecord;
         stmt.run(
-          event.runId, event.scenarioId, event.skillId ?? null, event.modelId,
-          event.timestampUs, event.eventType, event.sequenceNumber ?? null,
-          event.payload ? JSON.stringify(event.payload) : null
+          sanitizedEvent.runId, sanitizedEvent.scenarioId, sanitizedEvent.skillId ?? null, sanitizedEvent.modelId,
+          sanitizedEvent.timestampUs, sanitizedEvent.eventType, sanitizedEvent.sequenceNumber ?? null,
+          sanitizedEvent.payload ? JSON.stringify(sanitizedEvent.payload) : null
         );
       }
     });

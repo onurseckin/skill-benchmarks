@@ -1,6 +1,7 @@
 import type { IContainerInstance } from "../infrastructure/container/types.js";
 import { createDisposableWorkspace } from "../infrastructure/workspace/disposable-workspace.js";
 import { createRunArtifactLayout, prepareRunArtifactLayout } from "../infrastructure/workspace/run-artifact-layout.js";
+import type { DisposableWorkspace } from "../infrastructure/workspace/types.js";
 import { createProviderAdapter } from "../providers/factory.js";
 import { TelemetryDatabase, TerminalRunIdentityConflictError } from "../reporting/db.js";
 import type { ScenarioResult, RunTerminationReason } from "../runner/types.js";
@@ -61,6 +62,7 @@ export async function executeSweepCell(input: CellExecutionInput): Promise<Matri
   let evidenceCategory = "unknown";
   let attemptCount = 0;
   let infrastructureFailure: RunTerminationReason | undefined;
+  let workspace: DisposableWorkspace | undefined;
 
   try {
     await prepareRunArtifactLayout(artifactLayout);
@@ -73,7 +75,7 @@ export async function executeSweepCell(input: CellExecutionInput): Promise<Matri
     } catch {
       return persistTerminalFailure(cell, telemetryDb, artifactLayout, context, scenarioResult, attemptCount, startedMs);
     }
-    const workspace = await createDisposableWorkspace({
+    workspace = await createDisposableWorkspace({
       outputRoot: cell.outputRoot,
       runId: cell.runId,
       scenarioId: cell.scenarioId,
@@ -117,6 +119,7 @@ export async function executeSweepCell(input: CellExecutionInput): Promise<Matri
             }),
             prompt: scenarioDefinition.instructions,
             workspace,
+            artifactOutputDir: artifactLayout.runDirectory,
             container,
             limits: cell.limits,
             temperature: cell.temperature,
@@ -149,6 +152,14 @@ export async function executeSweepCell(input: CellExecutionInput): Promise<Matri
     }
   } catch {
     infrastructureFailure = "error";
+  } finally {
+    if (workspace !== undefined) {
+      try {
+        await workspace.dispose();
+      } catch {
+        infrastructureFailure = "error";
+      }
+    }
   }
 
   const context = { ...baseContext, category: evidenceCategory };

@@ -94,7 +94,7 @@ export async function runBenchmarkCommand(args: CliParsedArgs): Promise<CliComma
       ...(options.maxCostUSD === undefined ? {} : { maxCostUSD: options.maxCostUSD }),
       ...(options.timeoutSeconds === undefined ? {} : { maxWallClockTimeMs: options.timeoutSeconds * 1000 }),
     },
-    concurrency: { maxGlobalConcurrency: options.concurrency ?? 2 },
+    concurrency: { maxGlobalConcurrency: options.concurrency ?? 4 },
     telemetryDbPath: dbPath,
     runtimeConfig,
   };
@@ -159,9 +159,9 @@ export async function runReportCommand(args: CliParsedArgs): Promise<CliCommandR
   const options = args.reportOptions !== undefined ? args.reportOptions : ({} as ReportOptions);
   const dbPath = options.dbPath !== undefined ? options.dbPath : resolve(process.cwd(), "benchmarks.db");
   const format = options.format !== undefined ? options.format : "console";
-
+  if (!existsSync(dbPath)) throw new TypeError(`Report requires an existing benchmark database: ${dbPath}`);
   console.log(formatSectionHeader(`Generating Benchmark Report [format: ${format}] from ${dbPath}`));
-  const db = new TelemetryDatabase(dbPath);
+  const db = new TelemetryDatabase(dbPath, { readonly: true });
   try {
   const runs = db.queryRuns();
   const aggregates = aggregateAllSkills(runs, options.controlSkillId);

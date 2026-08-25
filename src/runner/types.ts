@@ -238,6 +238,7 @@ export interface ScenarioRunConfig {
   readonly provider: LLMProviderAdapter;
   readonly prompt: string;
   readonly systemPrompt?: string;
+  readonly artifactOutputDir?: string;
   readonly workspace?: WorkspaceRoot;
   readonly container?: IContainerInstance;
   readonly limits: ExecutionLimits;
