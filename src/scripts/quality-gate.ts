@@ -8,6 +8,7 @@ import type { NeoBrutalistDashboardConfig } from "../reporting/index.js";
 import type { NeoBrutalistComponentTokens } from "../dashboard-ui/types.js";
 import { runInteractiveDialogTest } from "../dialog/index.js";
 import { lookupCanonicalSkill } from "../skills/index.js";
+import { runCli } from "../index.js";
 
 void startStreamTunnel;
 void createJudgeArena;
@@ -15,6 +16,7 @@ void BudgetController;
 void OptimizerEngine;
 void runInteractiveDialogTest;
 void lookupCanonicalSkill;
+void runCli;
 const _nbConfig: NeoBrutalistDashboardConfig | null = null;
 void _nbConfig;
 const _nbTokens: NeoBrutalistComponentTokens | null = null;
