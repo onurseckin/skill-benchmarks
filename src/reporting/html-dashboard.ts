@@ -31,8 +31,14 @@ function renderLeaderboardRows(entries: readonly LeaderboardEntry[]): string {
         ? `<span class="badge badge-sig">p &lt; 0.05</span>`
         : `<span class="badge badge-dim">—</span>`;
       const cacheHitPct = (e.cacheHitRatio * (e.cacheHitRatio <= 1 ? 100 : 1)).toFixed(1);
+      const modelLabel = e.modelId ? escapeHtml(e.modelId) : "DEFAULT";
+      const thinkBadge =
+        e.thinkingLevel && e.thinkingLevel !== "none"
+          ? `<span class="badge badge-think">${escapeHtml(e.thinkingLevel.toUpperCase())}</span>`
+          : `<span class="badge badge-dim">OFF</span>`;
+      const reasoningTokens = e.reasoningTokens ? e.reasoningTokens.toLocaleString() : "—";
 
-      return `<tr data-category="${escapeHtml(e.category)}" data-skill="${escapeHtml(e.skillId)}"><td>#${e.rank}</td><td><strong>${escapeHtml(e.skillId)}</strong></td><td><span class="badge badge-cat">${escapeHtml(e.category)}</span></td><td>${e.passRate.toFixed(1)}%${deltaHtml}</td><td>${e.averageScore.toFixed(3)}</td><td>${Math.round(e.eloRating)}</td><td>${e.meanDurationSeconds.toFixed(2)}s</td><td>$${e.averageCostUSD.toFixed(4)}</td><td>${cacheHitPct}%</td><td>${e.totalRuns}</td><td>${sigBadge}</td></tr>`;
+      return `<tr data-category="${escapeHtml(e.category)}" data-skill="${escapeHtml(e.skillId)}" data-model="${modelLabel.toLowerCase()}" data-tier="${escapeHtml(e.modelTier ?? "flagship")}" data-think="${escapeHtml(e.thinkingLevel ?? "none")}"><td>#${e.rank}</td><td><strong>${modelLabel}</strong></td><td>${thinkBadge}</td><td><strong>${escapeHtml(e.skillId)}</strong></td><td><span class="badge badge-cat">${escapeHtml(e.category)}</span></td><td>${e.passRate.toFixed(1)}%${deltaHtml}</td><td>${e.averageScore.toFixed(3)}</td><td>${Math.round(e.eloRating)}</td><td>${e.meanDurationSeconds.toFixed(2)}s</td><td>$${e.averageCostUSD.toFixed(4)}</td><td>${cacheHitPct}%</td><td>${reasoningTokens}</td><td>${e.totalRuns}</td><td>${sigBadge}</td></tr>`;
     })
     .join("");
 }
@@ -274,16 +280,19 @@ export function generateHtmlDashboard(
         <thead>
           <tr>
             <th data-col="0" class="sortable">RANK</th>
-            <th data-col="1" class="sortable">SKILL ID</th>
-            <th data-col="2" class="sortable">CATEGORY</th>
-            <th data-col="3" class="sortable">PASS RATE</th>
-            <th data-col="4" class="sortable">SCORE</th>
-            <th data-col="5" class="sortable">ELO</th>
-            <th data-col="6" class="sortable">DURATION</th>
-            <th data-col="7" class="sortable">COST</th>
-            <th data-col="8" class="sortable">CACHE HIT</th>
-            <th data-col="9" class="sortable">RUNS</th>
-            <th data-col="10" class="sortable">STAT SIG</th>
+            <th data-col="1" class="sortable">MODEL</th>
+            <th data-col="2" class="sortable">THINKING</th>
+            <th data-col="3" class="sortable">SKILL ID</th>
+            <th data-col="4" class="sortable">CATEGORY</th>
+            <th data-col="5" class="sortable">PASS RATE</th>
+            <th data-col="6" class="sortable">SCORE</th>
+            <th data-col="7" class="sortable">ELO</th>
+            <th data-col="8" class="sortable">DURATION</th>
+            <th data-col="9" class="sortable">COST</th>
+            <th data-col="10" class="sortable">CACHE HIT</th>
+            <th data-col="11" class="sortable">REASONING TOK</th>
+            <th data-col="12" class="sortable">RUNS</th>
+            <th data-col="13" class="sortable">STAT SIG</th>
           </tr>
         </thead>
         <tbody>

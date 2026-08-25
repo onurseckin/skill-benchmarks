@@ -200,6 +200,10 @@ export interface SkillBenchmarkSummary {
 
 export interface LeaderboardEntry {
   readonly rank: number;
+  readonly modelId?: string;
+  readonly modelTier?: "flagship" | "mid" | "small";
+  readonly thinkingLevel?: "none" | "low" | "medium" | "high" | "max";
+  readonly reasoningTokens?: number;
   readonly skillId: string;
   readonly category: string;
   readonly passRate: number;
