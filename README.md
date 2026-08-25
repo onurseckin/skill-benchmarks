@@ -11,8 +11,8 @@ bun install
 bun run cli -- run \
   --mock \
   --scenario git-worktrees \
-  --skill using-git-worktrees \
-  --model claude-3-7-sonnet \
+  --skill tdd \
+  --model gpt-4o \
   --output-dir .benchmarks
 ```
 
@@ -23,11 +23,11 @@ Fake mode is the default. `--mock` makes that selection explicit. The fake provi
 Use `--live` only when you intend to contact a provider. It requires a nonblank credential for the selected provider before any provider request.
 
 ```bash
-ANTHROPIC_API_KEY="replace-with-a-real-key" bun run cli -- run \
+OPENAI_API_KEY="replace-with-a-real-key" bun run cli -- run \
   --live \
   --scenario git-worktrees \
-  --skill using-git-worktrees \
-  --model claude-3-7-sonnet \
+  --skill tdd \
+  --model gpt-4o \
   --output-dir .benchmarks
 ```
 
@@ -61,6 +61,7 @@ The full artifact contract, including every per-run path, is in the [configurati
 ## Local verification
 
 ```bash
+bun run test
 bun run typecheck
 bun run src/scripts/quality-gate.ts
 ```

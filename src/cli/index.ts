@@ -1,171 +1,109 @@
-import pkg from "../../package.json";
-
-import type {
-  CliCommandName,
-  CliCommandResult,
-  CliOutputFormat,
-  BenchmarkRunOptions,
-  TournamentOptions,
-  ReportOptions,
-  SyncOptions,
-  ListOptions,
-  ReplayCliOptions,
-  CliParsedArgs,
-  TableColumn,
-  TableRenderOptions,
-  MetricCard,
-  ProgressBarOptions,
-  StatusBadgeStatus,
-} from "./types.js";
-
+import { ReplayEvidenceInvalidError, ReplayEvidenceUnavailableError } from "../replay/errors.js";
+import { ScenarioCatalogError } from "../runner/scenario-loader.js";
+import { BenchmarkRuntimeConfigurationError } from "../shared/benchmark-runtime-config.js";
+import { ExecutionModeConfigurationError } from "../shared/execution-mode.js";
+import { BenchmarkAdmissionError } from "../sweep/sweep-config-validation.js";
+import { runArenaCommand } from "./commands/arena.js";
+import { runListCommand } from "./commands/list.js";
+import { runReplayCommand } from "./commands/replay.js";
+import { runReportCommand } from "./commands/report.js";
+import { runBenchmarkCommand } from "./commands/run.js";
+import { runTournamentCommand } from "./commands/tournament.js";
+import { getHelpText, getVersionText } from "./grammar/help.js";
 import {
-  bold,
-  dim,
-  italic,
-  underline,
-  red,
-  green,
-  yellow,
-  blue,
-  magenta,
-  cyan,
-  white,
-  gray,
-  reset,
-  stripAnsi,
-  stringWidth,
-  formatTable,
-  formatMetricCards,
-  formatProgressBar,
-  formatBadge,
-  formatError,
-  formatKeyValueList,
-  formatSectionHeader,
-} from "./formatter.js";
+  CliInputError,
+  diagnosticSummary,
+  type CliCommandName,
+  type CliDiagnosticCode,
+} from "./grammar/types.js";
+import { parseCliArgs } from "./parser.js";
+import type { CliCommandHandler, CliOutput } from "./types.js";
 
-import { parseCliArgs, getHelpText, getVersionText } from "./parser.js";
+type ExecutableCommand = Exclude<CliCommandName, "help" | "version">;
 
-import {
-  runBenchmarkCommand,
-  runArenaCommand,
-  runTournamentCommand,
-  runReportCommand,
-  runSyncCommand,
-  runListCommand,
-  runReplayCommand,
-  runHelpCommand,
-  runVersionCommand,
-} from "./commands.js";
+const commandHandlers: Readonly<Record<ExecutableCommand, CliCommandHandler>> = Object.freeze({
+  run: runBenchmarkCommand,
+  arena: runArenaCommand,
+  tournament: runTournamentCommand,
+  report: runReportCommand,
+  list: runListCommand,
+  replay: runReplayCommand,
+});
 
-export type {
-  CliCommandName,
-  CliCommandResult,
-  CliOutputFormat,
-  BenchmarkRunOptions,
-  TournamentOptions,
-  ReportOptions,
-  SyncOptions,
-  ListOptions,
-  ReplayCliOptions,
-  CliParsedArgs,
-  TableColumn,
-  TableRenderOptions,
-  MetricCard,
-  ProgressBarOptions,
-  StatusBadgeStatus,
-};
+class BufferedCliOutput implements CliOutput {
+  private readonly stdoutChunks: string[] = [];
+  private readonly stderrChunks: string[] = [];
 
-export {
-  bold,
-  dim,
-  italic,
-  underline,
-  red,
-  green,
-  yellow,
-  blue,
-  magenta,
-  cyan,
-  white,
-  gray,
-  reset,
-  stripAnsi,
-  stringWidth,
-  formatTable,
-  formatMetricCards,
-  formatProgressBar,
-  formatBadge,
-  formatError,
-  formatKeyValueList,
-  formatSectionHeader,
-  parseCliArgs,
-  getHelpText,
-  getVersionText,
-  runBenchmarkCommand,
-  runArenaCommand,
-  runTournamentCommand,
-  runReportCommand,
-  runSyncCommand,
-  runListCommand,
-  runReplayCommand,
-  runHelpCommand,
-  runVersionCommand,
-};
-
-export async function runCli(argv?: readonly string[]): Promise<number> {
-  const rawArgs = argv !== undefined ? argv : process.argv.slice(2);
-  const binEntry: string = pkg.bin["skill-benchmarks"];
-  if (binEntry.length === 0) {
-    return 1;
+  stdout(text: string): void {
+    this.stdoutChunks.push(text);
   }
+
+  stderr(text: string): void {
+    this.stderrChunks.push(text);
+  }
+
+  flush(): void {
+    if (this.stdoutChunks.length > 0) process.stdout.write(this.stdoutChunks.join(""));
+    if (this.stderrChunks.length > 0) process.stderr.write(this.stderrChunks.join(""));
+  }
+}
+
+export async function runCli(argv: readonly string[] = process.argv.slice(2)): Promise<number> {
+  const output = new BufferedCliOutput();
   try {
-    const parsed = parseCliArgs(rawArgs);
-
-    if (parsed.command === "help" || Boolean(parsed.flags["help"])) {
-      const result = await runHelpCommand(parsed);
-      return result.exitCode;
+    const parsed = parseCliArgs(argv, { stdoutIsTTY: process.stdout.isTTY === true });
+    if (parsed.helpRequested || parsed.command === "help") {
+      const requested = parsed.command === "help" ? readHelpTarget(parsed.positionals[0]) : parsed.command;
+      process.stdout.write(`${getHelpText(requested)}\n`);
+      return 0;
     }
-
-    if (parsed.command === "version" || Boolean(parsed.flags["version"])) {
-      const result = await runVersionCommand(parsed);
-      return result.exitCode;
+    if (parsed.command === "version") {
+      process.stdout.write(`${getVersionText()}\n`);
+      return 0;
     }
-
-    let result: CliCommandResult;
-    switch (parsed.command) {
-      case "run":
-      case "bench":
-        result = await runBenchmarkCommand(parsed);
-        break;
-      case "arena":
-        result = await runArenaCommand(parsed);
-        break;
-      case "tournament":
-        result = await runTournamentCommand(parsed);
-        break;
-      case "report":
-        result = await runReportCommand(parsed);
-        break;
-      case "sync":
-        result = await runSyncCommand(parsed);
-        break;
-      case "list":
-        result = await runListCommand(parsed);
-        break;
-      case "replay":
-        result = await runReplayCommand(parsed);
-        break;
-      default:
-        result = await runHelpCommand(parsed);
-        break;
+    const handler = commandHandlers[parsed.command];
+    const result = await handler(parsed, output);
+    if (!result.success || result.exitCode !== 0) {
+      writeDiagnostic("command_failed");
+      return 1;
     }
-
-    return result.exitCode;
+    output.flush();
+    return 0;
   } catch (error) {
-    const formatted = formatError(error, false);
-    console.error(formatted);
-    return 1;
+    const classified = classifyError(error);
+    writeDiagnostic(classified.code);
+    return classified.exitCode;
   }
+}
+
+function readHelpTarget(value: string | undefined): CliCommandName | undefined {
+  if (value === undefined) return undefined;
+  return value as CliCommandName;
+}
+
+function classifyError(error: unknown): { readonly code: CliDiagnosticCode; readonly exitCode: 1 | 2 } {
+  if (error instanceof CliInputError) {
+    return { code: error.code, exitCode: error.code === "command_failed" ? 1 : 2 };
+  }
+  if (error instanceof BenchmarkAdmissionError) return { code: error.code, exitCode: 2 };
+  if (error instanceof ScenarioCatalogError) {
+    return {
+      code: error.code === "scenario_unresolved" ? "scenario_unresolved" : "scenario_catalog_invalid",
+      exitCode: 2,
+    };
+  }
+  if (error instanceof ExecutionModeConfigurationError
+    || error instanceof BenchmarkRuntimeConfigurationError) {
+    return { code: "invalid_configuration", exitCode: 2 };
+  }
+  if (error instanceof ReplayEvidenceUnavailableError || error instanceof ReplayEvidenceInvalidError) {
+    return { code: "replay_unavailable", exitCode: 2 };
+  }
+  return { code: "command_failed", exitCode: 1 };
+}
+
+function writeDiagnostic(code: CliDiagnosticCode): void {
+  process.stderr.write(`skill-benchmarks: ${code}: ${diagnosticSummary(code)}\n`);
 }
 
 export default runCli;

@@ -5,6 +5,13 @@ export interface ExecutionModeInput {
   readonly live?: boolean;
 }
 
+export class ExecutionModeConfigurationError extends TypeError {
+  constructor() {
+    super("Execution mode configuration is invalid");
+    this.name = "ExecutionModeConfigurationError";
+  }
+}
+
 const useMockEnvironmentVariable = "SKILL_BENCHMARKS_USE_MOCK";
 
 function resolveEnvironmentExecutionMode(environment: NodeJS.ProcessEnv): ExecutionMode | undefined {
@@ -18,7 +25,7 @@ function resolveEnvironmentExecutionMode(environment: NodeJS.ProcessEnv): Execut
   if (configuredValue === "false") {
     return "live";
   }
-  throw new TypeError(`Argument error: ${useMockEnvironmentVariable} must be true or false`);
+  throw new ExecutionModeConfigurationError();
 }
 
 export function resolveExecutionMode(
@@ -26,7 +33,7 @@ export function resolveExecutionMode(
   environment: NodeJS.ProcessEnv = process.env
 ): ExecutionMode {
   if (input.mock === true && input.live === true) {
-    throw new TypeError("Argument error: --mock and --live cannot be used together");
+    throw new ExecutionModeConfigurationError();
   }
   if (input.mock === true) {
     return "fake";

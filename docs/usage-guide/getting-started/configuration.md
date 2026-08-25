@@ -16,7 +16,7 @@ Fake mode is the default. It performs no provider network request and is intende
 | `--live` | Live |
 | `SKILL_BENCHMARKS_USE_MOCK=false` | Live |
 
-`SKILL_BENCHMARKS_USE_MOCK` accepts only `true` and `false`. `--mock` and `--live` are mutually exclusive. Live mode validates the selected provider's key before attempting a request.
+`SKILL_BENCHMARKS_USE_MOCK` accepts exact lowercase `true` and `false`. An absent or empty value leaves the mode unselected. Every other nonempty value is invalid. `--mock` and `--live` are mutually exclusive and override a valid environment selection. Live mode validates the selected provider's key before attempting a request.
 
 | Provider | Required live credential |
 | --- | --- |
@@ -30,8 +30,8 @@ Example fake run:
 bun run cli -- run \
   --mock \
   --scenario git-worktrees \
-  --skill using-git-worktrees \
-  --model claude-3-7-sonnet \
+  --skill tdd \
+  --model gpt-4o \
   --output-dir .benchmarks
 ```
 
@@ -42,7 +42,7 @@ OPENAI_API_KEY="replace-with-a-real-key" bun run cli -- run \
   --live \
   --provider openai \
   --scenario git-worktrees \
-  --skill using-git-worktrees \
+  --skill tdd \
   --model gpt-4o \
   --output-dir .benchmarks
 ```
@@ -60,8 +60,8 @@ The benchmark command writes its SQLite index to `<output-root>/db/benchmarks.sq
 ```bash
 SKILL_BENCHMARKS_OUTPUT_DIR=.benchmarks-local bun run cli -- run \
   --scenario git-worktrees \
-  --skill using-git-worktrees \
-  --model claude-3-7-sonnet
+  --skill tdd \
+  --model gpt-4o
 ```
 
 ## Artifact layout

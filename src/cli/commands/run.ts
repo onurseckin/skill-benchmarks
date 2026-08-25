@@ -3,17 +3,17 @@ import { getModelDefinition } from "../../models/model-registry.js";
 import { ScenarioLoader } from "../../runner/scenario-loader.js";
 import { resolveBenchmarkRuntimeConfig } from "../../shared/benchmark-runtime-config.js";
 import { MatrixSweepEngine } from "../../sweep/sweep-engine.js";
-import {
-  BenchmarkAdmissionError,
-  validateMatrixSweepConfig,
-} from "../../sweep/sweep-config-validation.js";
+import { BenchmarkAdmissionError, validateMatrixSweepConfig } from "../../sweep/sweep-config-validation.js";
 import type { MatrixSweepConfig } from "../../sweep/types.js";
 import { cyan, formatBadge, formatSectionHeader } from "../formatter.js";
-import type { BenchmarkRunOptions, CliCommandResult, CliParsedArgs } from "../types.js";
+import type { BenchmarkRunOptions, CliCommandResult, CliOutput, CliParsedArgs } from "../types.js";
 
-export async function runBenchmarkCommand(args: CliParsedArgs): Promise<CliCommandResult> {
-  const startTime = Date.now();
-  const options = args.benchmarkOptions ?? ({} as BenchmarkRunOptions);
+export async function runBenchmarkCommand(
+  args: CliParsedArgs,
+  output: CliOutput
+): Promise<CliCommandResult> {
+  const startedAt = Date.now();
+  const options = requireOptions(args.benchmarkOptions);
   const runtimeConfig = resolveBenchmarkRuntimeConfig({
     mock: options.mock,
     live: options.live,
@@ -23,9 +23,7 @@ export async function runBenchmarkCommand(args: CliParsedArgs): Promise<CliComma
   const scenarioIds = resolveScenarioIds(options);
   if (options.skillIds.length === 0) throw new BenchmarkAdmissionError("skill_unresolved");
   const skillIds = [...options.skillIds];
-  const modelIds = options.modelIds.length > 0
-    ? [...options.modelIds]
-    : ["claude-3-7-sonnet-20250219"];
+  const modelIds = options.modelIds.length > 0 ? [...options.modelIds] : ["claude-3-7-sonnet-20250219"];
   const models = modelIds.map((modelId) => {
     const definition = getModelDefinition(modelId);
     if (definition === undefined) throw new BenchmarkAdmissionError("model_unresolved");
@@ -55,23 +53,23 @@ export async function runBenchmarkCommand(args: CliParsedArgs): Promise<CliComma
     runtimeConfig,
   };
   validateMatrixSweepConfig(sweepConfig);
-  console.log(formatSectionHeader(`Executing Skill Benchmark Matrix: ${scenarioIds.length} scenario(s) x ${skillIds.length} skill(s) x ${modelIds.length} model(s)`));
+  output.stdout(`${formatSectionHeader(`Executing Skill Benchmark Matrix: ${scenarioIds.length} scenario(s) x ${skillIds.length} skill(s) x ${modelIds.length} model(s)`)}\n`);
   const engine = new MatrixSweepEngine();
   engine.on((event) => {
     if (event.type === "cell:complete") {
       const evaluated = event.payload?.eligibilityStatus === "eligible" && typeof event.payload.passedBenchmark === "boolean";
       const passedBenchmark = evaluated && event.payload?.passedBenchmark === true;
       const label = evaluated ? (passedBenchmark ? "PASS" : "EVALUATED") : "COMPLETE";
-      console.log(`  ${formatBadge(passedBenchmark ? "success" : "info", label)} ${cyan(event.cellId ?? "")} | ${event.message}`);
+      output.stdout(`  ${formatBadge(passedBenchmark ? "success" : "info", label)} ${cyan(event.cellId ?? "")} | ${event.message}\n`);
     } else if (event.type === "cell:error") {
-      console.log(`  ${formatBadge("error", "FAIL")} ${cyan(event.cellId ?? "")} | ${event.message}`);
+      output.stdout(`  ${formatBadge("error", "FAIL")} ${cyan(event.cellId ?? "")} | ${event.message}\n`);
     }
   });
   const summary = await engine.run(sweepConfig);
   const terminalLabel = summary.status === "completed" ? "Complete" : summary.status === "aborted" ? "Aborted" : "Failed";
-  console.log(formatSectionHeader(`Sweep ${terminalLabel}: ${summary.completedCount}/${summary.completedCount + summary.failedCount} completed in ${(summary.totalDurationMs / 1000).toFixed(1)}s`));
+  output.stdout(`${formatSectionHeader(`Sweep ${terminalLabel}: ${summary.completedCount}/${summary.completedCount + summary.failedCount} completed in ${(summary.totalDurationMs / 1000).toFixed(1)}s`)}\n`);
   const success = summary.status === "completed" && summary.failedCount === 0;
-  return { success, exitCode: success ? 0 : 1, durationMs: Date.now() - startTime, data: summary };
+  return { success, exitCode: success ? 0 : 1, durationMs: Date.now() - startedAt, data: summary };
 }
 
 function resolveScenarioIds(options: BenchmarkRunOptions): readonly string[] {
@@ -91,4 +89,9 @@ function resolveScenarioIds(options: BenchmarkRunOptions): readonly string[] {
   const matches = loader.queryScenarios({ category: options.category });
   if (matches.length === 0) throw new BenchmarkAdmissionError("scenario_unresolved");
   return matches.map((scenario) => scenario.id);
+}
+
+function requireOptions(options: BenchmarkRunOptions | undefined): BenchmarkRunOptions {
+  if (options === undefined) throw new TypeError("Benchmark options are unavailable");
+  return options;
 }

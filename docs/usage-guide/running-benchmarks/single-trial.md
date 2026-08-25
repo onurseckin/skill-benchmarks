@@ -10,8 +10,8 @@ A benchmark cell combines a scenario, a skill, and a model. The `run` command ac
 bun run cli -- run \
   --mock \
   --scenario git-worktrees \
-  --skill using-git-worktrees \
-  --model claude-3-7-sonnet \
+  --skill tdd \
+  --model gpt-4o \
   --output-dir .benchmarks
 ```
 
@@ -26,8 +26,8 @@ GEMINI_API_KEY="replace-with-a-real-key" bun run cli -- run \
   --live \
   --provider google \
   --scenario git-worktrees \
-  --skill using-git-worktrees \
-  --model gemini-2-0-flash \
+  --skill tdd \
+  --model gemini-2.0-flash-thinking-exp-01-21 \
   --output-dir .benchmarks
 ```
 

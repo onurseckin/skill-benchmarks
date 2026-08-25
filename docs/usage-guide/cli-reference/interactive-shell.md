@@ -28,8 +28,8 @@ Use the benchmark command directly. It emits a start banner, one terminal status
 bun run cli -- run \
   --mock \
   --scenario git-worktrees \
-  --skill using-git-worktrees \
-  --model claude-3-7-sonnet \
+  --skill tdd \
+  --model gpt-4o \
   --output-dir .benchmarks
 ```
 

@@ -5,19 +5,13 @@ import {
   sanitizeSkillId,
   SkillDownloader,
   SkillRegistry,
-} from "../skills/index";
-import type { CatalogEntry, SkillSyncError } from "../skills/index";
-
-interface SyncCliOptions {
-  readonly category?: string;
-  readonly skill?: string;
-  readonly limit?: number;
-  readonly dest: string;
-  readonly catalog: string;
-  readonly force: boolean;
-  readonly dryRun: boolean;
-  readonly help: boolean;
-}
+} from "../skills/index.js";
+import type { CatalogEntry, SkillSyncError } from "../skills/index.js";
+import {
+  getSyncSkillsHelp,
+  parseSyncSkillsOptions,
+  SyncSkillsInputError,
+} from "./sync-skills-options.js";
 
 interface SummaryReportData {
   readonly totalCatalogSkills: number;
@@ -46,100 +40,6 @@ interface CatalogIndex {
   };
   readonly categories: Record<string, number>;
   readonly entries: readonly CatalogEntry[];
-}
-
-function parseCliArgs(args: readonly string[]): SyncCliOptions {
-  let category: string | undefined = undefined;
-  let skill: string | undefined = undefined;
-  let limit: number | undefined = undefined;
-  let dest = ".skills";
-  let catalog = "skill-list/skill-list.md";
-  let force = false;
-  let dryRun = false;
-  let help = false;
-
-  for (let i = 0; i < args.length; i++) {
-    const arg = args[i];
-    if (arg === undefined) continue;
-
-    if (arg === "--help" || arg === "-h") {
-      help = true;
-    } else if (arg === "--force" || arg === "-f") {
-      force = true;
-    } else if (arg === "--dry-run") {
-      dryRun = true;
-    } else if (arg === "--category" || arg === "-c") {
-      const next = args[i + 1];
-      if (next !== undefined && !next.startsWith("-")) {
-        category = next;
-        i++;
-      }
-    } else if (arg.startsWith("--category=")) {
-      category = arg.slice("--category=".length);
-    } else if (arg === "--skill" || arg === "-s") {
-      const next = args[i + 1];
-      if (next !== undefined && !next.startsWith("-")) {
-        skill = next;
-        i++;
-      }
-    } else if (arg.startsWith("--skill=")) {
-      skill = arg.slice("--skill=".length);
-    } else if (arg === "--limit" || arg === "-l") {
-      const next = args[i + 1];
-      if (next !== undefined && !next.startsWith("-")) {
-        const parsed = Number.parseInt(next, 10);
-        if (!Number.isNaN(parsed) && parsed > 0) limit = parsed;
-        i++;
-      }
-    } else if (arg.startsWith("--limit=")) {
-      const parsed = Number.parseInt(arg.slice("--limit=".length), 10);
-      if (!Number.isNaN(parsed) && parsed > 0) limit = parsed;
-    } else if (arg === "--dest" || arg === "-d") {
-      const next = args[i + 1];
-      if (next !== undefined && !next.startsWith("-")) {
-        dest = next;
-        i++;
-      }
-    } else if (arg.startsWith("--dest=")) {
-      dest = arg.slice("--dest=".length);
-    } else if (arg === "--catalog") {
-      const next = args[i + 1];
-      if (next !== undefined && !next.startsWith("-")) {
-        catalog = next;
-        i++;
-      }
-    } else if (arg.startsWith("--catalog=")) {
-      catalog = arg.slice("--catalog=".length);
-    }
-  }
-
-  return { category, skill, limit, dest, catalog, force, dryRun, help };
-}
-
-function printHelp(): void {
-  process.stdout.write(`
-Skills Catalog Synchronization CLI
-
-Usage:
-  bun run sync:skills [options]
-  bun run src/scripts/sync-skills.ts [options]
-
-Options:
-  --category, -c <name>   Filter skills by category (e.g. debugging, security)
-  --skill, -s <name>      Filter skills by name or ID (e.g. find-skills, tdd)
-  --limit, -l <num>       Maximum number of skills to synchronize
-  --dest, -d <dir>        Destination directory for cached skills and catalog (default: .skills)
-  --catalog <path>        Path to markdown catalog file (default: skill-list/skill-list.md)
-  --force, -f             Force re-download even if skills are cached
-  --dry-run               Simulate catalog ingestion without downloading or writing files
-  --help, -h              Display this help message
-
-Examples:
-  bun run sync:skills --dry-run
-  bun run sync:skills --category debugging --limit 3
-  bun run sync:skills --skill tdd --force
-  bun run sync:skills --dest .skills
-`);
 }
 
 function isValidCatalogEntry(entry: CatalogEntry): boolean {
@@ -212,10 +112,10 @@ function printSummaryReport(data: SummaryReportData): void {
 
 async function run(): Promise<void> {
   const args = process.argv.slice(2);
-  const options = parseCliArgs(args);
+  const options = parseSyncSkillsOptions(args);
 
   if (options.help) {
-    printHelp();
+    process.stdout.write(`${getSyncSkillsHelp()}\n`);
     process.exit(0);
   }
 
@@ -385,6 +285,10 @@ async function run(): Promise<void> {
 }
 
 run().catch((err) => {
-  process.stderr.write(`Unexpected error during catalog sync: ${String(err)}\n`);
+  if (err instanceof SyncSkillsInputError) {
+    process.stderr.write(`sync-skills: ${err.code}: Sync options are invalid.\n`);
+    process.exit(2);
+  }
+  process.stderr.write("sync-skills: command_failed: Synchronization could not be completed.\n");
   process.exit(1);
 });

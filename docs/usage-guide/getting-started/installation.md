@@ -19,7 +19,7 @@ bun install
 ```bash
 bun run typecheck
 bun run src/scripts/quality-gate.ts
-bun run cli -- list --target all
+bun run cli -- list all
 ```
 
 ## Run the first local benchmark
@@ -28,8 +28,8 @@ bun run cli -- list --target all
 bun run cli -- run \
   --mock \
   --scenario git-worktrees \
-  --skill using-git-worktrees \
-  --model claude-3-7-sonnet \
+  --skill tdd \
+  --model gpt-4o \
   --output-dir .benchmarks
 ```
 

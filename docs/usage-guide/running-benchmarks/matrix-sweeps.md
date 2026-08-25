@@ -10,8 +10,8 @@ The `run` command creates a matrix when more than one scenario, skill, model, th
 bun run cli -- run \
   --mock \
   --scenario git-worktrees \
-  --skill using-git-worktrees \
-  --model claude-3-7-sonnet,gpt-4o \
+  --skill tdd \
+  --model claude-3-7-sonnet-20250219,gpt-4o \
   --repetitions 2 \
   --concurrency 2 \
   --output-dir .benchmarks
@@ -41,7 +41,7 @@ OPENAI_API_KEY="replace-with-a-real-key" bun run cli -- run \
   --live \
   --provider openai \
   --scenario git-worktrees \
-  --skill using-git-worktrees \
+  --skill tdd \
   --model gpt-4o \
   --repetitions 2 \
   --output-dir .benchmarks

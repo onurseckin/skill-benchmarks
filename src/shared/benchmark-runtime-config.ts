@@ -17,6 +17,13 @@ export interface BenchmarkRuntimeConfig {
   readonly requestedProviderId?: ProviderId;
 }
 
+export class BenchmarkRuntimeConfigurationError extends TypeError {
+  constructor() {
+    super("Benchmark runtime configuration is invalid");
+    this.name = "BenchmarkRuntimeConfigurationError";
+  }
+}
+
 const outputDirectoryEnvironmentVariable = "SKILL_BENCHMARKS_OUTPUT_DIR";
 
 function resolveRequestedProviderId(providerId: string | undefined): ProviderId | undefined {
@@ -32,7 +39,7 @@ function resolveRequestedProviderId(providerId: string | undefined): ProviderId 
   ) {
     return providerId;
   }
-  throw new TypeError(`Argument error: unsupported provider ID ${providerId}`);
+  throw new BenchmarkRuntimeConfigurationError();
 }
 
 function resolveOutputRoot(input: BenchmarkRuntimeConfigInput, environment: NodeJS.ProcessEnv): string {
@@ -40,7 +47,7 @@ function resolveOutputRoot(input: BenchmarkRuntimeConfigInput, environment: Node
     ?? environment[outputDirectoryEnvironmentVariable]
     ?? resolve(process.cwd(), ".benchmarks");
   if (configuredOutputRoot.trim().length === 0) {
-    throw new TypeError("Argument error: benchmark output root must not be empty");
+    throw new BenchmarkRuntimeConfigurationError();
   }
   return resolve(configuredOutputRoot);
 }
