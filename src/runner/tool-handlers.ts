@@ -51,7 +51,7 @@ function requireLocalWorkspaceRoot(context: AgentToolContext): string {
 }
 
 function isSensitiveProviderEnvironmentName(name: string): boolean {
-  return /(^|_)(API_?KEY|ACCESS_?TOKEN|AUTH_?TOKEN|SECRET|PASSWORD)(_|$)/i.test(name);
+  return /(^|_)(KEY|API_?KEY|TOKEN|ACCESS_?TOKEN|AUTH(?:ORIZATION|_?TOKEN)?|SECRET|PASSWORD|CREDENTIALS?)(_|$)/i.test(name);
 }
 
 function createToolCommandEnvironment(
