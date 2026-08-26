@@ -1,5 +1,6 @@
 import { resolveAbortReason } from "../../shared/cancellation.js";
 import { DockerError } from "../../infrastructure/container/docker-errors.js";
+import { waitForFixturePhase } from "./fixture-phase-deadline.js";
 import type {
   ContainerInspectInfo,
   ContainerLaunchConfig,
@@ -20,13 +21,6 @@ export type DockerFixturePhase =
   | "remove-volume";
 
 const leaseLabelKey = "io.skill-benchmarks.lease-id";
-
-export class FixturePhaseTimeoutError extends Error {
-  public constructor(phase: DockerFixturePhase) {
-    super(`Fixture phase '${phase}' did not start before its deterministic deadline`);
-    this.name = "FixturePhaseTimeoutError";
-  }
-}
 
 class DeferredValue {
   public readonly promise: Promise<void>;
@@ -81,6 +75,7 @@ export class FakeDockerClient implements IDockerClient {
   private readonly containerLabels = new Map<string, Record<string, string>>();
   private readonly volumeLabels = new Map<string, Record<string, string>>();
   private conflictNextContainerCreation = false;
+  private activePhaseDeadlineListeners = 0;
   private nextContainerNumber = 0;
 
   public hold(phase: DockerFixturePhase): void {
@@ -111,16 +106,21 @@ export class FakeDockerClient implements IDockerClient {
       waiter = new DeferredValue();
       this.phaseWaiters.set(phase, waiter);
     }
-    if (deadlineSignal === undefined) return waiter.promise;
-    if (deadlineSignal.aborted) return Promise.reject(new FixturePhaseTimeoutError(phase));
-    return new Promise<void>((resolve, reject) => {
-      const rejectForDeadline = (): void => reject(new FixturePhaseTimeoutError(phase));
-      deadlineSignal.addEventListener("abort", rejectForDeadline, { once: true });
-      void waiter.promise.then(() => {
-        deadlineSignal.removeEventListener("abort", rejectForDeadline);
-        resolve();
-      });
-    });
+    return waitForFixturePhase(
+      phase,
+      waiter.promise,
+      deadlineSignal,
+      () => {
+        this.activePhaseDeadlineListeners += 1;
+      },
+      () => {
+        this.activePhaseDeadlineListeners -= 1;
+      },
+    );
+  }
+
+  public get phaseDeadlineListenerCount(): number {
+    return this.activePhaseDeadlineListeners;
   }
 
   public callCount(phase: DockerFixturePhase): number {

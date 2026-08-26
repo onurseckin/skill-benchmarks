@@ -8,6 +8,7 @@ import { TokenBucketRateLimiter } from "../../sweep/token-bucket.js";
 import type { ModelMatrixEntry } from "../../sweep/types.js";
 import { requireCondition } from "./assertions.js";
 import { assertPending, expectFailure, FakeDockerClient } from "./container-lifecycle-fixtures.js";
+import { FixturePhaseDeadline } from "./fixture-phase-deadline.js";
 import { createSweepCell, createSweepConfig } from "./runtime-container-post-acquire.js";
 
 class DispatchTrackingRunner extends ScenarioRunnerEngine {
@@ -56,7 +57,17 @@ export async function verifyPoolPublicationBoundary(temporaryRoot: string): Prom
       signal: controller.signal,
       planFingerprint: "container-publication-boundary-fixture",
     });
-    await dockerClient.waitForPhase("start-container");
+    const phaseDeadline = new FixturePhaseDeadline(1000);
+    try {
+      await dockerClient.waitForPhase("start-container", phaseDeadline.signal);
+      requireCondition(
+        dockerClient.phaseDeadlineListenerCount === 0,
+        "publication_abort_phase_wait_clears_listener",
+      );
+    } finally {
+      phaseDeadline.dispose();
+    }
+    requireCondition(!phaseDeadline.active, "publication_abort_phase_wait_clears_timer");
     const pendingStatus = pool.getStatus();
     requireCondition(pendingStatus.creatingCount === 1, "publication_abort_has_pending_lease");
     requireCondition(pendingStatus.activeCount === 0, "publication_abort_has_no_published_lease");
@@ -75,10 +86,20 @@ export async function verifyPoolPublicationBoundary(temporaryRoot: string): Prom
 
 async function verifyPhaseWaitDeadline(): Promise<void> {
   const dockerClient = new FakeDockerClient();
-  const deadline = new AbortController();
-  const phaseWait = dockerClient.waitForPhase("start-container", deadline.signal);
-  deadline.abort();
-  await expectFailure(phaseWait, "FixturePhaseTimeoutError");
+  const deadline = new FixturePhaseDeadline(0);
+  try {
+    await expectFailure(
+      dockerClient.waitForPhase("start-container", deadline.signal),
+      "FixturePhaseTimeoutError",
+    );
+    requireCondition(
+      dockerClient.phaseDeadlineListenerCount === 0,
+      "phase_deadline_timeout_clears_listener",
+    );
+  } finally {
+    deadline.dispose();
+  }
+  requireCondition(!deadline.active, "phase_deadline_timeout_clears_timer");
 }
 
 function requireEmptyPool(
