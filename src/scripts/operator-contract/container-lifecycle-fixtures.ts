@@ -21,6 +21,13 @@ export type DockerFixturePhase =
 
 const leaseLabelKey = "io.skill-benchmarks.lease-id";
 
+export class FixturePhaseTimeoutError extends Error {
+  public constructor(phase: DockerFixturePhase) {
+    super(`Fixture phase '${phase}' did not start before its deterministic deadline`);
+    this.name = "FixturePhaseTimeoutError";
+  }
+}
+
 class DeferredValue {
   public readonly promise: Promise<void>;
   private resolvePromise: () => void = () => {};
@@ -97,14 +104,23 @@ export class FakeDockerClient implements IDockerClient {
     this.phaseCallbacks.set(phase, callback);
   }
 
-  public waitForPhase(phase: DockerFixturePhase): Promise<void> {
+  public waitForPhase(phase: DockerFixturePhase, deadlineSignal?: AbortSignal): Promise<void> {
     if (this.reachedPhases.has(phase)) return Promise.resolve();
     let waiter = this.phaseWaiters.get(phase);
     if (waiter === undefined) {
       waiter = new DeferredValue();
       this.phaseWaiters.set(phase, waiter);
     }
-    return waiter.promise;
+    if (deadlineSignal === undefined) return waiter.promise;
+    if (deadlineSignal.aborted) return Promise.reject(new FixturePhaseTimeoutError(phase));
+    return new Promise<void>((resolve, reject) => {
+      const rejectForDeadline = (): void => reject(new FixturePhaseTimeoutError(phase));
+      deadlineSignal.addEventListener("abort", rejectForDeadline, { once: true });
+      void waiter.promise.then(() => {
+        deadlineSignal.removeEventListener("abort", rejectForDeadline);
+        resolve();
+      });
+    });
   }
 
   public callCount(phase: DockerFixturePhase): number {

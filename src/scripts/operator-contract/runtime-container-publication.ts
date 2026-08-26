@@ -7,7 +7,7 @@ import { executeSweepCell } from "../../sweep/cell-execution.js";
 import { TokenBucketRateLimiter } from "../../sweep/token-bucket.js";
 import type { ModelMatrixEntry } from "../../sweep/types.js";
 import { requireCondition } from "./assertions.js";
-import { assertPending, FakeDockerClient } from "./container-lifecycle-fixtures.js";
+import { assertPending, expectFailure, FakeDockerClient } from "./container-lifecycle-fixtures.js";
 import { createSweepCell, createSweepConfig } from "./runtime-container-post-acquire.js";
 
 class DispatchTrackingRunner extends ScenarioRunnerEngine {
@@ -20,6 +20,7 @@ class DispatchTrackingRunner extends ScenarioRunnerEngine {
 }
 
 export async function verifyPoolPublicationBoundary(temporaryRoot: string): Promise<void> {
+  await verifyPhaseWaitDeadline();
   const dockerClient = new FakeDockerClient();
   dockerClient.hold("start-container");
   const controller = new AbortController();
@@ -62,26 +63,36 @@ export async function verifyPoolPublicationBoundary(temporaryRoot: string): Prom
     await assertPending(execution, "publication_abort_waits_for_pending_lease");
     dockerClient.release("start-container");
     const result = await execution;
+    requireEmptyPool(pool, dockerClient, true, "publication_abort_pre_drain");
     requireCondition(result.status === "aborted", "publication_abort_terminal_status");
     requireCondition(runner.dispatchCount === 0, "publication_abort_prevents_provider_dispatch");
-    requireCondition(pool.activeCount === 0, "publication_abort_has_no_active_lease");
     await pool.drain();
-    requireFullyDrained(pool, dockerClient);
+    requireEmptyPool(pool, dockerClient, false, "publication_abort_post_drain");
   } finally {
     database.close();
   }
 }
 
-function requireFullyDrained(pool: ContainerPoolManager, dockerClient: FakeDockerClient): void {
+async function verifyPhaseWaitDeadline(): Promise<void> {
+  const dockerClient = new FakeDockerClient();
+  const deadline = new AbortController();
+  const phaseWait = dockerClient.waitForPhase("start-container", deadline.signal);
+  deadline.abort();
+  await expectFailure(phaseWait, "FixturePhaseTimeoutError");
+}
+
+function requireEmptyPool(
+  pool: ContainerPoolManager,
+  dockerClient: FakeDockerClient,
+  accepting: boolean,
+  label: string,
+): void {
   const status = pool.getStatus();
-  requireCondition(!status.accepting, "publication_abort_drain_is_terminal");
-  requireCondition(status.queuedCount === 0, "publication_abort_drain_has_no_queue");
-  requireCondition(status.creatingCount === 0, "publication_abort_drain_has_no_creation");
-  requireCondition(status.activeCount === 0, "publication_abort_drain_has_no_active");
-  requireCondition(status.releasingCount === 0, "publication_abort_drain_has_no_release");
-  requireCondition(
-    status.cleanupFailedCount === 0,
-    "publication_abort_drain_has_no_cleanup_failure",
-  );
-  requireCondition(dockerClient.resourceCount === 0, "publication_abort_drain_has_no_resources");
+  requireCondition(status.accepting === accepting, `${label}_accepting`);
+  requireCondition(status.queuedCount === 0, `${label}_queue`);
+  requireCondition(status.creatingCount === 0, `${label}_creation`);
+  requireCondition(status.activeCount === 0, `${label}_active`);
+  requireCondition(status.releasingCount === 0, `${label}_release`);
+  requireCondition(status.cleanupFailedCount === 0, `${label}_cleanup_failure`);
+  requireCondition(dockerClient.resourceCount === 0, `${label}_resources`);
 }
