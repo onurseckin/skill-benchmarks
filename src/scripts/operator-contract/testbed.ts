@@ -6,6 +6,7 @@ import { runCommand, runSuccessfulCommand, startCommand, terminateCommand } from
 import { copyTestbedFixture, createNoKeyEnvironment } from "./fixture.js";
 
 export async function verifyTestbedLocalLifecycle(temporaryRoot: string): Promise<void> {
+  verifyCleanupFailureDetailRendering();
   const testbed = copyTestbedFixture(temporaryRoot);
   const environment = createNoKeyEnvironment(temporaryRoot);
   await runSuccessfulCommand(
@@ -127,6 +128,37 @@ export async function verifyTestbedDockerLifecycle(temporaryRoot: string): Promi
   if (primaryFailure !== undefined) throw primaryFailure;
 }
 
+function renderCleanupFailureDetail(value: unknown): string {
+  if (value instanceof Error) return value.message;
+  const detail: unknown = Reflect.apply(String, undefined, [value ?? "unknown"]);
+  if (typeof detail !== "string") throw new TypeError("Cleanup failure detail is not a string");
+  return detail;
+}
+
+function verifyCleanupFailureDetailRendering(): void {
+  const customStringifier = { toString: () => "custom-cleanup-detail" };
+  const primitiveConverter = {
+    [Symbol.toPrimitive]: () => "primitive-cleanup-detail",
+    toString: () => "incorrect-cleanup-detail",
+  };
+  const cases: readonly (readonly [unknown, string])[] = [
+    [null, "unknown"],
+    [undefined, "unknown"],
+    [customStringifier, "custom-cleanup-detail"],
+    [primitiveConverter, "primitive-cleanup-detail"],
+    ["text", "text"],
+    [7, "7"],
+    [false, "false"],
+    [7n, "7"],
+    [Symbol.for("cleanup"), "Symbol(cleanup)"],
+    [new Error("error-detail"), "error-detail"],
+  ];
+  requireCondition(
+    cases.every(([value, expected]) => renderCleanupFailureDetail(value) === expected),
+    "testbed_cleanup_failure_detail_invalid",
+  );
+}
+
 async function reconcileDockerResources(
   container: string,
   image: string,
@@ -189,20 +221,7 @@ async function reconcileDockerResources(
     }
     await Bun.sleep(200);
   }
-  const detail =
-    lastFailure instanceof Error
-      ? lastFailure.message
-      : typeof lastFailure === "string" ||
-          typeof lastFailure === "number" ||
-          typeof lastFailure === "bigint" ||
-          typeof lastFailure === "boolean" ||
-          typeof lastFailure === "symbol"
-        ? String(lastFailure)
-        : lastFailure === null
-          ? "null"
-          : lastFailure === undefined
-            ? "unknown"
-            : "non_error_failure";
+  const detail = renderCleanupFailureDetail(lastFailure);
   throw new TypeError(`testbed_docker_cleanup_timeout:${detail}`);
 }
 
