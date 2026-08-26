@@ -4,11 +4,11 @@
 
 **Status:** implemented and public for admitted execution.
 
-The sweep engine validates a matrix, derives deterministic cells and plan identity, acquires an output-root lease, opens the evidence database, persists checkpoints, applies concurrency accounting, and records terminal outcomes. Each cell owns one run identity and emits either a completed or failed terminal result.
+The sweep engine validates a matrix, derives deterministic cells and plan identity, acquires an output-root lease, opens the evidence database, persists checkpoints, applies concurrency accounting, and records terminal outcomes. A terminalized cell record can be `completed`, `failed`, `aborted`, or `skipped`; the immutable sweep outcome also represents planned cells without a durable record as `unstarted`. Sweep status is independently `completed`, `failed`, or `aborted` after worker-pool and reconciliation outcomes are known.
 
 ## Source anchors
 
-[`src/sweep/sweep-engine.ts`](../../../src/sweep/sweep-engine.ts), [`src/sweep/matrix-cell-planner.ts`](../../../src/sweep/matrix-cell-planner.ts), [`src/sweep/checkpoint.ts`](../../../src/sweep/checkpoint.ts), and [`src/sweep/terminal-cell-persistence.ts`](../../../src/sweep/terminal-cell-persistence.ts).
+[`src/sweep/sweep-engine.ts`](../../../src/sweep/sweep-engine.ts), [`src/sweep/matrix-cell-planner.ts`](../../../src/sweep/matrix-cell-planner.ts), [`src/sweep/checkpoint.ts`](../../../src/sweep/checkpoint.ts), [`src/sweep/terminal-cell-persistence.ts`](../../../src/sweep/terminal-cell-persistence.ts), [`src/sweep/aborted-cell-terminalization.ts`](../../../src/sweep/aborted-cell-terminalization.ts), and [`src/sweep/sweep-outcome.ts`](../../../src/sweep/sweep-outcome.ts).
 
 ## Limitations
 
