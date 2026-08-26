@@ -2,6 +2,8 @@
 
 [Book index](../README.md) | [Appendix index](README.md) | [Terminology](terminology.md)
 
+**Status:** current implementation-boundary registry.
+
 ## On this page
 
 - [Execution claims](#execution-claims)

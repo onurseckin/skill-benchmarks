@@ -8,8 +8,10 @@ export function verifyDocumentationContract(): void {
   const documentationFiles = [
     join(repositoryRoot, "README.md"),
     ...collectMarkdown(join(repositoryRoot, "docs", "usage-guide")),
+    ...collectMarkdown(join(repositoryRoot, "docs", "architecture")),
   ];
   for (const file of documentationFiles) verifyLinks(file);
+  verifyArchitectureBook();
   const commandReference = readFileSync(
     join(repositoryRoot, "docs", "usage-guide", "cli-reference", "commands.md"),
     "utf8",
@@ -42,6 +44,8 @@ function collectMarkdown(directory: string): readonly string[] {
 
 function verifyLinks(file: string): void {
   const content = readFileSync(file, "utf8");
+  requireCondition(!content.includes("file://"), `docs_file_uri_present:${file}`);
+  requireCondition(!content.includes("/Users/"), `docs_absolute_workspace_path:${file}`);
   for (const match of content.matchAll(/\[[^\]]*\]\(([^)]+)\)/g)) {
     const target = match[1];
     if (target === undefined || /^(?:https?:|mailto:)/.test(target)) continue;
@@ -50,6 +54,41 @@ function verifyLinks(file: string): void {
       pathPart === "" ? file : resolve(dirname(file), decodeURIComponent(pathPart ?? ""));
     requireCondition(existsSync(targetFile), `docs_link_missing:${file}:${target}`);
     if (anchor !== undefined && anchor !== "") verifyAnchor(targetFile, anchor, file);
+  }
+}
+
+function verifyArchitectureBook(): void {
+  const architectureDirectory = join(repositoryRoot, "docs", "architecture");
+  const architectureFiles = collectMarkdown(architectureDirectory);
+  requireCondition(architectureFiles.length >= 20, "architecture_book_incomplete");
+  for (const file of architectureFiles) {
+    const content = readFileSync(file, "utf8");
+    requireCondition(content.includes("Status"), `architecture_status_missing:${file}`);
+    requireCondition(
+      content.includes("## Source anchors"),
+      `architecture_source_anchors_missing:${file}`,
+    );
+    requireCondition(
+      content.includes("## Limitations"),
+      `architecture_limitations_missing:${file}`,
+    );
+    if (file !== join(architectureDirectory, "README.md")) {
+      requireCondition(
+        content.includes("[Book index]"),
+        `architecture_book_navigation_missing:${file}`,
+      );
+    }
+  }
+  const sourceMap = readFileSync(
+    join(architectureDirectory, "appendices", "source-map.md"),
+    "utf8",
+  );
+  for (const entry of readdirSync(join(repositoryRoot, "src"), { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    requireCondition(
+      sourceMap.includes(`\`${entry.name}\``),
+      `architecture_source_map_missing:${entry.name}`,
+    );
   }
 }
 

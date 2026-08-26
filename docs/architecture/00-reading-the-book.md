@@ -12,6 +12,8 @@
 
 Read this book when changing repository internals, verification, or persisted evidence. Read the [usage guide](../usage-guide/README.md) when operating the CLI.
 
+**Status:** current documentation navigation and scope guidance.
+
 ## How claims are labeled
 
 Every topic identifies its status and links to the files that establish it. An internal module is not automatically a supported public feature. A diagnostic output is not a benchmark result.

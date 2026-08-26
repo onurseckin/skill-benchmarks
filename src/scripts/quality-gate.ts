@@ -1,4 +1,4 @@
-import { readFileSync, existsSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { execSync } from "node:child_process";
 import { startStreamTunnel } from "../tunnel/index.js";
@@ -45,14 +45,6 @@ function runQualityAudit(): void {
   const usageVerification = join(rootDir, "docs/usage-guide/maintenance/verification.md");
   const usageTestbed = join(rootDir, "docs/usage-guide/maintenance/testbed-delivery.md");
   const archReadme = join(rootDir, "docs/architecture/README.md");
-  const archOverview = join(rootDir, "docs/architecture/01-system-overview.md");
-  const archSandbox = join(rootDir, "docs/architecture/02-container-sandbox.md");
-  const archProviders = join(rootDir, "docs/architecture/03-provider-adapters.md");
-  const archRunner = join(rootDir, "docs/architecture/04-runner-and-interceptor.md");
-  const archEval = join(rootDir, "docs/architecture/05-dual-layer-evaluation.md");
-  const archTelemetry = join(rootDir, "docs/architecture/06-telemetry-and-reporting.md");
-  const archChaos = join(rootDir, "docs/architecture/07-fuzzing-and-chaos.md");
-  const archStreaming = join(rootDir, "docs/architecture/08-binary-terminal-streaming.md");
   const masterRoadmap = join(rootDir, "docs/planning/MASTER-ROADMAP-AND-CONTINUITY.md");
 
   const requiredDeliverables = [
@@ -74,14 +66,6 @@ function runQualityAudit(): void {
     usageVerification,
     usageTestbed,
     archReadme,
-    archOverview,
-    archSandbox,
-    archProviders,
-    archRunner,
-    archEval,
-    archTelemetry,
-    archChaos,
-    archStreaming,
   ];
 
   for (const d of requiredDeliverables) {
@@ -89,29 +73,6 @@ function runQualityAudit(): void {
       process.stderr.write(`Required deliverable missing: ${d}\n`);
       process.exit(1);
     }
-  }
-
-  const evalContent = readFileSync(archEval, "utf8");
-  if (!evalContent.includes("## 5. Evaluation Module Reference")) {
-    process.stderr.write("Evaluation doc missing module reference section.\n");
-    process.exit(1);
-  }
-  const teleContent = readFileSync(archTelemetry, "utf8");
-  if (!teleContent.includes("## 4. Telemetry Module Reference")) {
-    process.stderr.write("Telemetry doc missing module reference section.\n");
-    process.exit(1);
-  }
-  const chaosContent = readFileSync(archChaos, "utf8");
-  if (!chaosContent.includes("## 5. Automated Fault Scenarios Summary")) {
-    process.stderr.write("Chaos doc missing automated fault scenarios summary section.\n");
-    process.exit(1);
-  }
-  const streamContent = readFileSync(archStreaming, "utf8");
-  if (!streamContent.includes("## 5. Binary Protocol Interoperability Summary")) {
-    process.stderr.write(
-      "Streaming doc missing binary protocol interoperability summary section.\n",
-    );
-    process.exit(1);
   }
 
   try {

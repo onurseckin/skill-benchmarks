@@ -4,6 +4,8 @@
 
 Use these reference pages to locate ownership, decode repository terms, and distinguish implemented behavior from deliberately unavailable behavior.
 
+**Status:** current reference material.
+
 ## Chapters
 
 - [Source map](source-map.md)
@@ -12,7 +14,7 @@ Use these reference pages to locate ownership, decode repository terms, and dist
 
 ## Source anchors
 
-[`src/index.ts`](../../src/index.ts) and [`src/scripts/operator-contract/documentation.ts`](../../src/scripts/operator-contract/documentation.ts).
+[`src/index.ts`](../../../src/index.ts) and [`src/scripts/operator-contract/documentation.ts`](../../../src/scripts/operator-contract/documentation.ts).
 
 ## Limitations
 

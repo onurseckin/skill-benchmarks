@@ -2,6 +2,8 @@
 
 [Book index](../README.md) | [Appendix index](README.md) | [Limitations](current-limitations.md)
 
+**Status:** current ownership map.
+
 ## On this page
 
 - [Runtime and support domains](#runtime-and-support-domains)
@@ -27,6 +29,8 @@
 | `arena`, `chaos`                                | unranked diagnostics                  | diagnostic only       |
 | `streaming`, `tunnel`, `tui`                    | presentation and transport components | implemented, internal |
 | `analytics`, `dialog`, `generator`, `optimizer` | exploratory or support modules        | implemented, internal |
+
+Mapped roots: `analytics`, `arena`, `chaos`, `cli`, `dialog`, `eval`, `generator`, `infrastructure`, `models`, `optimizer`, `providers`, `replay`, `reporting`, `runner`, `scripts`, `server`, `shared`, `skills`, `streaming`, `sweep`, `tui`, and `tunnel`.
 
 ## Source anchors
 

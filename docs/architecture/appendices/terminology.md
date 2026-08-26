@@ -2,6 +2,8 @@
 
 [Book index](../README.md) | [Appendix index](README.md) | [Limitations](current-limitations.md)
 
+**Status:** current terminology reference.
+
 ## Terms
 
 - **Authority**: the evidence-backed classification that decides whether benchmark claims may exist.
