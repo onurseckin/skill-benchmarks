@@ -134,8 +134,10 @@ async function reconcileDockerResources(
   environment: Readonly<Record<string, string | undefined>>,
   primaryFailed: boolean,
 ): Promise<void> {
-  const deadline = Date.now() + (primaryFailed ? 60_000 : 30_000);
-  const requiredAbsenceMs = primaryFailed ? 5_000 : 1_000;
+  const startedAt = Date.now();
+  const publicationHorizon = startedAt + (primaryFailed ? 60_000 : 0);
+  const deadline = startedAt + (primaryFailed ? 70_000 : 30_000);
+  const requiredAbsenceMs = 1_000;
   let absentSince: number | undefined;
   let lastFailure: unknown;
   while (Date.now() < deadline) {
@@ -177,7 +179,8 @@ async function reconcileDockerResources(
       }
       if (!containerExists && !imageExists) {
         absentSince ??= Date.now();
-        if (Date.now() - absentSince >= requiredAbsenceMs) return;
+        if (Date.now() >= publicationHorizon && Date.now() - absentSince >= requiredAbsenceMs)
+          return;
       }
       lastFailure = undefined;
     } catch (error) {

@@ -1,6 +1,7 @@
 import { lstatSync, readdirSync, readFileSync } from "node:fs";
 import { basename, extname, join, sep } from "node:path";
 import { parseSync } from "oxc-parser";
+import { scanShellComments as scanShellTokens } from "./shell-comment-audit.js";
 
 export type SourceViolationType =
   | "LINE_COUNT_EXCEEDED"
@@ -195,7 +196,8 @@ function findGoCommentOffsets(content: string): readonly number[] {
 }
 
 function scanShellComments(path: string, content: string): readonly SourceViolation[] {
-  return findShellCommentLines(content).flatMap((lineNumber) =>
+  const scan = scanShellTokens(content);
+  const violations: SourceViolation[] = scan.commentLines.flatMap((lineNumber) =>
     lineNumber === 1 && content.startsWith("#!")
       ? []
       : [
@@ -206,48 +208,14 @@ function scanShellComments(path: string, content: string): readonly SourceViolat
           },
         ],
   );
-}
-
-function findShellCommentLines(content: string): readonly number[] {
-  const lines: number[] = [];
-  let quote: "'" | '"' | undefined;
-  let escaped = false;
-  let wordStart = true;
-  let lineNumber = 1;
-  for (let index = 0; index < content.length; index += 1) {
-    const character = content[index];
-    if (escaped) {
-      escaped = false;
-      if (character === "\n") {
-        lineNumber += 1;
-      } else {
-        wordStart = false;
-      }
-      continue;
-    }
-    if (character === "\\" && quote !== "'") {
-      escaped = true;
-      continue;
-    }
-    if (quote !== undefined) {
-      if (character === quote) quote = undefined;
-      if (character === "\n") lineNumber += 1;
-      continue;
-    }
-    if (character === '"' || character === "'") {
-      quote = character;
-      wordStart = false;
-    } else if (character === "#" && wordStart) {
-      lines.push(lineNumber);
-      while (content[index + 1] !== undefined && content[index + 1] !== "\n") index += 1;
-    } else if (character === "\n") {
-      lineNumber += 1;
-      wordStart = true;
-    } else {
-      wordStart = character !== undefined && /[\t\r |&;()<>]/.test(character);
-    }
+  if (scan.uncertainty !== undefined) {
+    violations.push({
+      file: path,
+      type: "PARSER_ERROR",
+      detail: `Shell scanner failed closed: ${scan.uncertainty}`,
+    });
   }
-  return lines;
+  return violations;
 }
 
 function scanDockerfileComments(path: string, content: string): readonly SourceViolation[] {

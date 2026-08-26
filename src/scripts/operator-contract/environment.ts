@@ -10,8 +10,13 @@ export async function verifyNoKeySubprocess(temporaryRoot: string): Promise<void
     writeFileSync(join(temporaryRoot, name), `${dotenv}\n`);
   }
   const expression = `process.stdout.write(JSON.stringify(${JSON.stringify([...credentialKeys])}.filter((key) => process.env[key] !== undefined)))`;
+  writeFileSync(join(temporaryRoot, "probe.ts"), expression);
+  writeFileSync(
+    join(temporaryRoot, "package.json"),
+    JSON.stringify({ scripts: { probe: "bun probe.ts" } }),
+  );
   const result = await runSuccessfulCommand(
-    ["bun", "-e", expression],
+    ["bun", "run", "probe"],
     { cwd: temporaryRoot, env: createNoKeyEnvironment(temporaryRoot) },
     "no_key_child_failed",
   );

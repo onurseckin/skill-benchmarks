@@ -27,6 +27,7 @@ export function createNoKeyEnvironment(
     if (value === undefined) delete environment[key];
     else environment[key] = value;
   }
+  environment.BUN_OPTIONS = "--no-env-file";
   return environment;
 }
 

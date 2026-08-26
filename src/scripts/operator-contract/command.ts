@@ -19,6 +19,7 @@ export interface RunningCommand {
   readonly stdout: Promise<string>;
   readonly stderr: Promise<string>;
   readonly kill: (signal: NodeJS.Signals) => void;
+  readonly signalLeader: (signal: NodeJS.Signals) => void;
   readonly isGroupAlive: () => boolean;
   readonly cancelOutput: () => Promise<void>;
 }
@@ -79,6 +80,7 @@ export function startCommand(
     stdout: stdout.output,
     stderr: stderr.output,
     kill: (signal) => signalProcessGroup(child.pid, signal),
+    signalLeader: (signal) => signalProcess(child.pid, signal),
     isGroupAlive: () => isProcessGroupAlive(child.pid),
     cancelOutput: async () => {
       await Promise.allSettled([stdout.cancel(), stderr.cancel()]);
@@ -89,9 +91,11 @@ export function startCommand(
 function stripCredentialKeys(
   environment: Readonly<Record<string, string | undefined>>,
 ): Record<string, string | undefined> {
-  return Object.fromEntries(
+  const secured = Object.fromEntries(
     Object.entries(environment).filter(([key]) => !credentialKeys.has(key)),
   );
+  secured.BUN_OPTIONS = "--no-env-file";
+  return secured;
 }
 
 export async function terminateCommand(
@@ -99,7 +103,7 @@ export async function terminateCommand(
   signal: NodeJS.Signals,
   timeoutMs: number,
 ): Promise<CommandResult> {
-  running.kill(signal);
+  running.signalLeader(signal);
   let exitCode = await waitForExit(running, timeoutMs);
   if (exitCode === undefined || running.isGroupAlive()) {
     running.kill("SIGKILL");
@@ -109,6 +113,14 @@ export async function terminateCommand(
   await requireGroupStopped(running, finalizationTimeoutMs);
   const [stdout, stderr] = await readOutput(running, finalizationTimeoutMs);
   return { exitCode, stdout, stderr };
+}
+
+function signalProcess(pid: number, signal: NodeJS.Signals): void {
+  try {
+    process.kill(pid, signal);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
+  }
 }
 
 function secureBunArguments(argumentsList: readonly string[]): string[] {

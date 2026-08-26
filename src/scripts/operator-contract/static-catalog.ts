@@ -39,10 +39,10 @@ function verifyStaticRejections(temporaryRoot: string): void {
   writeFileSync(join(temporaryRoot, "src", "comment.cts"), "export {};\n/* forbidden */\n");
   writeFileSync(
     join(temporaryRoot, "src", "boundary.sh"),
-    "#!/bin/sh\nprintf '%s\\n' '# literal'\nprintf '%s\\n' \\#escaped\ntrue;# forbidden\n",
+    "#!/bin/sh\nprintf '%s\\n' '# literal'\nprintf '%s\\n' \\#escaped\ntrue;# forbidden\nprintf '%s\\n' \"$(true;# nested forbidden\nprintf x)\"\n",
   );
   const audit = auditMaintainedSources(temporaryRoot);
-  requireCondition(audit.violations.length === 4, "static_rejection_count_invalid");
+  requireCondition(audit.violations.length === 5, "static_rejection_count_invalid");
   requireCondition(
     audit.violations.some(
       (violation) =>
@@ -58,4 +58,8 @@ function verifyStaticRejections(temporaryRoot: string): void {
       `static_comment_admitted:${name}`,
     );
   }
+  requireCondition(
+    audit.violations.filter((violation) => violation.file.endsWith("boundary.sh")).length === 2,
+    "static_nested_shell_comment_admitted",
+  );
 }
