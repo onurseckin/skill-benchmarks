@@ -15,6 +15,14 @@ function sendJson(response: ServerResponse, statusCode: number, payload: unknown
   response.end(JSON.stringify(payload));
 }
 
+function requestPathname(requestTarget: string | undefined): string | undefined {
+  try {
+    return new URL(requestTarget ?? "/", "http://localhost").pathname;
+  } catch {
+    return undefined;
+  }
+}
+
 function startListening(server: Server, port: number, hostname: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const handleError = (error: Error): void => {
@@ -52,12 +60,16 @@ export function createBackendServer(
 ): BackendServer {
   const handler = new ApiHandler();
   const server = createServer((request, response) => {
-    const requestUrl = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
-    if (request.method === "GET" && requestUrl.pathname === "/health") {
+    const pathname = requestPathname(request.url);
+    if (pathname === undefined) {
+      sendJson(response, 400, { success: false, error: "Bad request" });
+      return;
+    }
+    if (request.method === "GET" && pathname === "/health") {
       sendJson(response, 200, { status: "ok" });
       return;
     }
-    if (request.method === "GET" && requestUrl.pathname === "/api/items") {
+    if (request.method === "GET" && pathname === "/api/items") {
       sendJson(response, 200, handler.handleGetItems());
       return;
     }

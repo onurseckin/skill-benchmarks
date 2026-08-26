@@ -38,7 +38,7 @@ curl --fail http://127.0.0.1:4000/api/items
 
 Stop the supervisor with `Ctrl-C` or send it `SIGTERM`. The supervisor forwards the signal to its running children, waits up to three seconds, and force-stops only children it created.
 
-The bind addresses and ports can be set with `FRONTEND_HOST`, `FRONTEND_PORT`, `BACKEND_HOST`, and `BACKEND_PORT`. `READINESS_HOST` selects the address used by the supervisor readiness checks and defaults to `127.0.0.1`.
+The bind addresses and ports can be set with `FRONTEND_HOST`, `FRONTEND_PORT`, `BACKEND_HOST`, and `BACKEND_PORT`. `READINESS_HOST` selects the address used by the supervisor readiness checks and defaults to `127.0.0.1`. IPv6 literals are supported as unbracketed host values, such as `FRONTEND_HOST=::1 BACKEND_HOST=::1 READINESS_HOST=::1`; the supervisor adds URL brackets where required.
 
 ## Component commands
 

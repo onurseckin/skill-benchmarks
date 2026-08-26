@@ -8,6 +8,35 @@ interface ManagedChild {
   readonly name: string;
   readonly process: ChildProcess;
   readonly finite: boolean;
+  readonly terminal: Promise<ChildTerminal>;
+  readonly isTerminal: () => boolean;
+}
+
+type ChildTerminal =
+  | { readonly kind: "error"; readonly error: Error }
+  | {
+      readonly kind: "closed";
+      readonly code: number | null;
+      readonly signal: NodeJS.Signals | null;
+    };
+
+function requestPathname(requestTarget: string | undefined): string | undefined {
+  try {
+    return new URL(requestTarget ?? "/", "http://localhost").pathname;
+  } catch {
+    return undefined;
+  }
+}
+
+function urlHost(hostname: string): string {
+  if (hostname.startsWith("[") && hostname.endsWith("]")) {
+    return hostname;
+  }
+  return hostname.includes(":") ? `[${hostname}]` : hostname;
+}
+
+function serviceUrl(hostname: string, port: number, pathname: string): string {
+  return `http://${urlHost(hostname)}:${port}${pathname}`;
 }
 
 const artifactRoot = dirname(fileURLToPath(import.meta.url));
@@ -99,12 +128,16 @@ function close(server: Server): Promise<void> {
 
 async function startFrontendServer(): Promise<void> {
   const server = createServer((request, response) => {
-    const requestUrl = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
+    const pathname = requestPathname(request.url);
+    if (pathname === undefined) {
+      sendResponse(response, 400, "Bad request", "text/plain; charset=utf-8");
+      return;
+    }
     if (request.method !== "GET" && request.method !== "HEAD") {
       sendResponse(response, 405, "Method not allowed", "text/plain; charset=utf-8");
       return;
     }
-    if (requestUrl.pathname === "/health") {
+    if (pathname === "/health") {
       sendResponse(
         response,
         200,
@@ -113,10 +146,10 @@ async function startFrontendServer(): Promise<void> {
       );
       return;
     }
-    void serveFrontendFile(requestUrl.pathname, response);
+    void serveFrontendFile(pathname, response);
   });
   await listen(server, frontendPort, frontendHost);
-  console.log(`Frontend ready at http://${frontendHost}:${frontendPort}`);
+  console.log(`Frontend ready at ${serviceUrl(frontendHost, frontendPort, "/")}`);
   let stopping = false;
   const stopFrontend = async (signal: NodeJS.Signals): Promise<void> => {
     if (stopping) {
@@ -145,7 +178,33 @@ function spawnChild(
     env: process.env,
     stdio: "inherit",
   });
-  return { name, process: child, finite };
+  let terminalState = false;
+  let settleTerminal: (terminal: ChildTerminal) => void = () => undefined;
+  const terminal = new Promise<ChildTerminal>((resolveTerminal) => {
+    settleTerminal = (outcome) => {
+      if (terminalState) {
+        return;
+      }
+      terminalState = true;
+      resolveTerminal(outcome);
+    };
+  });
+  child.once("error", (error) => {
+    settleTerminal({ kind: "error", error });
+  });
+  child.once("exit", (code, signal) => {
+    settleTerminal({ kind: "closed", code, signal });
+  });
+  child.once("close", (code, signal) => {
+    settleTerminal({ kind: "closed", code, signal });
+  });
+  return {
+    name,
+    process: child,
+    finite,
+    terminal,
+    isTerminal: () => terminalState,
+  };
 }
 
 async function endpointIsReady(endpoint: string): Promise<boolean> {
@@ -173,18 +232,24 @@ async function waitForReadiness(
 }
 
 async function terminateChild(child: ManagedChild, signal: NodeJS.Signals): Promise<void> {
-  if (child.process.exitCode !== null || child.process.signalCode !== null) {
+  if (child.isTerminal()) {
     return;
   }
-  const exited = new Promise<void>((resolveExit) => {
-    child.process.once("exit", () => resolveExit());
-  });
-  child.process.kill(signal);
-  await Promise.race([exited, delay(3_000)]);
-  if (child.process.exitCode === null && child.process.signalCode === null) {
-    child.process.kill("SIGKILL");
-    await exited;
+  try {
+    child.process.kill(signal);
+  } catch {
+    return;
   }
+  await Promise.race([child.terminal, delay(3_000)]);
+  if (child.isTerminal()) {
+    return;
+  }
+  try {
+    child.process.kill("SIGKILL");
+  } catch {
+    return;
+  }
+  await Promise.race([child.terminal, delay(1_000)]);
 }
 
 async function startSupervisor(): Promise<void> {
@@ -218,19 +283,21 @@ async function startSupervisor(): Promise<void> {
     return shutdownPromise;
   };
   for (const child of children) {
-    child.process.once("error", (error) => {
-      void shutdown(1, `${child.name} failed to start: ${error.message}`, "SIGTERM");
-    });
-    child.process.once("exit", (code, signal) => {
+    void child.terminal.then((outcome) => {
       if (stopping) {
         return;
       }
-      if (child.finite && code === 0) {
+      if (outcome.kind === "error") {
+        void shutdown(1, `${child.name} failed to start: ${outcome.error.message}`, "SIGTERM");
+        return;
+      }
+      if (child.finite && outcome.code === 0) {
         console.log(`${child.name} completed successfully`);
         return;
       }
-      const outcome = signal === null ? `code ${code ?? 1}` : `signal ${signal}`;
-      void shutdown(1, `${child.name} exited unexpectedly with ${outcome}`, "SIGTERM");
+      const description =
+        outcome.signal === null ? `code ${outcome.code ?? 1}` : `signal ${outcome.signal}`;
+      void shutdown(1, `${child.name} exited unexpectedly with ${description}`, "SIGTERM");
     });
   }
   process.once("SIGINT", () => {
@@ -242,9 +309,9 @@ async function startSupervisor(): Promise<void> {
   try {
     await waitForReadiness(
       [
-        `http://${readinessHost}:${frontendPort}/health`,
-        `http://${readinessHost}:${backendPort}/health`,
-        `http://${readinessHost}:${backendPort}/api/items`,
+        serviceUrl(readinessHost, frontendPort, "/health"),
+        serviceUrl(readinessHost, backendPort, "/health"),
+        serviceUrl(readinessHost, backendPort, "/api/items"),
       ],
       () => stopping,
     );

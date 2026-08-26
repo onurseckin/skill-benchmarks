@@ -10,9 +10,10 @@ export * from "./server.js";
 const port = Number(process.env.BACKEND_PORT ?? "4000");
 const hostname = process.env.BACKEND_HOST ?? "0.0.0.0";
 const server = createBackendServer(port, hostname);
+const urlHostname = hostname.includes(":") ? `[${hostname}]` : hostname;
 
 await server.start();
-console.log(`Backend ready at http://${hostname}:${port}`);
+console.log(`Backend ready at http://${urlHostname}:${port}/`);
 
 let stopping = false;
 
