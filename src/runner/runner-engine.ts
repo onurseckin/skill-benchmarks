@@ -250,9 +250,8 @@ export class ScenarioRunnerEngine {
         terminationReason = "max_turns";
       }
       const totalDurationMs = performance.now() - startTimeMs;
-      const finishedAt = new Date().toISOString();
       const completed = terminationReason === "success";
-      scribe.emit("run:finish", {
+      const finishEvent = scribe.emit("run:finish", {
         runId: config.runId,
         terminationReason,
         totalDurationMs,
@@ -260,6 +259,7 @@ export class ScenarioRunnerEngine {
         totalTurns: turnIndex,
         completed,
       });
+      const finishedAt = new Date(Number(BigInt(finishEvent.timestampUs) / 1000n)).toISOString();
       return {
         runId: config.runId,
         scenarioId: config.scenarioId,
