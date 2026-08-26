@@ -83,11 +83,27 @@ export interface IContainerPoolManager {
   readonly queuedCount: number;
   readonly maxConcurrency: number;
 
-  acquire(config: ContainerLaunchConfig): Promise<IContainerInstance>;
+  getStatus(): ContainerPoolStatus;
+
+  acquire(config: ContainerLaunchConfig, signal?: AbortSignal): Promise<IContainerInstance>;
 
   release(instance: IContainerInstance): Promise<void>;
 
   drain(): Promise<void>;
+}
+
+export interface ContainerPoolStatus {
+  readonly accepting: boolean;
+  readonly queuedCount: number;
+  readonly creatingCount: number;
+  readonly activeCount: number;
+  readonly releasingCount: number;
+  readonly cleanupFailedCount: number;
+}
+
+export interface ContainerQueueTimer {
+  schedule(callback: () => void, delayMs: number): unknown;
+  cancel(handle: unknown): void;
 }
 
 export interface PoolConfig {
@@ -96,6 +112,8 @@ export interface PoolConfig {
   readonly queueTimeoutMs?: number;
   readonly idleTimeoutMs?: number;
   readonly dockerClient?: IDockerClient;
+  readonly queueTimer?: ContainerQueueTimer;
+  readonly waitForStartupJitter?: (delayMs: number, signal: AbortSignal) => Promise<void>;
 }
 
 export interface ContainerInspectState {
@@ -174,22 +192,42 @@ export interface DockerExecProcessResult {
   readonly timedOut: boolean;
 }
 
+export interface DockerOperationOptions {
+  readonly signal?: AbortSignal;
+}
+
 export interface IDockerClient {
-  createContainer(options: DockerCreateOptions): Promise<string>;
-  startContainer(containerId: string): Promise<void>;
+  createContainer(
+    options: DockerCreateOptions,
+    operation?: DockerOperationOptions,
+  ): Promise<string>;
+  startContainer(containerId: string, operation?: DockerOperationOptions): Promise<void>;
   exec(
     containerId: string,
     command: ReadonlyArray<string>,
     options?: DockerExecOptions,
   ): Promise<DockerExecProcessResult>;
   inspectContainer(containerId: string): Promise<ContainerInspectInfo>;
-  killContainer(containerId: string, signal?: string): Promise<void>;
+  killContainer(
+    containerId: string,
+    signal?: string,
+    operation?: DockerOperationOptions,
+  ): Promise<void>;
   removeContainer(
     containerId: string,
     options?: { readonly force?: boolean; readonly removeVolumes?: boolean },
+    operation?: DockerOperationOptions,
   ): Promise<void>;
-  createVolume(name: string, options?: { readonly labels?: Record<string, string> }): Promise<void>;
-  removeVolume(name: string, options?: { readonly force?: boolean }): Promise<void>;
+  createVolume(
+    name: string,
+    options?: { readonly labels?: Record<string, string> },
+    operation?: DockerOperationOptions,
+  ): Promise<void>;
+  removeVolume(
+    name: string,
+    options?: { readonly force?: boolean },
+    operation?: DockerOperationOptions,
+  ): Promise<void>;
   listContainers(options?: {
     readonly all?: boolean;
     readonly filters?: Record<string, string | ReadonlyArray<string>>;

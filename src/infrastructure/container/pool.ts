@@ -1,320 +1,328 @@
 import * as os from "node:os";
+import { resolveAbortReason } from "../../shared/cancellation.js";
+import { ContainerAcquisitionQueue } from "./acquisition-queue.js";
+import { ContainerCreationLease } from "./creation-lease.js";
 import { DockerClient } from "./docker-client.js";
-import { ContainerInstance } from "./instance.js";
-import { ContainerStateMachine } from "./state-machine.js";
+import {
+  ContainerDrainError,
+  DrainInitiatedError,
+  UnknownContainerLeaseError,
+} from "./pool-errors.js";
 import type {
   ContainerLaunchConfig,
+  ContainerPoolStatus,
+  ContainerQueueTimer,
   IContainerInstance,
   IContainerPoolManager,
   IDockerClient,
   PoolConfig,
 } from "./types.js";
 
-export class QueueTimeoutError extends Error {
-  readonly queueTimeoutMs: number;
+export { DrainInitiatedError, QueueTimeoutError } from "./pool-errors.js";
 
-  constructor(queueTimeoutMs: number, message?: string) {
-    super(
-      message ?? `Container pool acquisition timed out after waiting ${queueTimeoutMs}ms in queue`,
-    );
-    this.name = "QueueTimeoutError";
-    this.queueTimeoutMs = queueTimeoutMs;
-  }
+interface ActiveContainerRecord {
+  readonly instance: IContainerInstance;
+  releasePromise: Promise<void> | undefined;
+  cleanupFailed: boolean;
 }
 
-export class DrainInitiatedError extends Error {
-  constructor(message?: string) {
-    super(message ?? "Container pool is draining, acquisition cancelled");
-    this.name = "DrainInitiatedError";
-  }
-}
-
-interface QueuedRequest {
-  readonly config: ContainerLaunchConfig;
-  readonly resolve: (instance: IContainerInstance) => void;
-  readonly reject: (error: Error) => void;
-  readonly timerId: ReturnType<typeof setTimeout>;
-  readonly queuedAt: number;
-}
+const defaultQueueTimer: ContainerQueueTimer = {
+  schedule(callback: () => void, delayMs: number): ReturnType<typeof setTimeout> {
+    return setTimeout(callback, delayMs);
+  },
+  cancel(handle: unknown): void {
+    clearTimeout(handle as ReturnType<typeof setTimeout>);
+  },
+};
 
 export class ContainerPoolManager implements IContainerPoolManager {
-  private readonly _maxConcurrency: number;
-  private readonly _startupJitterMs: number;
-  private readonly _queueTimeoutMs: number;
+  private readonly maxPoolConcurrency: number;
+  private readonly startupJitterMs: number;
   private readonly dockerClient: IDockerClient;
-
-  private readonly activeInstances = new Map<string, IContainerInstance>();
-  private readonly queue: QueuedRequest[] = [];
+  private readonly queue: ContainerAcquisitionQueue;
+  private readonly waitForStartupJitter: (delayMs: number, signal: AbortSignal) => Promise<void>;
+  private readonly activeInstances = new Map<string, ActiveContainerRecord>();
+  private readonly creatingLeases = new Map<string, ContainerCreationLease>();
+  private readonly failedCreationLeases = new Map<string, ContainerCreationLease>();
+  private readonly retiredInstances = new WeakSet<IContainerInstance>();
   private isDraining = false;
+  private drainPromise: Promise<void> | undefined;
+  private nextLeaseNumber = 0;
   private lastCreationTimestamp = 0;
-  private creationLock: Promise<void> = Promise.resolve();
+  private startupLock: Promise<void> = Promise.resolve();
 
-  constructor(config?: PoolConfig) {
-    this._maxConcurrency = config?.maxConcurrency ?? ContainerPoolManager.calculateMaxConcurrency();
-    this._startupJitterMs = config?.startupJitterMs ?? 150;
-    this._queueTimeoutMs = config?.queueTimeoutMs ?? 300000;
+  public constructor(config?: PoolConfig) {
+    this.maxPoolConcurrency =
+      config?.maxConcurrency ?? ContainerPoolManager.calculateMaxConcurrency();
+    this.startupJitterMs = config?.startupJitterMs ?? 150;
     this.dockerClient = config?.dockerClient ?? new DockerClient();
+    this.queue = new ContainerAcquisitionQueue(
+      config?.queueTimeoutMs ?? 300000,
+      config?.queueTimer ?? defaultQueueTimer,
+    );
+    this.waitForStartupJitter = config?.waitForStartupJitter ?? waitForAbortableDelay;
   }
 
-  get activeCount(): number {
+  public get activeCount(): number {
     return this.activeInstances.size;
   }
 
-  get queuedCount(): number {
-    return this.queue.length;
+  public get queuedCount(): number {
+    return this.queue.count;
   }
 
-  get maxConcurrency(): number {
-    return this._maxConcurrency;
+  public get maxConcurrency(): number {
+    return this.maxPoolConcurrency;
   }
 
-  static calculateMaxConcurrency(hostCpus?: number, totalMemoryBytes?: number): number {
+  public getStatus(): ContainerPoolStatus {
+    let releasingCount = 0;
+    let cleanupFailedCount = this.failedCreationLeases.size;
+    for (const record of this.activeInstances.values()) {
+      if (record.releasePromise !== undefined) releasingCount += 1;
+      if (record.cleanupFailed) cleanupFailedCount += 1;
+    }
+    return {
+      accepting: !this.isDraining,
+      queuedCount: this.queue.count,
+      creatingCount: this.creatingLeases.size,
+      activeCount: this.activeInstances.size,
+      releasingCount,
+      cleanupFailedCount,
+    };
+  }
+
+  public static calculateMaxConcurrency(hostCpus?: number, totalMemoryBytes?: number): number {
     const cpus = hostCpus ?? (typeof os.cpus === "function" ? os.cpus().length : 4);
-    const memBytes =
+    const memoryBytes =
       totalMemoryBytes ??
       (typeof os.totalmem === "function" ? os.totalmem() : 16 * 1024 * 1024 * 1024);
-
-    const totalMemoryGb = memBytes / (1024 * 1024 * 1024);
-    const mFreeGb = Math.max(0, totalMemoryGb - 4.0);
-
-    const memorySlots = Math.floor(mFreeGb / 2.5);
-    const cpuSlots = cpus - 1;
-
-    return Math.max(1, Math.min(cpuSlots, memorySlots));
+    const memorySlots = Math.floor(Math.max(0, memoryBytes / 1024 ** 3 - 4) / 2.5);
+    return Math.max(1, Math.min(cpus - 1, memorySlots));
   }
 
-  private async enforceStartupJitter(): Promise<void> {
-    const previousLock = this.creationLock;
-    let releaseLock: () => void = () => {};
-    this.creationLock = new Promise<void>((resolve) => {
-      releaseLock = resolve;
-    });
-
-    await previousLock;
-
-    try {
-      const now = Date.now();
-      const elapsed = now - this.lastCreationTimestamp;
-      if (elapsed < this._startupJitterMs) {
-        const waitMs = this._startupJitterMs - elapsed;
-        await new Promise((resolve) => setTimeout(resolve, waitMs));
-      }
-      this.lastCreationTimestamp = Date.now();
-    } finally {
-      releaseLock();
-    }
-  }
-
-  private async createContainerInstance(
+  public async acquire(
     config: ContainerLaunchConfig,
+    signal?: AbortSignal,
   ): Promise<IContainerInstance> {
-    await this.enforceStartupJitter();
-
-    const stateMachine = new ContainerStateMachine("PENDING");
-    stateMachine.transition("CREATING");
-
-    if (config.workspaceVolumeName) {
-      await this.dockerClient.createVolume(config.workspaceVolumeName, {
-        labels: {
-          "io.skill-benchmarks.volume": "workspace",
-          "io.skill-benchmarks.run-id": config.runId,
-          "io.skill-benchmarks.scenario-id": config.scenarioId,
-        },
-      });
-    }
-
-    const containerName = `sb-run-${config.runId}`;
-    const bindMounts = config.artifactHostPath
-      ? [
-          {
-            hostPath: config.artifactHostPath,
-            containerPath: "/artifacts",
-            readonly: false,
-          },
-        ]
-      : [];
-
-    const volumeMounts = config.workspaceVolumeName
-      ? [
-          {
-            volumeName: config.workspaceVolumeName,
-            containerPath: "/workspace",
-            readonly: false,
-          },
-        ]
-      : [];
-
-    const labels: Record<string, string> = {
-      "io.skill-benchmarks.managed": "true",
-      "io.skill-benchmarks.run-id": config.runId,
-      "io.skill-benchmarks.scenario-id": config.scenarioId,
-      ...config.labels,
-    };
-
-    let containerId: string;
-    try {
-      containerId = await this.dockerClient.createContainer({
-        name: containerName,
-        image: config.imageTag,
-        command: ["sleep", "infinity"],
-        workingDir: "/workspace",
-        environment: config.environment,
-        labels,
-        network: config.networkMode,
-        bindMounts,
-        volumeMounts,
-        resourceLimits: config.resourceLimits,
-        securityOpts: config.securityOpts,
-        capDrop: config.capDrop,
-        capAdd: config.capAdd,
-        user: config.user ?? "sandbox",
-      });
-
-      await this.dockerClient.startContainer(containerId);
-      stateMachine.transition("READY");
-    } catch (err) {
-      stateMachine.transition("ERRORED", (err as Error).message);
-      throw err;
-    }
-
-    return new ContainerInstance(containerId, config, this.dockerClient, stateMachine);
+    if (this.isDraining) throw new DrainInitiatedError();
+    if (signal?.aborted === true) throw resolveAbortReason(signal, "sweep");
+    if (this.hasCapacity()) return this.startCreation(config, signal);
+    return this.queue.enqueue(config, signal);
   }
 
-  async acquire(config: ContainerLaunchConfig): Promise<IContainerInstance> {
-    if (this.isDraining) {
-      throw new DrainInitiatedError();
+  public release(instance: IContainerInstance): Promise<void> {
+    const record = this.activeInstances.get(instance.containerId);
+    if (record === undefined) {
+      if (this.retiredInstances.has(instance)) return Promise.resolve();
+      return Promise.reject(new UnknownContainerLeaseError(instance.containerId));
     }
-
-    if (this.activeInstances.size < this._maxConcurrency) {
-      const placeholderKey = `pending-${config.runId}-${Date.now()}`;
-      const dummyInstance: IContainerInstance = {
-        containerId: placeholderKey,
-        runId: config.runId,
-        state: "CREATING",
-        config,
-        executeCommand: async () => {
-          throw new Error("Not implemented");
-        },
-        readFile: async () => new Uint8Array(),
-        writeFile: async () => {},
-        extractGitDiff: async () => "",
-        teardown: async () => {},
-      };
-      this.activeInstances.set(placeholderKey, dummyInstance);
-
-      try {
-        const instance = await this.createContainerInstance(config);
-        this.activeInstances.delete(placeholderKey);
-        this.activeInstances.set(instance.containerId, instance);
-        return instance;
-      } catch (err) {
-        this.activeInstances.delete(placeholderKey);
-        this.processNextInQueue();
-        throw err;
-      }
+    if (record.instance !== instance) {
+      return Promise.reject(new UnknownContainerLeaseError(instance.containerId));
     }
-
-    return new Promise<IContainerInstance>((resolve, reject) => {
-      let timerId: ReturnType<typeof setTimeout>;
-
-      timerId = setTimeout(() => {
-        const idx = this.queue.findIndex((q) => q.timerId === timerId);
-        if (idx !== -1) {
-          this.queue.splice(idx, 1);
-          reject(new QueueTimeoutError(this._queueTimeoutMs));
-        }
-      }, this._queueTimeoutMs);
-
-      this.queue.push({
-        config,
-        resolve: (inst) => {
-          clearTimeout(timerId);
-          resolve(inst);
-        },
-        reject: (err) => {
-          clearTimeout(timerId);
-          reject(err);
-        },
-        timerId,
-        queuedAt: Date.now(),
-      });
-    });
+    return this.releaseRecord(instance.containerId, record);
   }
 
-  private processNextInQueue(): void {
-    if (this.isDraining || this.queue.length === 0) {
-      return;
-    }
-
-    if (this.activeInstances.size >= this._maxConcurrency) {
-      return;
-    }
-
-    const next = this.queue.shift();
-    if (!next) {
-      return;
-    }
-
-    const placeholderKey = `pending-${next.config.runId}-${Date.now()}`;
-    const dummyInstance: IContainerInstance = {
-      containerId: placeholderKey,
-      runId: next.config.runId,
-      state: "CREATING",
-      config: next.config,
-      executeCommand: async () => {
-        throw new Error("Not implemented");
-      },
-      readFile: async () => new Uint8Array(),
-      writeFile: async () => {},
-      extractGitDiff: async () => "",
-      teardown: async () => {},
-    };
-    this.activeInstances.set(placeholderKey, dummyInstance);
-
-    this.createContainerInstance(next.config)
-      .then((instance) => {
-        this.activeInstances.delete(placeholderKey);
-        this.activeInstances.set(instance.containerId, instance);
-        next.resolve(instance);
-      })
-      .catch((err) => {
-        this.activeInstances.delete(placeholderKey);
-        next.reject(err);
-        this.processNextInQueue();
-      });
-  }
-
-  async release(instance: IContainerInstance): Promise<void> {
-    this.activeInstances.delete(instance.containerId);
-
-    try {
-      await instance.teardown();
-    } catch {
-    } finally {
-      this.processNextInQueue();
-    }
-  }
-
-  async drain(): Promise<void> {
+  public drain(): Promise<void> {
+    if (this.drainPromise !== undefined) return this.drainPromise;
     this.isDraining = true;
+    const drainReason = new DrainInitiatedError();
+    this.queue.rejectAll(drainReason);
+    this.drainPromise = this.completeDrain(drainReason);
+    void this.drainPromise.then(
+      () => {
+        this.drainPromise = undefined;
+      },
+      () => {
+        this.drainPromise = undefined;
+      },
+    );
+    return this.drainPromise;
+  }
 
-    while (this.queue.length > 0) {
-      const item = this.queue.shift();
-      if (item) {
-        clearTimeout(item.timerId);
-        item.reject(new DrainInitiatedError());
-      }
-    }
-
-    const activeList = Array.from(this.activeInstances.values());
-    this.activeInstances.clear();
-
-    await Promise.all(
-      activeList.map(async (instance) => {
-        try {
-          await instance.teardown();
-        } catch {}
-      }),
+  private hasCapacity(): boolean {
+    return (
+      this.activeInstances.size + this.creatingLeases.size + this.failedCreationLeases.size <
+      this.maxPoolConcurrency
     );
   }
+
+  private startCreation(
+    config: ContainerLaunchConfig,
+    signal?: AbortSignal,
+  ): Promise<IContainerInstance> {
+    const lease = new ContainerCreationLease({
+      id: `${config.runId}-${this.nextLeaseNumber++}`,
+      config,
+      dockerClient: this.dockerClient,
+      signal,
+      waitForStartupJitter: async (leaseSignal) => await this.enforceStartupJitter(leaseSignal),
+      publish: (instance) => this.publishInstance(instance),
+    });
+    this.creatingLeases.set(lease.id, lease);
+    lease.start();
+    void lease.settled.then((settlement) => {
+      this.creatingLeases.delete(lease.id);
+      if (settlement.cleanupFailed) this.failedCreationLeases.set(lease.id, lease);
+      else this.failedCreationLeases.delete(lease.id);
+      this.processQueue();
+    });
+    return lease.result;
+  }
+
+  private publishInstance(instance: IContainerInstance): boolean {
+    if (this.isDraining || this.activeInstances.has(instance.containerId)) return false;
+    this.activeInstances.set(instance.containerId, {
+      instance,
+      releasePromise: undefined,
+      cleanupFailed: false,
+    });
+    return true;
+  }
+
+  private processQueue(): void {
+    if (this.isDraining) return;
+    while (this.hasCapacity()) {
+      const request = this.queue.takeNext();
+      if (request === undefined) return;
+      void this.startCreation(request.config, request.signal).then(request.resolve, request.reject);
+    }
+  }
+
+  private releaseRecord(containerId: string, record: ActiveContainerRecord): Promise<void> {
+    if (record.releasePromise !== undefined) return record.releasePromise;
+    const releaseAttempt = record.instance.teardown().then(
+      () => {
+        this.activeInstances.delete(containerId);
+        this.retiredInstances.add(record.instance);
+        this.processQueue();
+      },
+      (error: unknown) => {
+        record.cleanupFailed = true;
+        throw asError(error);
+      },
+    );
+    record.releasePromise = releaseAttempt;
+    void releaseAttempt.then(
+      () => {
+        record.releasePromise = undefined;
+      },
+      () => {
+        record.releasePromise = undefined;
+      },
+    );
+    return releaseAttempt;
+  }
+
+  private async completeDrain(drainReason: DrainInitiatedError): Promise<void> {
+    for (;;) {
+      for (const lease of this.creatingLeases.values()) {
+        lease.cancel(drainReason);
+      }
+      const failures = await this.drainSnapshot();
+      if (failures.length > 0) throw new ContainerDrainError(failures);
+      if (
+        this.creatingLeases.size === 0 &&
+        this.failedCreationLeases.size === 0 &&
+        this.activeInstances.size === 0
+      ) {
+        return;
+      }
+    }
+  }
+
+  private async drainSnapshot(): Promise<Error[]> {
+    const pendingSettlements = Array.from(this.creatingLeases.values(), (lease) => lease.settled);
+    const failedCreationRetries = Array.from(
+      this.failedCreationLeases.entries(),
+      async ([id, lease]) => {
+        await lease.retryCleanup();
+        this.failedCreationLeases.delete(id);
+      },
+    );
+    const activeReleases = Array.from(this.activeInstances.entries(), ([id, record]) =>
+      this.releaseRecord(id, record),
+    );
+    const results = await Promise.allSettled([
+      ...pendingSettlements,
+      ...failedCreationRetries,
+      ...activeReleases,
+    ]);
+    const failures: Error[] = [];
+    for (const result of results) {
+      if (result.status === "rejected") failures.push(asError(result.reason));
+      if (result.status === "fulfilled" && isCleanupFailedSettlement(result.value)) {
+        failures.push(new Error("Container creation cleanup remains incomplete"));
+      }
+    }
+    return failures;
+  }
+
+  private async enforceStartupJitter(signal: AbortSignal): Promise<void> {
+    const previousLock = this.startupLock;
+    let releaseLock: (() => void) | undefined;
+    this.startupLock = new Promise<void>((resolve) => {
+      releaseLock = resolve;
+    });
+    try {
+      await awaitSignalSettlement(previousLock, signal);
+      const waitMs = Math.max(0, this.startupJitterMs - (Date.now() - this.lastCreationTimestamp));
+      await this.waitForStartupJitter(waitMs, signal);
+      if (signal.aborted) throw resolvePoolAbortReason(signal);
+      this.lastCreationTimestamp = Date.now();
+    } finally {
+      releaseLock?.();
+    }
+  }
+}
+
+async function waitForAbortableDelay(delayMs: number, signal: AbortSignal): Promise<void> {
+  if (signal.aborted) throw resolvePoolAbortReason(signal);
+  if (delayMs === 0) return;
+  await new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(() => settle(resolve), delayMs);
+    const abort = (): void => settle(() => reject(resolvePoolAbortReason(signal)));
+    const settle = (action: () => void): void => {
+      clearTimeout(timeout);
+      signal.removeEventListener("abort", abort);
+      action();
+    };
+    signal.addEventListener("abort", abort, { once: true });
+  });
+}
+
+async function awaitSignalSettlement(operation: Promise<void>, signal: AbortSignal): Promise<void> {
+  if (signal.aborted) throw resolvePoolAbortReason(signal);
+  await new Promise<void>((resolve, reject) => {
+    let settled = false;
+    const settle = (action: () => void): void => {
+      if (settled) return;
+      settled = true;
+      signal.removeEventListener("abort", abort);
+      action();
+    };
+    const abort = (): void => settle(() => reject(resolvePoolAbortReason(signal)));
+    signal.addEventListener("abort", abort, { once: true });
+    operation.then(
+      () => settle(resolve),
+      (error: unknown) => settle(() => reject(error)),
+    );
+  });
+}
+
+function asError(value: unknown): Error {
+  return value instanceof Error ? value : new Error(String(value));
+}
+
+function resolvePoolAbortReason(signal: AbortSignal): Error {
+  return signal.reason instanceof Error ? signal.reason : resolveAbortReason(signal, "sweep");
+}
+
+function isCleanupFailedSettlement(value: unknown): value is { readonly cleanupFailed: true } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "cleanupFailed" in value &&
+    value.cleanupFailed === true
+  );
 }

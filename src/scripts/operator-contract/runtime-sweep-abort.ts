@@ -53,7 +53,10 @@ export async function verifyAbortedSweepTerminalization(temporaryRoot: string): 
   requireCondition(checkpoint.status === "aborted", "sweep_abort_checkpoint_status");
   requireCondition(summary.results.length === 2, "sweep_abort_summary_terminal_count");
   requireCondition(outcome.terminalCells.length === 2, "sweep_abort_outcome_terminal_count");
-  requireCondition(Object.keys(checkpointByCell).length === 2, "sweep_abort_checkpoint_terminal_count");
+  requireCondition(
+    Object.keys(checkpointByCell).length === 2,
+    "sweep_abort_checkpoint_terminal_count",
+  );
   requireCondition(summary.completedCount === 0, "sweep_abort_summary_completed_count");
   requireCondition(summary.failedCount === 0, "sweep_abort_summary_failed_count");
   requireCondition(summary.abortedCount === 2, "sweep_abort_summary_aborted_count");
@@ -63,7 +66,10 @@ export async function verifyAbortedSweepTerminalization(temporaryRoot: string): 
   requireCondition(progress.abortedCells === 2, "sweep_abort_progress_aborted_count");
   requireCondition(progress.skippedCells === 0, "sweep_abort_progress_skipped_count");
   requireCondition(progress.queuedCells === 0, "sweep_abort_progress_queued_count");
-  requireCondition(checkpoint.completedCellIds.length === 0, "sweep_abort_checkpoint_completed_ids");
+  requireCondition(
+    checkpoint.completedCellIds.length === 0,
+    "sweep_abort_checkpoint_completed_ids",
+  );
   requireCondition(checkpoint.failedCellIds.length === 0, "sweep_abort_checkpoint_failed_ids");
   requireCondition(checkpoint.abortedCellIds.length === 2, "sweep_abort_checkpoint_aborted_ids");
   requireCondition(checkpoint.skippedCellIds.length === 0, "sweep_abort_checkpoint_skipped_ids");
@@ -82,10 +88,7 @@ export async function verifyAbortedSweepTerminalization(temporaryRoot: string): 
       "sweep_abort_summary_cell_reason",
     );
     requireCondition(outcomeCell?.status === "aborted", "sweep_abort_outcome_cell_status");
-    requireCondition(
-      outcomeCell?.publicStatus === "aborted",
-      "sweep_abort_outcome_public_status",
-    );
+    requireCondition(outcomeCell?.publicStatus === "aborted", "sweep_abort_outcome_public_status");
     requireCondition(
       outcomeCell?.terminationReason === "aborted",
       "sweep_abort_outcome_cell_reason",
@@ -106,8 +109,7 @@ export async function verifyAbortedSweepTerminalization(temporaryRoot: string): 
   requireCondition(outcome.abortedCount === 2, "sweep_abort_outcome_aborted_count");
   requireCondition(outcome.failedCount === 0, "sweep_abort_outcome_failed_count");
   requireCondition(
-    summary.abortedCount === outcome.abortedCount &&
-      summary.failedCount === outcome.failedCount,
+    summary.abortedCount === outcome.abortedCount && summary.failedCount === outcome.failedCount,
     "sweep_abort_accounting_agreement",
   );
   await verifyMixedFailureAbortPrecedence(temporaryRoot);
@@ -197,6 +199,16 @@ function createMixedFailureConfig(
     activeCount: 0,
     queuedCount: 0,
     maxConcurrency: 1,
+    getStatus() {
+      return {
+        accepting: true,
+        queuedCount: 0,
+        creatingCount: 0,
+        activeCount: 0,
+        releasingCount: 0,
+        cleanupFailedCount: 0,
+      };
+    },
     async acquire() {
       throw new Error("fixture durable setup failure");
     },

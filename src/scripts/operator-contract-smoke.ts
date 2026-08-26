@@ -10,6 +10,7 @@ import { verifyReplayRoundTrip, verifyReportCohorts } from "./operator-contract/
 import { verifyRuntimeCancellationAndPermits } from "./operator-contract/runtime-lifecycle.js";
 import { verifyProviderRuntimeLifecycle } from "./operator-contract/runtime-providers.js";
 import { verifyCellPermitFinalization } from "./operator-contract/runtime-cell-permits.js";
+import { verifyContainerLifecycle } from "./operator-contract/runtime-container-lifecycle.js";
 import { verifyToolProcessLifecycle } from "./operator-contract/runtime-tools.js";
 import { verifyAbortedSweepTerminalization } from "./operator-contract/runtime-sweep-abort.js";
 import { verifySelectorAdmission } from "./operator-contract/selectors.js";
@@ -35,6 +36,7 @@ const cases: readonly OperatorCase[] = [
   { name: "runtime-providers", execute: () => verifyProviderRuntimeLifecycle() },
   { name: "runtime-lifecycle", execute: verifyRuntimeCancellationAndPermits },
   { name: "runtime-cell-permits", execute: verifyCellPermitFinalization },
+  { name: "runtime-container-lifecycle", execute: verifyContainerLifecycle },
   { name: "runtime-tools", execute: verifyToolProcessLifecycle },
   { name: "runtime-sweep-abort", execute: verifyAbortedSweepTerminalization },
   { name: "artifacts", execute: verifyArtifactReconciliation },

@@ -74,14 +74,21 @@ function createCell(outputRoot: string): MatrixCellDescriptor {
   } as MatrixCellDescriptor;
 }
 
-function createConfig(
-  outputRoot: string,
-  modelEntry: ModelMatrixEntry,
-): MatrixSweepConfig {
+function createConfig(outputRoot: string, modelEntry: ModelMatrixEntry): MatrixSweepConfig {
   const containerPool: IContainerPoolManager = {
     activeCount: 0,
     queuedCount: 0,
     maxConcurrency: 1,
+    getStatus() {
+      return {
+        accepting: true,
+        queuedCount: 0,
+        creatingCount: 0,
+        activeCount: 0,
+        releasingCount: 0,
+        cleanupFailedCount: 0,
+      };
+    },
     async acquire() {
       throw new Error("fixture setup failure");
     },

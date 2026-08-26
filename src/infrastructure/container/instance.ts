@@ -1,3 +1,4 @@
+import { ContainerCleanupError } from "./pool-errors.js";
 import { ContainerStateMachine } from "./state-machine.js";
 import type {
   ContainerExecResult,
@@ -8,7 +9,7 @@ import type {
   IDockerClient,
 } from "./types.js";
 
-const META_TRAILER_REGEX = /\n?__SB_META_TRAILER__:(\{.*?\})\n?$/;
+const metaTrailerExpression = /\n?__SB_META_TRAILER__:(\{.*?\})\n?$/;
 
 interface MetaTrailer {
   readonly exitCode: number;
@@ -16,13 +17,16 @@ interface MetaTrailer {
 }
 
 export class ContainerInstance implements IContainerInstance {
-  readonly containerId: string;
-  readonly runId: string;
-  readonly config: ContainerLaunchConfig;
-  readonly stateMachine: ContainerStateMachine;
+  public readonly containerId: string;
+  public readonly runId: string;
+  public readonly config: ContainerLaunchConfig;
+  public readonly stateMachine: ContainerStateMachine;
   private readonly dockerClient: IDockerClient;
+  private teardownPromise: Promise<void> | undefined;
+  private containerRemoved = false;
+  private volumeRemoved = false;
 
-  constructor(
+  public constructor(
     containerId: string,
     config: ContainerLaunchConfig,
     dockerClient: IDockerClient,
@@ -35,227 +39,191 @@ export class ContainerInstance implements IContainerInstance {
     this.stateMachine = stateMachine ?? new ContainerStateMachine("READY");
   }
 
-  get state(): ContainerState {
+  public get state(): ContainerState {
     return this.stateMachine.state;
   }
 
-  private parseTrailer(rawStderr: string): {
-    readonly cleanStderr: string;
-    readonly trailer?: MetaTrailer;
-  } {
-    const match = META_TRAILER_REGEX.exec(rawStderr);
-    if (!match || !match[1]) {
-      return { cleanStderr: rawStderr, trailer: undefined };
-    }
-
-    try {
-      const parsed = JSON.parse(match[1]) as { exitCode?: unknown; durationMs?: unknown };
-      if (typeof parsed.exitCode === "number" && typeof parsed.durationMs === "number") {
-        const cleanStderr = rawStderr.replace(META_TRAILER_REGEX, "").trimEnd();
-        return {
-          cleanStderr,
-          trailer: {
-            exitCode: parsed.exitCode,
-            durationMs: parsed.durationMs,
-          },
-        };
-      }
-    } catch {}
-
-    return { cleanStderr: rawStderr, trailer: undefined };
-  }
-
-  async executeCommand(
+  public async executeCommand(
     command: string,
     options?: ExecuteCommandOptions,
   ): Promise<ContainerExecResult> {
-    if (this.stateMachine.state !== "EXECUTING") {
-      this.stateMachine.transition("EXECUTING");
-    }
-
+    if (this.stateMachine.state !== "EXECUTING") this.stateMachine.transition("EXECUTING");
     const cwd = options?.cwd ?? "/workspace";
     const timeoutMs = options?.timeoutMs ?? this.config.timeouts.commandTimeoutMs;
     const user = options?.user ?? this.config.user ?? "sandbox";
-
-    const wrappedScript = `
-set -o pipefail
-CWD="${cwd}"
-cd "\${CWD}" || exit 1
-START_NS=$(date +%s%N)
-${command}
-EXIT_CODE=$?
-END_NS=$(date +%s%N)
-DURATION_MS=$(( (END_NS - START_NS) / 1000000 ))
-printf "\\n__SB_META_TRAILER__:{\\"exitCode\\":%d,\\"durationMs\\":%d}\\n" "\${EXIT_CODE}" "\${DURATION_MS}" >&2
-exit \${EXIT_CODE}
-`.trim();
-
-    const execArgs = ["/bin/bash", "-c", wrappedScript];
-
-    let execResult;
+    const wrappedScript = [
+      "set -o pipefail",
+      `CWD="${cwd}"`,
+      'cd "${CWD}" || exit 1',
+      "START_NS=$(date +%s%N)",
+      command,
+      "EXIT_CODE=$?",
+      "END_NS=$(date +%s%N)",
+      "DURATION_MS=$(( (END_NS - START_NS) / 1000000 ))",
+      'printf "\\n__SB_META_TRAILER__:{\\"exitCode\\":%d,\\"durationMs\\":%d}\\n" "${EXIT_CODE}" "${DURATION_MS}" >&2',
+      "exit ${EXIT_CODE}",
+    ].join("\n");
+    let execution;
     try {
-      execResult = await this.dockerClient.exec(this.containerId, execArgs, {
-        cwd,
-        user,
-        env: options?.env ?? this.config.environment,
-        timeoutMs,
-        onStdoutChunk: options?.onStdoutChunk,
-        onStderrChunk: options?.onStderrChunk,
-      });
-    } catch (err) {
+      execution = await this.dockerClient.exec(
+        this.containerId,
+        ["/bin/bash", "-c", wrappedScript],
+        {
+          cwd,
+          user,
+          env: options?.env ?? this.config.environment,
+          timeoutMs,
+          onStdoutChunk: options?.onStdoutChunk,
+          onStderrChunk: options?.onStderrChunk,
+        },
+      );
+    } catch (error) {
       if (this.stateMachine.canTransition("ERRORED")) {
-        this.stateMachine.transition("ERRORED", (err as Error).message);
+        this.stateMachine.transition("ERRORED", asError(error).message);
       }
-      throw err;
+      throw error;
     }
-
-    const rawStdout = new TextDecoder().decode(execResult.stdout);
-    const rawStderr = new TextDecoder().decode(execResult.stderr);
-
-    const { cleanStderr, trailer } = this.parseTrailer(rawStderr);
-
-    const exitCode = execResult.timedOut ? 124 : (trailer?.exitCode ?? execResult.exitCode);
-    const executionTimeMs = trailer?.durationMs ?? execResult.durationMs;
-    const timedOut = execResult.timedOut;
-    const oomKilled = exitCode === 137;
-
-    let peakMemoryBytes = 0;
-    try {
-      const inspectInfo = await this.dockerClient.inspectContainer(this.containerId);
-      if (inspectInfo.state.oomKilled) {
-      }
-    } catch {}
-
-    if (this.stateMachine.state === "EXECUTING") {
-      this.stateMachine.transition("READY");
-    }
-
+    const stderr = new TextDecoder().decode(execution.stderr);
+    const trailer = parseTrailer(stderr);
+    if (this.stateMachine.state === "EXECUTING") this.stateMachine.transition("READY");
     return {
-      exitCode,
-      stdout: rawStdout,
-      stderr: cleanStderr,
-      executionTimeMs,
-      peakMemoryBytes,
-      timedOut,
-      oomKilled,
+      exitCode: execution.timedOut ? 124 : (trailer.value?.exitCode ?? execution.exitCode),
+      stdout: new TextDecoder().decode(execution.stdout),
+      stderr: trailer.stderr,
+      executionTimeMs: trailer.value?.durationMs ?? execution.durationMs,
+      peakMemoryBytes: 0,
+      timedOut: execution.timedOut,
+      oomKilled: execution.exitCode === 137,
     };
   }
 
-  async readFile(path: string): Promise<Uint8Array> {
+  public async readFile(path: string): Promise<Uint8Array> {
     const result = await this.dockerClient.exec(
       this.containerId,
       ["/bin/bash", "-c", `base64 "${path}"`],
-      {
-        cwd: "/workspace",
-        user: "root",
-      },
+      { cwd: "/workspace", user: "root" },
     );
-
     if (result.exitCode !== 0) {
-      const errText = new TextDecoder().decode(result.stderr);
-      throw new Error(`Failed to read file '${path}' in container ${this.containerId}: ${errText}`);
+      throw new Error(`Failed to read file '${path}' in container ${this.containerId}`);
     }
-
-    const base64Str = new TextDecoder().decode(result.stdout).replace(/\s+/g, "");
-    const binaryStr = atob(base64Str);
-    const bytes = new Uint8Array(binaryStr.length);
-    for (let i = 0; i < binaryStr.length; i++) {
-      bytes[i] = binaryStr.charCodeAt(i);
-    }
-    return bytes;
+    const content = atob(new TextDecoder().decode(result.stdout).replace(/\s+/g, ""));
+    return Uint8Array.from(content, (character) => character.charCodeAt(0));
   }
 
-  async writeFile(path: string, content: Uint8Array | string): Promise<void> {
-    let base64Content: string;
-    if (typeof content === "string") {
-      const encoded = new TextEncoder().encode(content);
-      let binary = "";
-      for (let i = 0; i < encoded.length; i++) {
-        binary += String.fromCharCode(encoded[i] ?? 0);
-      }
-      base64Content = btoa(binary);
-    } else {
-      let binary = "";
-      for (let i = 0; i < content.length; i++) {
-        binary += String.fromCharCode(content[i] ?? 0);
-      }
-      base64Content = btoa(binary);
-    }
-
-    const script = `
-DIRNAME=$(dirname "${path}")
-mkdir -p "$DIRNAME"
-printf "%s" "${base64Content}" | base64 -d > "${path}"
-`.trim();
-
+  public async writeFile(path: string, content: Uint8Array | string): Promise<void> {
+    const bytes = typeof content === "string" ? new TextEncoder().encode(content) : content;
+    const encoded = encodeBase64(bytes);
+    const script = `DIRNAME=$(dirname "${path}")\nmkdir -p "$DIRNAME"\nprintf "%s" "${encoded}" | base64 -d > "${path}"`;
     const result = await this.dockerClient.exec(this.containerId, ["/bin/bash", "-c", script], {
       cwd: "/workspace",
       user: "root",
     });
-
     if (result.exitCode !== 0) {
-      const errText = new TextDecoder().decode(result.stderr);
-      throw new Error(
-        `Failed to write file '${path}' in container ${this.containerId}: ${errText}`,
-      );
+      throw new Error(`Failed to write file '${path}' in container ${this.containerId}`);
     }
   }
 
-  async extractGitDiff(): Promise<string> {
-    if (this.stateMachine.state !== "EXTRACTING") {
-      this.stateMachine.transition("EXTRACTING");
-    }
-
-    const script = `
-cd /workspace || exit 1
-git add --intent-to-add . 2>/dev/null || true
-git diff --binary --full-index baseline 2>/dev/null || git diff --binary --full-index HEAD 2>/dev/null || true
-`.trim();
-
+  public async extractGitDiff(): Promise<string> {
+    if (this.stateMachine.state !== "EXTRACTING") this.stateMachine.transition("EXTRACTING");
+    const script = [
+      "cd /workspace || exit 1",
+      "git add --intent-to-add . 2>/dev/null || true",
+      "git diff --binary --full-index baseline 2>/dev/null || git diff --binary --full-index HEAD 2>/dev/null || true",
+    ].join("\n");
     const result = await this.dockerClient.exec(this.containerId, ["/bin/bash", "-c", script], {
       cwd: "/workspace",
       user: "sandbox",
     });
-
-    const diffOutput = new TextDecoder().decode(result.stdout);
-
-    if (this.stateMachine.state === "EXTRACTING") {
-      this.stateMachine.transition("READY");
-    }
-
-    return diffOutput;
+    if (this.stateMachine.state === "EXTRACTING") this.stateMachine.transition("READY");
+    return new TextDecoder().decode(result.stdout);
   }
 
-  async teardown(): Promise<void> {
-    if (this.stateMachine.state === "TERMINATED") {
-      return;
-    }
+  public teardown(): Promise<void> {
+    if (this.stateMachine.state === "TERMINATED") return Promise.resolve();
+    if (this.teardownPromise !== undefined) return this.teardownPromise;
+    const attempt = this.performTeardown();
+    this.teardownPromise = attempt;
+    void attempt.then(
+      () => {
+        this.teardownPromise = undefined;
+      },
+      () => {
+        this.teardownPromise = undefined;
+      },
+    );
+    return attempt;
+  }
 
-    if (this.stateMachine.canTransition("TEARDOWN")) {
-      this.stateMachine.transition("TEARDOWN");
+  private async performTeardown(): Promise<void> {
+    if (this.stateMachine.canTransition("TEARDOWN")) this.stateMachine.transition("TEARDOWN");
+    const errors: Error[] = [];
+    if (!this.containerRemoved) {
+      await this.killContainer();
+      try {
+        await this.dockerClient.removeContainer(this.containerId, {
+          force: true,
+          removeVolumes: true,
+        });
+        this.containerRemoved = true;
+      } catch (error) {
+        errors.push(asError(error));
+      }
     }
+    if (!this.volumeRemoved && this.config.workspaceVolumeName.length > 0) {
+      try {
+        await this.dockerClient.removeVolume(this.config.workspaceVolumeName, { force: true });
+        this.volumeRemoved = true;
+      } catch (error) {
+        errors.push(asError(error));
+      }
+    } else if (this.config.workspaceVolumeName.length === 0) {
+      this.volumeRemoved = true;
+    }
+    if (errors.length > 0) {
+      if (this.stateMachine.canTransition("ERRORED")) this.stateMachine.transition("ERRORED");
+      throw new ContainerCleanupError(
+        "Container teardown did not remove every owned resource",
+        errors,
+      );
+    }
+    if (this.stateMachine.canTransition("TERMINATED")) this.stateMachine.transition("TERMINATED");
+  }
 
+  private async killContainer(): Promise<void> {
     try {
       await this.dockerClient.killContainer(this.containerId);
     } catch {}
-
-    try {
-      await this.dockerClient.removeContainer(this.containerId, {
-        force: true,
-        removeVolumes: true,
-      });
-    } catch {}
-
-    try {
-      if (this.config.workspaceVolumeName) {
-        await this.dockerClient.removeVolume(this.config.workspaceVolumeName, {
-          force: true,
-        });
-      }
-    } catch {}
-
-    if (this.stateMachine.canTransition("TERMINATED")) {
-      this.stateMachine.transition("TERMINATED");
-    }
   }
+}
+
+function parseTrailer(rawStderr: string): {
+  readonly stderr: string;
+  readonly value?: MetaTrailer;
+} {
+  const match = metaTrailerExpression.exec(rawStderr);
+  if (match?.[1] === undefined) return { stderr: rawStderr };
+  try {
+    const parsed = JSON.parse(match[1]) as { exitCode?: unknown; durationMs?: unknown };
+    if (typeof parsed.exitCode !== "number" || typeof parsed.durationMs !== "number") {
+      return { stderr: rawStderr };
+    }
+    return {
+      stderr: rawStderr.replace(metaTrailerExpression, "").trimEnd(),
+      value: { exitCode: parsed.exitCode, durationMs: parsed.durationMs },
+    };
+  } catch {
+    return { stderr: rawStderr };
+  }
+}
+
+function asError(value: unknown): Error {
+  return value instanceof Error ? value : new Error(String(value));
+}
+
+function encodeBase64(bytes: Uint8Array): string {
+  let binary = "";
+  for (let index = 0; index < bytes.length; index += 1) {
+    binary += String.fromCharCode(bytes[index] ?? 0);
+  }
+  return btoa(binary);
 }

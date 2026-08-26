@@ -7,12 +7,14 @@ import {
   type RawDockerVolumeInspectItem,
 } from "./docker-args.js";
 import { DockerError, DockerTimeoutError } from "./docker-errors.js";
+import { resolveAbortReason } from "../../shared/cancellation.js";
 import type {
   ContainerInspectInfo,
   ContainerInspectState,
   DockerCreateOptions,
   DockerExecOptions,
   DockerExecProcessResult,
+  DockerOperationOptions,
   IDockerClient,
   VolumeInspectInfo,
 } from "./types.js";
@@ -33,6 +35,10 @@ function concatUint8Arrays(chunks: ReadonlyArray<Uint8Array>): Uint8Array {
   return result;
 }
 
+function resolveDockerAbortReason(signal: AbortSignal | undefined): Error {
+  return signal?.reason instanceof Error ? signal.reason : resolveAbortReason(signal, "sweep");
+}
+
 export class DockerClient implements IDockerClient {
   private readonly dockerBinary: string;
 
@@ -44,12 +50,14 @@ export class DockerClient implements IDockerClient {
     args: ReadonlyArray<string>,
     options?: {
       readonly timeoutMs?: number;
+      readonly signal?: AbortSignal;
       readonly onStdoutChunk?: (chunk: Uint8Array) => void;
       readonly onStderrChunk?: (chunk: Uint8Array) => void;
     },
   ): Promise<DockerExecProcessResult> {
     const fullCommand = [this.dockerBinary, ...args];
     const startTime = Date.now();
+    if (options?.signal?.aborted === true) throw resolveDockerAbortReason(options.signal);
 
     const proc = Bun.spawn(fullCommand as string[], {
       stdout: "pipe",
@@ -97,33 +105,47 @@ export class DockerClient implements IDockerClient {
 
     let timedOut = false;
     let timerId: ReturnType<typeof setTimeout> | undefined;
-
-    const timeoutPromise = new Promise<number>((resolve) => {
-      if (options?.timeoutMs !== undefined && options.timeoutMs > 0) {
-        timerId = setTimeout(() => {
-          timedOut = true;
-          try {
-            proc.kill(9);
-          } catch {}
-          resolve(124);
-        }, options.timeoutMs);
+    let aborted = false;
+    let terminationError: unknown;
+    const terminate = (): void => {
+      try {
+        proc.kill(9);
+      } catch (error) {
+        terminationError = error;
       }
-    });
-
-    const exitCodePromise = proc.exited;
-    const exitCode = await Promise.race([exitCodePromise, timeoutPromise]);
-    if (timerId !== undefined) {
-      clearTimeout(timerId);
+    };
+    const abort = (): void => {
+      aborted = true;
+      terminate();
+    };
+    options?.signal?.addEventListener("abort", abort, { once: true });
+    if (options?.timeoutMs !== undefined && options.timeoutMs > 0) {
+      timerId = setTimeout(() => {
+        timedOut = true;
+        terminate();
+      }, options.timeoutMs);
+    }
+    let exitCode: number;
+    try {
+      exitCode = await proc.exited;
+    } finally {
+      if (timerId !== undefined) clearTimeout(timerId);
+      options?.signal?.removeEventListener("abort", abort);
     }
 
     await Promise.all([stdoutPromise, stderrPromise]);
+
+    if (aborted) {
+      throw resolveDockerAbortReason(options?.signal);
+    }
+    if (terminationError !== undefined && !timedOut) throw terminationError;
 
     const durationMs = Date.now() - startTime;
     const stdout = concatUint8Arrays(stdoutChunks);
     const stderr = concatUint8Arrays(stderrChunks);
 
     return {
-      exitCode,
+      exitCode: timedOut ? 124 : exitCode,
       stdout,
       stderr,
       durationMs,
@@ -131,23 +153,39 @@ export class DockerClient implements IDockerClient {
     };
   }
 
-  async createContainer(options: DockerCreateOptions): Promise<string> {
+  async createContainer(
+    options: DockerCreateOptions,
+    operation?: DockerOperationOptions,
+  ): Promise<string> {
     const args = buildCreateContainerArgs(options);
-    const result = await this.runSubprocess(args);
+    const result = await this.runSubprocess(args, operation);
     if (result.exitCode !== 0) {
       const stderrStr = new TextDecoder().decode(result.stderr);
+      if (result.timedOut) {
+        throw new DockerTimeoutError([this.dockerBinary, ...args], 0, stderrStr);
+      }
       throw new DockerError([this.dockerBinary, ...args], result.exitCode, stderrStr);
     }
 
     const containerId = new TextDecoder().decode(result.stdout).trim();
+    if (containerId.length === 0) {
+      throw new DockerError(
+        [this.dockerBinary, ...args],
+        result.exitCode,
+        "Docker returned no container ID",
+      );
+    }
     return containerId;
   }
 
-  async startContainer(containerId: string): Promise<void> {
+  async startContainer(containerId: string, operation?: DockerOperationOptions): Promise<void> {
     const args = ["start", containerId];
-    const result = await this.runSubprocess(args);
+    const result = await this.runSubprocess(args, operation);
     if (result.exitCode !== 0) {
       const stderrStr = new TextDecoder().decode(result.stderr);
+      if (result.timedOut) {
+        throw new DockerTimeoutError([this.dockerBinary, ...args], 0, stderrStr);
+      }
       throw new DockerError([this.dockerBinary, ...args], result.exitCode, stderrStr);
     }
   }
@@ -206,14 +244,18 @@ export class DockerClient implements IDockerClient {
     };
   }
 
-  async killContainer(containerId: string, signal?: string): Promise<void> {
+  async killContainer(
+    containerId: string,
+    signal?: string,
+    operation?: DockerOperationOptions,
+  ): Promise<void> {
     const args: string[] = ["kill"];
     if (signal) {
       args.push("-s", signal);
     }
     args.push(containerId);
 
-    const result = await this.runSubprocess(args);
+    const result = await this.runSubprocess(args, operation);
     if (result.exitCode !== 0) {
       const stderrStr = new TextDecoder().decode(result.stderr);
       if (
@@ -228,6 +270,7 @@ export class DockerClient implements IDockerClient {
   async removeContainer(
     containerId: string,
     options?: { readonly force?: boolean; readonly removeVolumes?: boolean },
+    operation?: DockerOperationOptions,
   ): Promise<void> {
     const args: string[] = ["rm"];
     if (options?.force === true) {
@@ -238,7 +281,7 @@ export class DockerClient implements IDockerClient {
     }
     args.push(containerId);
 
-    const result = await this.runSubprocess(args);
+    const result = await this.runSubprocess(args, operation);
     if (result.exitCode !== 0) {
       const stderrStr = new TextDecoder().decode(result.stderr);
       if (!stderrStr.toLowerCase().includes("no such container")) {
@@ -250,29 +293,35 @@ export class DockerClient implements IDockerClient {
   async createVolume(
     name: string,
     options?: { readonly labels?: Record<string, string> },
+    operation?: DockerOperationOptions,
   ): Promise<void> {
-    const args: string[] = ["volume", "create", name];
+    const args: string[] = ["volume", "create"];
     if (options?.labels) {
       for (const [k, v] of Object.entries(options.labels)) {
         args.push("--label", `${k}=${v}`);
       }
     }
+    args.push(name);
 
-    const result = await this.runSubprocess(args);
+    const result = await this.runSubprocess(args, operation);
     if (result.exitCode !== 0) {
       const stderrStr = new TextDecoder().decode(result.stderr);
       throw new DockerError([this.dockerBinary, ...args], result.exitCode, stderrStr);
     }
   }
 
-  async removeVolume(name: string, options?: { readonly force?: boolean }): Promise<void> {
+  async removeVolume(
+    name: string,
+    options?: { readonly force?: boolean },
+    operation?: DockerOperationOptions,
+  ): Promise<void> {
     const args: string[] = ["volume", "rm"];
     if (options?.force === true) {
       args.push("-f");
     }
     args.push(name);
 
-    const result = await this.runSubprocess(args);
+    const result = await this.runSubprocess(args, operation);
     if (result.exitCode !== 0) {
       const stderrStr = new TextDecoder().decode(result.stderr);
       if (!stderrStr.toLowerCase().includes("no such volume")) {

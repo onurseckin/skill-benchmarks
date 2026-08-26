@@ -114,21 +114,25 @@ export async function executeSweepCell(input: CellExecutionInput): Promise<Matri
       try {
         if (signal.aborted) throw resolveAbortReason(signal, "sweep");
         if (config.containerPool) {
-          container = await config.containerPool.acquire({
-            imageTag: "skill-benchmarks-sandbox:latest",
-            runId: cell.runId,
-            scenarioId: cell.scenarioId,
-            resourceLimits: { cpus: 2, memoryMb: 4096, pidsLimit: 512 },
-            networkMode: "sb-bridge-isolated",
-            workspaceVolumeName: `sb-vol-${cell.runId}`,
-            artifactHostPath: artifactLayout.runDirectory,
-            timeouts: {
-              commandTimeoutMs: cell.limits.toolTimeoutMs,
-              turnTimeoutMs: 60000,
-              totalScenarioTimeoutMs: cell.limits.maxWallClockTimeMs,
+          container = await config.containerPool.acquire(
+            {
+              imageTag: "skill-benchmarks-sandbox:latest",
+              runId: cell.runId,
+              scenarioId: cell.scenarioId,
+              resourceLimits: { cpus: 2, memoryMb: 4096, pidsLimit: 512 },
+              networkMode: "sb-bridge-isolated",
+              workspaceVolumeName: `sb-vol-${cell.runId}`,
+              artifactHostPath: artifactLayout.runDirectory,
+              timeouts: {
+                commandTimeoutMs: cell.limits.toolTimeoutMs,
+                turnTimeoutMs: 60000,
+                totalScenarioTimeoutMs: cell.limits.maxWallClockTimeMs,
+              },
+              labels: { "io.skill-benchmarks.sweep-id": cell.runId },
             },
-            labels: { "io.skill-benchmarks.sweep-id": cell.runId },
-          });
+            signal,
+          );
+          if (signal.aborted) throw resolveAbortReason(signal, "sweep");
         }
         scenarioResult = config.dryRun
           ? createDryRunResult(cell, startedAt)
