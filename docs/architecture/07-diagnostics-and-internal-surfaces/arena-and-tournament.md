@@ -2,7 +2,7 @@
 
 [Book index](../README.md) | [Part index](README.md) | [Next: chaos](chaos.md)
 
-**Status:** Planned/unavailable
+**Status:** Diagnostic only
 
 Arena and tournament behavior is planned or simulated diagnostics and remains unranked.
 
