@@ -1,4 +1,5 @@
 import { resolveAbortReason } from "../../shared/cancellation.js";
+import { DockerError } from "../../infrastructure/container/docker-errors.js";
 import type {
   ContainerInspectInfo,
   ContainerLaunchConfig,
@@ -63,8 +64,12 @@ export class FakeDockerClient implements IDockerClient {
   public readonly volumes = new Set<string>();
   public readonly containers = new Set<string>();
   private readonly deferredPhases = new Map<DockerFixturePhase, DeferredValue>();
+  private readonly phaseCallbacks = new Map<DockerFixturePhase, () => void>();
   private readonly failures = new Map<DockerFixturePhase, number>();
   private readonly containerNames = new Map<string, string>();
+  private readonly containerLabels = new Map<string, Record<string, string>>();
+  private readonly volumeLabels = new Map<string, Record<string, string>>();
+  private conflictNextContainerCreation = false;
   private nextContainerNumber = 0;
 
   public hold(phase: DockerFixturePhase): void {
@@ -80,6 +85,14 @@ export class FakeDockerClient implements IDockerClient {
     this.failures.set(phase, (this.failures.get(phase) ?? 0) + 1);
   }
 
+  public conflictNextContainer(): void {
+    this.conflictNextContainerCreation = true;
+  }
+
+  public afterPhase(phase: DockerFixturePhase, callback: () => void): void {
+    this.phaseCallbacks.set(phase, callback);
+  }
+
   public callCount(phase: DockerFixturePhase): number {
     return this.calls.filter((call) => call.startsWith(`${phase}:`)).length;
   }
@@ -92,10 +105,28 @@ export class FakeDockerClient implements IDockerClient {
     options: DockerCreateOptions,
     operation?: DockerOperationOptions,
   ): Promise<string> {
+    this.calls.push(`create-container:${options.name}`);
+    if (this.conflictNextContainerCreation) {
+      this.conflictNextContainerCreation = false;
+      this.containers.add(options.name);
+      this.containerLabels.set(options.name, { "io.skill-benchmarks.managed": "external" });
+      throw new DockerError(
+        ["docker", "create"],
+        1,
+        "Conflict. The container name is already in use",
+      );
+    }
+    if (this.containers.has(options.name)) {
+      throw new DockerError(
+        ["docker", "create"],
+        1,
+        "Conflict. The container name is already in use",
+      );
+    }
     const containerId = `fake-container-${this.nextContainerNumber++}`;
     this.containers.add(options.name);
     this.containerNames.set(containerId, options.name);
-    this.calls.push(`create-container:${options.name}`);
+    this.containerLabels.set(options.name, { ...options.labels });
     await this.awaitPhase("create-container", operation?.signal);
     this.throwFailure("create-container");
     return containerId;
@@ -107,6 +138,7 @@ export class FakeDockerClient implements IDockerClient {
   ): Promise<void> {
     this.calls.push(`start-container:${containerId}`);
     await this.awaitPhase("start-container", operation?.signal);
+    this.runPhaseCallback("start-container");
     this.throwFailure("start-container");
   }
 
@@ -125,9 +157,13 @@ export class FakeDockerClient implements IDockerClient {
   }
 
   public async inspectContainer(containerId: string): Promise<ContainerInspectInfo> {
+    const containerName = this.containerNames.get(containerId) ?? containerId;
+    if (!this.containers.has(containerName)) {
+      throw new DockerError(["docker", "inspect", containerId], 1, "No such container");
+    }
     return {
       id: containerId,
-      name: this.containerNames.get(containerId) ?? containerId,
+      name: containerName,
       state: {
         status: "running",
         running: true,
@@ -137,7 +173,7 @@ export class FakeDockerClient implements IDockerClient {
         finishedAt: "",
       },
       created: "",
-      config: { labels: {}, image: "fake", env: [] },
+      config: { labels: this.containerLabels.get(containerName) ?? {}, image: "fake", env: [] },
     };
   }
 
@@ -157,7 +193,12 @@ export class FakeDockerClient implements IDockerClient {
     this.calls.push(`remove-container:${containerId}`);
     await this.awaitPhase("remove-container");
     this.throwFailure("remove-container");
-    this.containers.delete(this.containerNames.get(containerId) ?? containerId);
+    const containerName = this.containerNames.get(containerId) ?? containerId;
+    this.containers.delete(containerName);
+    this.containerLabels.delete(containerName);
+    for (const [id, name] of this.containerNames) {
+      if (name === containerName) this.containerNames.delete(id);
+    }
   }
 
   public async createVolume(
@@ -165,8 +206,11 @@ export class FakeDockerClient implements IDockerClient {
     _options?: { readonly labels?: Record<string, string> },
     operation?: DockerOperationOptions,
   ): Promise<void> {
-    this.volumes.add(name);
     this.calls.push(`create-volume:${name}`);
+    if (!this.volumes.has(name)) {
+      this.volumes.add(name);
+      this.volumeLabels.set(name, { ..._options?.labels });
+    }
     await this.awaitPhase("create-volume", operation?.signal);
     this.throwFailure("create-volume");
   }
@@ -180,14 +224,21 @@ export class FakeDockerClient implements IDockerClient {
     await this.awaitPhase("remove-volume");
     this.throwFailure("remove-volume");
     this.volumes.delete(name);
+    this.volumeLabels.delete(name);
   }
 
   public async listContainers(): Promise<ReadonlyArray<ContainerInspectInfo>> {
     return [];
   }
 
-  public async listVolumes(): Promise<ReadonlyArray<VolumeInspectInfo>> {
-    return [];
+  public async listVolumes(options?: {
+    readonly filters?: Record<string, string | ReadonlyArray<string>>;
+  }): Promise<ReadonlyArray<VolumeInspectInfo>> {
+    return Array.from(this.volumes, (name) => ({
+      name,
+      driver: "local",
+      labels: this.volumeLabels.get(name) ?? {},
+    })).filter((volume) => matchesVolumeFilters(volume, options?.filters));
   }
 
   public get resourceCount(): number {
@@ -207,6 +258,27 @@ export class FakeDockerClient implements IDockerClient {
     this.failures.set(phase, remaining - 1);
     throw new Error(`Fake Docker ${phase} failure`);
   }
+
+  private runPhaseCallback(phase: DockerFixturePhase): void {
+    const callback = this.phaseCallbacks.get(phase);
+    this.phaseCallbacks.delete(phase);
+    callback?.();
+  }
+}
+
+function matchesVolumeFilters(
+  volume: VolumeInspectInfo,
+  filters: Record<string, string | ReadonlyArray<string>> | undefined,
+): boolean {
+  const labelFilter = filters?.label;
+  if (labelFilter === undefined) return true;
+  const labels = typeof labelFilter === "string" ? [labelFilter] : labelFilter;
+  return labels.every((label) => {
+    const separator = label.indexOf("=");
+    const key = separator === -1 ? label : label.slice(0, separator);
+    const value = separator === -1 ? undefined : label.slice(separator + 1);
+    return value === undefined ? key in volume.labels : volume.labels[key] === value;
+  });
 }
 
 let fixtureCounter = 0;

@@ -97,7 +97,10 @@ function createFixtureContainer(): IContainerInstance {
   };
 }
 
-function createSweepCell(outputRoot: string, modelEntry: ModelMatrixEntry): MatrixCellDescriptor {
+export function createSweepCell(
+  outputRoot: string,
+  modelEntry: ModelMatrixEntry,
+): MatrixCellDescriptor {
   return {
     sweepId: "container-lifecycle-sweep",
     cellId: "container-lifecycle-cell",
@@ -124,17 +127,18 @@ function createSweepCell(outputRoot: string, modelEntry: ModelMatrixEntry): Matr
   } as MatrixCellDescriptor;
 }
 
-function createSweepConfig(
+export function createSweepConfig(
   outputRoot: string,
   modelEntry: ModelMatrixEntry,
   containerPool: IContainerPoolManager,
+  dryRun = true,
 ): MatrixSweepConfig {
   return {
     runtimeConfig: { executionMode: "fake", outputRoot },
     scenarioIds: ["git-worktrees"],
     skillIds: ["tdd"],
     models: [modelEntry],
-    dryRun: true,
+    dryRun,
     maxRetriesPerCell: 0,
     containerPool,
   };

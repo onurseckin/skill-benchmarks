@@ -1,4 +1,5 @@
 import * as os from "node:os";
+import { randomUUID } from "node:crypto";
 import { resolveAbortReason } from "../../shared/cancellation.js";
 import { ContainerAcquisitionQueue } from "./acquisition-queue.js";
 import { ContainerCreationLease } from "./creation-lease.js";
@@ -47,7 +48,6 @@ export class ContainerPoolManager implements IContainerPoolManager {
   private readonly retiredInstances = new WeakSet<IContainerInstance>();
   private isDraining = false;
   private drainPromise: Promise<void> | undefined;
-  private nextLeaseNumber = 0;
   private lastCreationTimestamp = 0;
   private startupLock: Promise<void> = Promise.resolve();
 
@@ -152,7 +152,7 @@ export class ContainerPoolManager implements IContainerPoolManager {
     signal?: AbortSignal,
   ): Promise<IContainerInstance> {
     const lease = new ContainerCreationLease({
-      id: `${config.runId}-${this.nextLeaseNumber++}`,
+      id: randomUUID(),
       config,
       dockerClient: this.dockerClient,
       signal,

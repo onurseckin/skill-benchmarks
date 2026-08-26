@@ -9,6 +9,8 @@ import {
   waitForCall,
 } from "./container-lifecycle-fixtures.js";
 import { verifyPostAcquireAbort } from "./runtime-container-post-acquire.js";
+import { verifyContainerOwnership } from "./runtime-container-ownership.js";
+import { verifyPoolPublicationBoundary } from "./runtime-container-publication.js";
 
 export async function verifyContainerLifecycle(temporaryRoot: string): Promise<void> {
   await verifyPreAbortedAcquire();
@@ -19,11 +21,13 @@ export async function verifyContainerLifecycle(temporaryRoot: string): Promise<v
   await verifyCallerAbortDuringContainerStart();
   await verifyCreationFailures();
   await verifyCreationCleanupFailureRetry();
+  await verifyContainerOwnership();
   await verifyQueueCancellationAndTimeout();
   await verifyQueueDrain();
   await verifyRepeatedReleaseAndDrain();
   await verifyCleanupFailureRetry();
   await verifyTwentyCycleStability();
+  await verifyPoolPublicationBoundary(temporaryRoot);
   await verifyPostAcquireAbort(temporaryRoot);
 }
 
@@ -98,8 +102,10 @@ async function verifyLateUnknownContainerCreationCleanup(): Promise<void> {
   await expectFailure(acquisition, "DrainInitiatedError");
   await drain;
   requireCondition(dockerClient.callCount("start-container") === 0, "container_abort_blocks_start");
+  const createdName = dockerClient.calls.find((call) => call.startsWith("create-container:"));
+  requireCondition(createdName !== undefined, "container_creation_records_reservation_name");
   requireCondition(
-    dockerClient.hasCall(`remove-container:sb-run-${config.runId}`),
+    dockerClient.hasCall(`remove-container:${createdName.slice("create-container:".length)}`),
     "container_unknown_id_uses_deterministic_name",
   );
   requireZero(pool, dockerClient, "container_creation_zero_ownership");
@@ -216,6 +222,7 @@ async function verifyQueueCancellationAndTimeout(): Promise<void> {
   const controller = new AbortController();
   const cancelled = pool.acquire(createLaunchConfig(), controller.signal);
   controller.abort(new Error("queue cancelled"));
+  requireCondition(timer.activeCount === 0, "container_cancelled_queue_clears_timer_immediately");
   await expectFailure(cancelled, "ExecutionAbortedError");
   requireCondition(pool.queuedCount === 0, "container_cancelled_queue_removed");
   const timedOut = pool.acquire(createLaunchConfig());
@@ -229,13 +236,15 @@ async function verifyQueueCancellationAndTimeout(): Promise<void> {
 
 async function verifyQueueDrain(): Promise<void> {
   const dockerClient = new FakeDockerClient();
-  const pool = createPool(dockerClient);
+  const timer = new ManualQueueTimer();
+  const pool = createPool(dockerClient, { queueTimer: timer });
   await pool.acquire(createLaunchConfig());
   const queuedFirst = pool.acquire(createLaunchConfig());
   const queuedSecond = pool.acquire(createLaunchConfig());
   void queuedFirst.catch(() => {});
   void queuedSecond.catch(() => {});
   const drain = pool.drain();
+  requireCondition(timer.activeCount === 0, "container_drain_clears_queue_timers_immediately");
   await expectFailure(queuedFirst, "DrainInitiatedError");
   await expectFailure(queuedSecond, "DrainInitiatedError");
   await drain;

@@ -1,8 +1,16 @@
 import { resolveAbortReason } from "../../shared/cancellation.js";
 import { ContainerInstance } from "./instance.js";
-import { ContainerCleanupError } from "./pool-errors.js";
+import { DockerError } from "./docker-errors.js";
+import { ContainerCleanupError, ContainerOwnershipError } from "./pool-errors.js";
 import { ContainerStateMachine } from "./state-machine.js";
-import type { ContainerLaunchConfig, IDockerClient, IContainerInstance } from "./types.js";
+import type {
+  ContainerLaunchConfig,
+  IDockerClient,
+  IContainerInstance,
+  VolumeInspectInfo,
+} from "./types.js";
+
+const leaseLabelKey = "io.skill-benchmarks.lease-id";
 
 export type ContainerCreationSettlement =
   | { readonly state: "published"; readonly cleanupFailed: false }
@@ -28,13 +36,17 @@ export class ContainerCreationLease {
   private readonly waitForStartupJitter: (signal: AbortSignal) => Promise<void>;
   private readonly publish: (instance: IContainerInstance) => boolean;
   private readonly containerName: string;
+  private readonly volumeName: string;
+  private readonly instanceConfig: ContainerLaunchConfig;
   private readonly removeCallerAbortListener: () => void;
   private resolveResult: (instance: IContainerInstance) => void = () => {};
   private rejectResult: (error: Error) => void = () => {};
   private resolveSettlement: (settlement: ContainerCreationSettlement) => void = () => {};
   private settledOnce = false;
-  private volumeMayExist = false;
-  private containerMayExist = false;
+  private volumeCreationRequested = false;
+  private volumeOwned = false;
+  private containerCreationRequested = false;
+  private containerOwned = false;
   private containerReference: string;
   private cleanupPromise: Promise<void> | undefined;
 
@@ -44,7 +56,9 @@ export class ContainerCreationLease {
     this.dockerClient = options.dockerClient;
     this.waitForStartupJitter = options.waitForStartupJitter;
     this.publish = options.publish;
-    this.containerName = `sb-run-${this.config.runId}`;
+    this.containerName = `sb-container-${this.id}`;
+    this.volumeName = this.config.workspaceVolumeName.length > 0 ? `sb-volume-${this.id}` : "";
+    this.instanceConfig = { ...this.config, workspaceVolumeName: this.volumeName };
     this.containerReference = this.containerName;
     this.removeCallerAbortListener = this.connectCallerSignal(options.signal);
     this.result = new Promise<IContainerInstance>((resolve, reject) => {
@@ -90,7 +104,7 @@ export class ContainerCreationLease {
       this.throwIfCancelled();
       const instance = new ContainerInstance(
         containerId,
-        this.config,
+        this.instanceConfig,
         this.dockerClient,
         this.createReadyStateMachine(),
       );
@@ -109,36 +123,31 @@ export class ContainerCreationLease {
   }
 
   private async createVolume(): Promise<void> {
-    this.volumeMayExist = this.config.workspaceVolumeName.length > 0;
-    if (!this.volumeMayExist) return;
+    if (this.volumeName.length === 0) return;
+    this.volumeCreationRequested = true;
     await this.dockerClient.createVolume(
-      this.config.workspaceVolumeName,
+      this.volumeName,
       {
-        labels: {
-          "io.skill-benchmarks.volume": "workspace",
-          "io.skill-benchmarks.run-id": this.config.runId,
-          "io.skill-benchmarks.scenario-id": this.config.scenarioId,
-        },
+        labels: this.createVolumeLabels(),
       },
       { signal: this.controller.signal },
     );
+    if (!(await this.hasOwnedVolume())) {
+      throw new ContainerOwnershipError(`Volume reservation '${this.volumeName}' is not owned`);
+    }
+    this.volumeOwned = true;
   }
 
   private async createContainer(): Promise<string> {
-    this.containerMayExist = true;
-    return await this.dockerClient.createContainer(
+    this.containerCreationRequested = true;
+    const containerId = await this.dockerClient.createContainer(
       {
         name: this.containerName,
         image: this.config.imageTag,
         command: ["sleep", "infinity"],
         workingDir: "/workspace",
         environment: this.config.environment,
-        labels: {
-          "io.skill-benchmarks.managed": "true",
-          "io.skill-benchmarks.run-id": this.config.runId,
-          "io.skill-benchmarks.scenario-id": this.config.scenarioId,
-          ...this.config.labels,
-        },
+        labels: this.createContainerLabels(),
         network: this.config.networkMode,
         bindMounts: this.createBindMounts(),
         volumeMounts: this.createVolumeMounts(),
@@ -150,6 +159,14 @@ export class ContainerCreationLease {
       },
       { signal: this.controller.signal },
     );
+    this.containerReference = containerId;
+    if (!(await this.hasOwnedContainer(containerId))) {
+      throw new ContainerOwnershipError(
+        `Container reservation '${this.containerName}' is not owned`,
+      );
+    }
+    this.containerOwned = true;
+    return containerId;
   }
 
   private createBindMounts() {
@@ -164,10 +181,10 @@ export class ContainerCreationLease {
   }
 
   private createVolumeMounts() {
-    if (this.config.workspaceVolumeName.length === 0) return [];
+    if (this.volumeName.length === 0) return [];
     return [
       {
-        volumeName: this.config.workspaceVolumeName,
+        volumeName: this.volumeName,
         containerPath: "/workspace",
         readonly: false,
       },
@@ -231,22 +248,27 @@ export class ContainerCreationLease {
 
   private async removeOwnedResources(): Promise<void> {
     const errors: Error[] = [];
-    if (this.containerMayExist) {
+    try {
+      await this.claimLateOwnedResources();
+    } catch (error) {
+      errors.push(this.resolveFailure(error));
+    }
+    if (this.containerOwned) {
       await this.killContainer();
       try {
         await this.dockerClient.removeContainer(this.containerReference, {
           force: true,
           removeVolumes: true,
         });
-        this.containerMayExist = false;
+        this.containerOwned = false;
       } catch (error) {
         errors.push(this.resolveFailure(error));
       }
     }
-    if (this.volumeMayExist) {
+    if (this.volumeOwned) {
       try {
-        await this.dockerClient.removeVolume(this.config.workspaceVolumeName, { force: true });
-        this.volumeMayExist = false;
+        await this.dockerClient.removeVolume(this.volumeName, { force: true });
+        this.volumeOwned = false;
       } catch (error) {
         errors.push(this.resolveFailure(error));
       }
@@ -262,9 +284,71 @@ export class ContainerCreationLease {
     } catch {}
   }
 
+  private createContainerLabels(): Record<string, string> {
+    return {
+      ...this.config.labels,
+      "io.skill-benchmarks.managed": "true",
+      "io.skill-benchmarks.run-id": this.config.runId,
+      "io.skill-benchmarks.scenario-id": this.config.scenarioId,
+      [leaseLabelKey]: this.id,
+    };
+  }
+
+  private createVolumeLabels(): Record<string, string> {
+    return {
+      "io.skill-benchmarks.volume": "workspace",
+      "io.skill-benchmarks.run-id": this.config.runId,
+      "io.skill-benchmarks.scenario-id": this.config.scenarioId,
+      [leaseLabelKey]: this.id,
+    };
+  }
+
+  private async claimLateOwnedResources(): Promise<void> {
+    if (this.containerCreationRequested && !this.containerOwned) {
+      this.containerOwned = await this.hasOwnedContainer(this.containerName);
+      if (this.containerOwned) this.containerReference = this.containerName;
+    }
+    if (this.volumeCreationRequested && !this.volumeOwned) {
+      this.volumeOwned = await this.hasOwnedVolume();
+    }
+  }
+
+  private async hasOwnedContainer(reference: string): Promise<boolean> {
+    try {
+      const container = await this.dockerClient.inspectContainer(reference);
+      return this.hasOwnershipLabels(container.config.labels);
+    } catch (error) {
+      if (isDockerResourceAbsent(error)) return false;
+      throw error;
+    }
+  }
+
+  private async hasOwnedVolume(): Promise<boolean> {
+    const volumes = await this.dockerClient.listVolumes({
+      filters: { label: `${leaseLabelKey}=${this.id}` },
+    });
+    return volumes.some((volume) => this.isOwnedVolume(volume));
+  }
+
+  private isOwnedVolume(volume: VolumeInspectInfo): boolean {
+    return volume.name === this.volumeName && this.hasOwnershipLabels(volume.labels);
+  }
+
+  private hasOwnershipLabels(labels: Record<string, string>): boolean {
+    return (
+      labels[leaseLabelKey] === this.id &&
+      labels["io.skill-benchmarks.run-id"] === this.config.runId &&
+      labels["io.skill-benchmarks.scenario-id"] === this.config.scenarioId
+    );
+  }
+
   private settle(settlement: ContainerCreationSettlement): void {
     if (this.settledOnce) return;
     this.settledOnce = true;
     this.resolveSettlement(settlement);
   }
+}
+
+function isDockerResourceAbsent(error: unknown): boolean {
+  return error instanceof DockerError && /no such (container|object)/i.test(error.stderr);
 }

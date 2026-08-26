@@ -32,6 +32,13 @@ export class ContainerCleanupError extends Error {
   }
 }
 
+export class ContainerOwnershipError extends Error {
+  public constructor(message: string) {
+    super(message);
+    this.name = "ContainerOwnershipError";
+  }
+}
+
 export class ContainerDrainError extends Error {
   public readonly errors: readonly Error[];
 
