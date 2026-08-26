@@ -66,6 +66,7 @@ export class CheckpointLedger implements ICheckpointLedger {
       totalPlannedCells: initialSummary.totalPlannedCells,
       completedCellIds: [],
       failedCellIds: [],
+      abortedCellIds: [],
       skippedCellIds: [],
       completedResults: {},
       totalTokens: emptyTokens,
@@ -167,8 +168,8 @@ export class CheckpointLedger implements ICheckpointLedger {
           current,
           completedSet,
           new Set(current.failedCellIds),
+          new Set(current.abortedCellIds),
           new Set(current.skippedCellIds),
-          completedResults,
         ),
         completedCellIds: Array.from(completedSet),
         completedResults,
@@ -191,11 +192,32 @@ export class CheckpointLedger implements ICheckpointLedger {
           current,
           new Set(current.completedCellIds),
           failedSet,
+          new Set(current.abortedCellIds),
           new Set(current.skippedCellIds),
-          completedResults,
         ),
         failedCellIds: Array.from(failedSet),
         completedResults,
+        wallClockDurationMs: current.wallClockDurationMs + result.durationMs,
+      };
+    });
+  }
+
+  async recordCellAborted(result: MatrixCellResult): Promise<void> {
+    const cellId = result.cell.cellId;
+    await this.persistState((current) => {
+      const abortedSet = new Set(current.abortedCellIds);
+      abortedSet.add(cellId);
+      return {
+        ...current,
+        status: resolveCheckpointStatus(
+          current,
+          new Set(current.completedCellIds),
+          new Set(current.failedCellIds),
+          abortedSet,
+          new Set(current.skippedCellIds),
+        ),
+        abortedCellIds: Array.from(abortedSet),
+        completedResults: { ...current.completedResults, [cellId]: result },
         wallClockDurationMs: current.wallClockDurationMs + result.durationMs,
       };
     });
@@ -213,8 +235,8 @@ export class CheckpointLedger implements ICheckpointLedger {
           current,
           new Set(current.completedCellIds),
           new Set(current.failedCellIds),
+          new Set(current.abortedCellIds),
           skippedSet,
-          completedResults,
         ),
         skippedCellIds: Array.from(skippedSet),
         completedResults,
@@ -247,14 +269,11 @@ function resolveCheckpointStatus(
   current: CheckpointState,
   completedIds: ReadonlySet<string>,
   failedIds: ReadonlySet<string>,
+  abortedIds: ReadonlySet<string>,
   skippedIds: ReadonlySet<string>,
-  results: Readonly<Record<string, MatrixCellResult>>,
 ): SweepExecutionStatus {
-  const terminalIds = new Set([...completedIds, ...failedIds, ...skippedIds]);
+  const terminalIds = new Set([...completedIds, ...failedIds, ...abortedIds, ...skippedIds]);
   if (terminalIds.size < current.totalPlannedCells) return "running";
-  if (failedIds.size === 0) return "completed";
-  const allFailuresAborted = [...failedIds].every(
-    (cellId) => results[cellId]?.runRecord?.terminationReason === "aborted",
-  );
-  return allFailuresAborted ? "aborted" : "failed";
+  if (failedIds.size > 0) return "failed";
+  return abortedIds.size > 0 ? "aborted" : "completed";
 }

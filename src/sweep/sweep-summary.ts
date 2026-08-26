@@ -6,6 +6,7 @@ export interface SweepSummaryInput {
   readonly totalCells: number;
   readonly completedCount: number;
   readonly failedCount: number;
+  readonly abortedCount: number;
   readonly skippedCount: number;
   readonly totalDurationMs: number;
   readonly totalCostUSD: number;
@@ -22,6 +23,7 @@ export function createMatrixSweepSummary(input: SweepSummaryInput): MatrixSweepS
     totalCells: input.totalCells,
     completedCount: input.completedCount,
     failedCount: input.failedCount,
+    abortedCount: input.abortedCount,
     skippedCount: input.skippedCount,
     totalDurationMs: input.totalDurationMs,
     totalCostUSD: Number(input.totalCostUSD.toFixed(4)),

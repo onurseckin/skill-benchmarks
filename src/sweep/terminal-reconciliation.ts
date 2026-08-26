@@ -30,7 +30,7 @@ export function validateCheckpointTerminalEvidence(
   config: MatrixSweepConfig,
 ): void {
   const cellsById = new Map(cells.map((cell) => [cell.cellId, cell]));
-  const { completedIds, terminalIds } = validateCheckpointStateContract(
+  const { completedIds, abortedIds, terminalIds } = validateCheckpointStateContract(
     cells,
     checkpoint,
     config,
@@ -45,7 +45,11 @@ export function validateCheckpointTerminalEvidence(
       cell,
       checkpointResult,
       telemetryDb,
-      completedIds.has(terminalId),
+      completedIds.has(terminalId)
+        ? "completed"
+        : abortedIds.has(terminalId)
+          ? "aborted"
+          : "failed",
       checkpoint.metadata.planFingerprint,
     );
   }
@@ -177,7 +181,7 @@ function validateTerminalCell(
   cell: MatrixCellDescriptor,
   checkpointResult: MatrixCellResult,
   telemetryDb: TelemetryDatabase,
-  expectedCompleted: boolean,
+  expectedStatus: "completed" | "failed" | "aborted",
   planFingerprint: string,
 ): void {
   const layout = createRunArtifactLayout(cell.outputRoot, cell.runId);
@@ -190,15 +194,15 @@ function validateTerminalCell(
   const result = readTerminalResult(
     layout.resultPath,
     layout.terminalFailurePath,
-    expectedCompleted,
+    expectedStatus === "completed",
   );
-  assertCellResult(checkpointResult, cell, scenarioResult, databaseRecord, expectedCompleted);
+  assertCellResult(checkpointResult, cell, scenarioResult, databaseRecord, expectedStatus);
   assertArtifactIdentity(manifest, cell, databaseRecord, "manifest");
   assertArtifactIdentity(
     result,
     cell,
     databaseRecord,
-    expectedCompleted ? "result" : result.artifactKind,
+    expectedStatus === "completed" ? "result" : result.artifactKind,
   );
   if (scenarioResult !== undefined)
     assertScenarioResult(scenarioResult, cell, result, databaseRecord);
@@ -212,10 +216,11 @@ function assertCellResult(
   cell: MatrixCellDescriptor,
   scenarioResult: ScenarioResult | undefined,
   databaseRecord: RunRecord,
-  expectedCompleted: boolean,
+  expectedStatus: "completed" | "failed" | "aborted",
 ): void {
+  const expectedCompleted = expectedStatus === "completed";
   if (
-    checkpointResult.status !== (expectedCompleted ? "completed" : "failed") ||
+    checkpointResult.status !== expectedStatus ||
     checkpointResult.executionCompleted !== expectedCompleted ||
     checkpointResult.retryable ||
     (expectedCompleted
@@ -233,7 +238,8 @@ function assertCellResult(
     checkpointResult.durationMs !==
       (scenarioResult?.totalDurationMs ?? databaseRecord.wallClockMs) ||
     !sameMatrixCellDescriptor(checkpointResult.cell, cell) ||
-    (databaseRecord.status === "completed") !== expectedCompleted
+    (databaseRecord.status === "completed") !== expectedCompleted ||
+    (databaseRecord.status === "aborted") !== (expectedStatus === "aborted")
   )
     failReconciliation();
 }

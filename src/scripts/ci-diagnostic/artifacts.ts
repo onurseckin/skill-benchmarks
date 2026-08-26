@@ -61,6 +61,7 @@ export function validateDiagnosticArtifacts(paths: DiagnosticBundlePaths): Diagn
     "artifact_checkpoint_lifecycle_invalid",
   );
   requireEqualStringArrays(checkpoint.failedCellIds, [], "artifact_checkpoint_lifecycle_invalid");
+  requireEqualStringArrays(checkpoint.abortedCellIds, [], "artifact_checkpoint_lifecycle_invalid");
   requireEqualStringArrays(checkpoint.skippedCellIds, [], "artifact_checkpoint_lifecycle_invalid");
   const completedResults = requireRecord(
     checkpoint.completedResults,

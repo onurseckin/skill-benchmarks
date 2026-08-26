@@ -1,16 +1,6 @@
 import { join } from "node:path";
 import { mkdir } from "node:fs/promises";
-import type {
-  IMatrixSweepEngine,
-  MatrixCellDescriptor,
-  MatrixCellResult,
-  MatrixSweepConfig,
-  MatrixSweepSummary,
-  SweepEvent,
-  SweepEventListener,
-  SweepExecutionStatus,
-  SweepProgress,
-} from "./types.js";
+import type { IMatrixSweepEngine, MatrixCellDescriptor, MatrixCellResult, MatrixSweepConfig, MatrixSweepSummary, SweepEvent, SweepEventListener, SweepExecutionStatus, SweepProgress } from "./types.js";
 import { MultiProviderRateLimiter } from "./token-bucket.js";
 import { ScenarioRunnerEngine } from "../runner/runner-engine.js";
 import { ScenarioLoader } from "../runner/scenario-loader.js";
@@ -34,12 +24,7 @@ import {
 import { prepareSweepExecution } from "./sweep-preparation.js";
 import { createMatrixSweepSummary } from "./sweep-summary.js";
 import { runSweepWorkerPool } from "./sweep-worker-pool.js";
-import {
-  createSweepProgress,
-  createInitialSweepIdentity,
-  dispatchSweepEvent,
-  resolveSweepIdentity,
-} from "./sweep-engine-state.js";
+import { createSweepProgress, createInitialSweepIdentity, dispatchSweepEvent, resolveSweepIdentity } from "./sweep-engine-state.js";
 import { createCheckpointPersistenceFailure, createSkippedSweepCellResult } from "./sweep-cell-results.js";
 export class MatrixSweepEngine implements IMatrixSweepEngine {
   public sweepId: string;
@@ -53,6 +38,7 @@ export class MatrixSweepEngine implements IMatrixSweepEngine {
   private totalCells = 0;
   private completedCount = 0;
   private failedCount = 0;
+  private abortedCount = 0;
   private skippedCount = 0;
   private inFlightCount = 0;
   private totalTokensConsumed = 0;
@@ -77,6 +63,7 @@ export class MatrixSweepEngine implements IMatrixSweepEngine {
       totalCells: this.totalCells,
       completedCount: this.completedCount,
       failedCount: this.failedCount,
+      abortedCount: this.abortedCount,
       skippedCount: this.skippedCount,
       inFlightCount: this.inFlightCount,
       totalTokensConsumed: this.totalTokensConsumed,
@@ -233,6 +220,7 @@ export class MatrixSweepEngine implements IMatrixSweepEngine {
           }
           try {
             if (result.executionCompleted) await checkpointLedger.recordCellSuccess(result);
+            else if (result.status === "aborted") await checkpointLedger.recordCellAborted(result);
             else await checkpointLedger.recordCellFailure(result);
           } catch {
             checkpointPersistenceFailed = true;
@@ -262,6 +250,8 @@ export class MatrixSweepEngine implements IMatrixSweepEngine {
                   : { passedBenchmark: result.passedBenchmark }),
               },
             });
+          } else if (result.status === "aborted") {
+            this.abortedCount += 1;
           } else {
             this.failedCount += 1;
             this.emitEvent({
@@ -342,6 +332,7 @@ export class MatrixSweepEngine implements IMatrixSweepEngine {
           totalCells: this.totalCells,
           completedCount: this.completedCount,
           failedCount: this.failedCount,
+          abortedCount: this.abortedCount,
           skippedCount: this.skippedCount,
           totalDurationMs,
           totalCostUSD: this.totalCostUSD,
@@ -375,7 +366,7 @@ export class MatrixSweepEngine implements IMatrixSweepEngine {
               : this.status === "aborted"
                 ? "sweep:abort"
                 : "sweep:error",
-          message: `Sweep ${this.sweepId} ${this.status}: ${this.completedCount} executed, ${this.failedCount} failed in ${totalDurationMs}ms`,
+          message: `Sweep ${this.sweepId} ${this.status}: ${this.completedCount} executed, ${this.abortedCount} aborted, ${this.failedCount} failed in ${totalDurationMs}ms`,
           payload: {
             totalCostUSD: summary.totalCostUSD,
             totalDurationMs,

@@ -13,6 +13,7 @@ import type {
 interface CheckpointCellSets {
   readonly completedIds: ReadonlySet<string>;
   readonly failedIds: ReadonlySet<string>;
+  readonly abortedIds: ReadonlySet<string>;
   readonly skippedIds: ReadonlySet<string>;
   readonly terminalIds: ReadonlySet<string>;
 }
@@ -25,8 +26,9 @@ export function validateCheckpointStateContract(
 ): CheckpointCellSets {
   const completedIds = new Set(checkpoint.completedCellIds);
   const failedIds = new Set(checkpoint.failedCellIds);
+  const abortedIds = new Set(checkpoint.abortedCellIds);
   const skippedIds = new Set(checkpoint.skippedCellIds);
-  const terminalIds = new Set([...completedIds, ...failedIds]);
+  const terminalIds = new Set([...completedIds, ...failedIds, ...abortedIds]);
   const trackedIds = new Set([...terminalIds, ...skippedIds]);
   const resultIds = Object.keys(checkpoint.completedResults);
   if (
@@ -36,12 +38,16 @@ export function validateCheckpointStateContract(
     !isDeepStrictEqual(checkpoint.configSummary, expectedConfigSummary(config)) ||
     completedIds.size !== checkpoint.completedCellIds.length ||
     failedIds.size !== checkpoint.failedCellIds.length ||
+    abortedIds.size !== checkpoint.abortedCellIds.length ||
     skippedIds.size !== checkpoint.skippedCellIds.length ||
-    [...completedIds].some((cellId) => failedIds.has(cellId) || skippedIds.has(cellId)) ||
-    [...failedIds].some((cellId) => skippedIds.has(cellId)) ||
+    [...completedIds].some(
+      (cellId) => failedIds.has(cellId) || abortedIds.has(cellId) || skippedIds.has(cellId),
+    ) ||
+    [...failedIds].some((cellId) => abortedIds.has(cellId) || skippedIds.has(cellId)) ||
+    [...abortedIds].some((cellId) => skippedIds.has(cellId)) ||
     resultIds.length !== trackedIds.size ||
     resultIds.some((cellId) => !trackedIds.has(cellId)) ||
-    checkpoint.status !== expectedCheckpointStatus(checkpoint, terminalIds, failedIds, skippedIds)
+    checkpoint.status !== expectedCheckpointStatus(checkpoint, terminalIds, failedIds, abortedIds, skippedIds)
   )
     fail();
   const cellsById = new Map(cells.map((cell) => [cell.cellId, cell]));
@@ -51,9 +57,10 @@ export function validateCheckpointStateContract(
     if (cell === undefined || result === undefined || !sameMatrixCellDescriptor(result.cell, cell))
       fail();
     if (skippedIds.has(cellId) && !isCanonicalSkippedResult(result)) fail();
+    if (abortedIds.has(cellId) && result.status !== "aborted") fail();
   }
-  validateCheckpointAggregates(checkpoint, completedIds, failedIds, fail);
-  return { completedIds, failedIds, skippedIds, terminalIds };
+  validateCheckpointAggregates(checkpoint, completedIds, failedIds, abortedIds, fail);
+  return { completedIds, failedIds, abortedIds, skippedIds, terminalIds };
 }
 
 export function sameMatrixCellDescriptor(
@@ -98,22 +105,21 @@ function expectedCheckpointStatus(
   checkpoint: CheckpointState,
   terminalIds: ReadonlySet<string>,
   failedIds: ReadonlySet<string>,
+  abortedIds: ReadonlySet<string>,
   skippedIds: ReadonlySet<string>,
 ): SweepExecutionStatus {
   if (terminalIds.size + skippedIds.size < checkpoint.totalPlannedCells) {
     return terminalIds.size + skippedIds.size === 0 ? "pending" : "running";
   }
-  if (failedIds.size === 0) return "completed";
-  const allFailuresAborted = [...failedIds].every(
-    (cellId) => checkpoint.completedResults[cellId]?.runRecord?.terminationReason === "aborted",
-  );
-  return allFailuresAborted ? "aborted" : "failed";
+  if (failedIds.size > 0) return "failed";
+  return abortedIds.size > 0 ? "aborted" : "completed";
 }
 
 function validateCheckpointAggregates(
   checkpoint: CheckpointState,
   completedIds: ReadonlySet<string>,
   failedIds: ReadonlySet<string>,
+  abortedIds: ReadonlySet<string>,
   fail: () => never,
 ): void {
   let inputTokens = 0;
@@ -140,6 +146,11 @@ function validateCheckpointAggregates(
     if (result === undefined) fail();
     expectedDuration += result.durationMs;
   }
+  for (const cellId of checkpoint.abortedCellIds) {
+    const result = checkpoint.completedResults[cellId];
+    if (result === undefined) fail();
+    expectedDuration += result.durationMs;
+  }
   const expectedTokens: TokenUsage = {
     inputTokens,
     outputTokens,
@@ -150,6 +161,7 @@ function validateCheckpointAggregates(
   if (
     completedIds.size !== checkpoint.completedCellIds.length ||
     failedIds.size !== checkpoint.failedCellIds.length ||
+    abortedIds.size !== checkpoint.abortedCellIds.length ||
     !isDeepStrictEqual(checkpoint.totalTokens, expectedTokens) ||
     checkpoint.totalCostUSD !== expectedCost ||
     checkpoint.wallClockDurationMs !== expectedDuration

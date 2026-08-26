@@ -32,6 +32,7 @@ export async function verifyAbortedSweepTerminalization(temporaryRoot: string): 
   });
 
   const summary = await engine.run(createConfig(outputRoot, checkpointPath, sweepId));
+  const progress = engine.getProgress();
   const outcome = JSON.parse(
     readFileSync(createSweepOutcomePath(outputRoot, sweepId), "utf8"),
   ) as SweepOutcomeFixture;
@@ -47,10 +48,27 @@ export async function verifyAbortedSweepTerminalization(temporaryRoot: string): 
   requireCondition(summary.results.length === 2, "sweep_abort_summary_terminal_count");
   requireCondition(outcome.terminalCells.length === 2, "sweep_abort_outcome_terminal_count");
   requireCondition(Object.keys(checkpointByCell).length === 2, "sweep_abort_checkpoint_terminal_count");
+  requireCondition(summary.completedCount === 0, "sweep_abort_summary_completed_count");
+  requireCondition(summary.failedCount === 0, "sweep_abort_summary_failed_count");
+  requireCondition(summary.abortedCount === 2, "sweep_abort_summary_aborted_count");
+  requireCondition(summary.skippedCount === 0, "sweep_abort_summary_skipped_count");
+  requireCondition(progress.completedCells === 0, "sweep_abort_progress_completed_count");
+  requireCondition(progress.failedCells === 0, "sweep_abort_progress_failed_count");
+  requireCondition(progress.abortedCells === 2, "sweep_abort_progress_aborted_count");
+  requireCondition(progress.skippedCells === 0, "sweep_abort_progress_skipped_count");
+  requireCondition(progress.queuedCells === 0, "sweep_abort_progress_queued_count");
+  requireCondition(checkpoint.completedCellIds.length === 0, "sweep_abort_checkpoint_completed_ids");
+  requireCondition(checkpoint.failedCellIds.length === 0, "sweep_abort_checkpoint_failed_ids");
+  requireCondition(checkpoint.abortedCellIds.length === 2, "sweep_abort_checkpoint_aborted_ids");
+  requireCondition(checkpoint.skippedCellIds.length === 0, "sweep_abort_checkpoint_skipped_ids");
 
   for (const [cellId, result] of summaryByCell) {
     const outcomeCell = outcomeByCell.get(cellId);
     const checkpointResult = checkpointByCell[cellId];
+    requireCondition(
+      checkpoint.abortedCellIds.includes(cellId),
+      "sweep_abort_checkpoint_aborted_id",
+    );
     requireCondition(result.runRecord?.status === "aborted", "sweep_abort_summary_cell_status");
     requireCondition(result.status === "aborted", "sweep_abort_summary_public_status");
     requireCondition(
@@ -81,6 +99,11 @@ export async function verifyAbortedSweepTerminalization(temporaryRoot: string): 
   }
   requireCondition(outcome.abortedCount === 2, "sweep_abort_outcome_aborted_count");
   requireCondition(outcome.failedCount === 0, "sweep_abort_outcome_failed_count");
+  requireCondition(
+    summary.abortedCount === outcome.abortedCount &&
+      summary.failedCount === outcome.failedCount,
+    "sweep_abort_accounting_agreement",
+  );
 }
 
 function createConfig(

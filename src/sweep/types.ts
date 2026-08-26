@@ -121,6 +121,7 @@ export interface SweepProgress {
   readonly totalCells: number;
   readonly completedCells: number;
   readonly failedCells: number;
+  readonly abortedCells: number;
   readonly skippedCells: number;
   readonly inFlightCells: number;
   readonly queuedCells: number;
@@ -190,6 +191,7 @@ export interface CheckpointState {
   readonly totalPlannedCells: number;
   readonly completedCellIds: readonly string[];
   readonly failedCellIds: readonly string[];
+  readonly abortedCellIds: readonly string[];
   readonly skippedCellIds: readonly string[];
   readonly completedResults: Readonly<Record<string, MatrixCellResult>>;
   readonly totalTokens: TokenUsage;
@@ -230,6 +232,7 @@ export interface MatrixSweepSummary {
   readonly totalCells: number;
   readonly completedCount: number;
   readonly failedCount: number;
+  readonly abortedCount: number;
   readonly skippedCount: number;
   readonly totalDurationMs: number;
   readonly totalCostUSD: number;
@@ -260,6 +263,7 @@ export interface ICheckpointLedger {
   save(state: CheckpointState): Promise<void>;
   recordCellSuccess(result: MatrixCellResult): Promise<void>;
   recordCellFailure(result: MatrixCellResult): Promise<void>;
+  recordCellAborted(result: MatrixCellResult): Promise<void>;
   isCellCompleted(cellId: string): boolean;
   getCompletedResults(): readonly MatrixCellResult[];
   getState(): CheckpointState;

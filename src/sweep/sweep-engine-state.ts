@@ -21,6 +21,7 @@ export interface SweepProgressInput {
   readonly totalCells: number;
   readonly completedCount: number;
   readonly failedCount: number;
+  readonly abortedCount: number;
   readonly skippedCount: number;
   readonly inFlightCount: number;
   readonly totalTokensConsumed: number;
@@ -31,7 +32,8 @@ export interface SweepProgressInput {
 
 export function createSweepProgress(input: SweepProgressInput): SweepProgress {
   const elapsedMs = input.startTimeMs > 0 ? Date.now() - input.startTimeMs : 0;
-  const finished = input.completedCount + input.failedCount + input.skippedCount;
+  const finished =
+    input.completedCount + input.failedCount + input.abortedCount + input.skippedCount;
   const percentage = input.totalCells > 0 ? (finished / input.totalCells) * 100 : 0;
   const averageDuration = finished > 0 ? input.totalCellDurationMs / finished : 0;
   const remaining = Math.max(0, input.totalCells - finished);
@@ -40,6 +42,7 @@ export function createSweepProgress(input: SweepProgressInput): SweepProgress {
     totalCells: input.totalCells,
     completedCells: input.completedCount,
     failedCells: input.failedCount,
+    abortedCells: input.abortedCount,
     skippedCells: input.skippedCount,
     inFlightCells: input.inFlightCount,
     queuedCells: Math.max(0, input.totalCells - finished - input.inFlightCount),
