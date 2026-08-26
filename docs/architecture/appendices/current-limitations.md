@@ -2,7 +2,9 @@
 
 [Book index](../README.md) | [Appendix index](README.md) | [Terminology](terminology.md)
 
-**Status:** current implementation-boundary registry.
+**Status:** Implemented but not public
+
+This page is the current implementation-boundary registry.
 
 ## On this page
 

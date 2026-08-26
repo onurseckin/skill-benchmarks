@@ -2,7 +2,9 @@
 
 [Book index](../README.md) | [Part index](README.md) | [Previous: arena and tournament](arena-and-tournament.md) | [Next: streaming and tunnels](streaming-and-tunnels.md)
 
-**Status:** implemented diagnostic subsystem, not a public CLI workflow.
+**Status:** Diagnostic only
+
+The chaos subsystem is implemented for diagnostics, not as a public CLI workflow.
 
 `ChaosEngine` validates schedules and coordinates a fault injector against an explicit container context. Its report records schedule, observation, and lifecycle facts.
 

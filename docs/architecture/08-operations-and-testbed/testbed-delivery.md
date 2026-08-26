@@ -2,7 +2,9 @@
 
 [Book index](../README.md) | [Part index](README.md) | [Previous: verification](verification-boundary.md) | [Appendices](../appendices/README.md)
 
-**Status:** optional maintainer delivery target.
+**Status:** Implemented but not public
+
+The testbed is an optional maintainer delivery target.
 
 The testbed combines frontend, backend, supervisor, and Go microservice workloads for local and Docker lifecycle verification. It is not required for the fake-first consumer trajectory.
 

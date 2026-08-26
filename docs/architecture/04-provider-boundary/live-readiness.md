@@ -2,7 +2,9 @@
 
 [Book index](../README.md) | [Part index](README.md) | [Previous: adapter contract](adapter-contract.md) | [Next part: evidence](../05-evidence-and-evaluation/README.md)
 
-**Status:** planned or unavailable for documentation certification.
+**Status:** Planned/unavailable
+
+Live readiness is planned or unavailable for documentation certification.
 
 Live requests are an explicit user operation. The supported consumer guidance names credential environment variables and warns that maintained verification removes them. The reliability plan keeps live eligibility closed until cancellation, lifecycle drain, model/pricing authority, protocol validation, stream parity, and declared evaluation gates are complete.
 

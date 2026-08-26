@@ -2,7 +2,9 @@
 
 [Book index](../README.md) | [Previous: admission](../01-boundaries-and-admission/README.md) | [Next: isolation](../03-isolation-and-lifecycle/README.md)
 
-**Status:** implemented and public for fake execution; evidence remains diagnostic unless eligible authority is present.
+**Status:** Implemented & public
+
+Fake execution is implemented and public; evidence remains diagnostic unless eligible authority is present.
 
 ## Chapters
 

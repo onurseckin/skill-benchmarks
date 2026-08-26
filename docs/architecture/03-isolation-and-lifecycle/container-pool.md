@@ -2,7 +2,9 @@
 
 [Book index](../README.md) | [Part index](README.md) | [Next: telemetry](telemetry.md)
 
-**Status:** implemented, internal and optional per sweep.
+**Status:** Implemented but not public
+
+The container pool is implemented internally and remains optional per sweep.
 
 `ContainerPoolManager` bounds active instances, queues acquisition, creates a Docker volume and container for a requested run, releases instances through teardown, and rejects new work after drain begins. A drain is a terminal barrier: queued requests, pending creation leases, published instances, and in-progress release operations must settle before it resolves. Cell execution supplies a container only when its sweep configuration has a pool.
 

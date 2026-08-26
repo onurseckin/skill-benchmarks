@@ -2,7 +2,9 @@
 
 [Book index](../README.md) | [Part index](README.md) | [Next: reports, replay, and server](reports-replay-and-server.md)
 
-**Status:** implemented persisted evidence store.
+**Status:** Implemented but not public
+
+The persisted evidence store is implemented as an internal data boundary.
 
 `TelemetryDatabase` owns schema access and authority-aware run records. Terminal persistence binds artifacts and database identities. Query code reconstructs stored records and report cohorts separate eligible evidence from diagnostic material.
 

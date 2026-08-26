@@ -2,7 +2,9 @@
 
 [Book index](../README.md) | [Previous: readers](../06-persistence-and-readers/README.md) | [Next: operations](../08-operations-and-testbed/README.md)
 
-**Status:** diagnostics or internal source surfaces.
+**Status:** Diagnostic only
+
+This part covers diagnostic or internal source surfaces.
 
 ## Chapters
 

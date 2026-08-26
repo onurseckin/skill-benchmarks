@@ -2,7 +2,9 @@
 
 [Book index](../README.md) | [Part index](README.md) | [Next: testbed delivery](testbed-delivery.md)
 
-**Status:** implemented maintainer verification.
+**Status:** Implemented but not public
+
+Maintainer verification is implemented.
 
 `bun run test` runs typechecking and the operator contract. The contract runs isolated no-key cases for static inventory, catalog, admission, fake artifacts, runtime behavior, CLI failure modes, persisted readers, server output, testbed delivery, workflow identity, and documentation.
 

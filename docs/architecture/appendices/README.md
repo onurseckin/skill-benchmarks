@@ -4,7 +4,9 @@
 
 Use these reference pages to locate ownership, decode repository terms, and distinguish implemented behavior from deliberately unavailable behavior.
 
-**Status:** current reference material.
+**Status:** Implemented but not public
+
+This appendix index is current reference material for maintainers.
 
 ## Chapters
 

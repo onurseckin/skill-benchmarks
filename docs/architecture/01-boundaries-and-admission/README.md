@@ -2,7 +2,9 @@
 
 [Book index](../README.md) | [Reading guide](../00-reading-the-book.md) | [Next: execution](../02-execution-and-artifacts/README.md)
 
-**Status:** implemented and public where reached through the CLI.
+**Status:** Implemented & public
+
+The behavior in this part is public where reached through the CLI.
 
 ## Chapters
 

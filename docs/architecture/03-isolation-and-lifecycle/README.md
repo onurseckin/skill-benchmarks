@@ -2,7 +2,9 @@
 
 [Book index](../README.md) | [Previous: execution](../02-execution-and-artifacts/README.md) | [Next: providers](../04-provider-boundary/README.md)
 
-**Status:** implemented, internal.
+**Status:** Implemented but not public
+
+The isolation and lifecycle components are implemented internally.
 
 ## Chapters
 

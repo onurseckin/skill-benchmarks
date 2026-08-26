@@ -2,7 +2,9 @@
 
 [Book index](../README.md) | [Part index](README.md) | [Previous: container pool](container-pool.md) | [Next part: providers](../04-provider-boundary/README.md)
 
-**Status:** implemented persisted event telemetry.
+**Status:** Implemented but not public
+
+Persisted event telemetry is implemented as an internal surface.
 
 The runner emits run, turn, and tool events through `EventScribe`. Artifact readers load the canonical event stream for replay. Container and resource profiling modules exist for internal use.
 

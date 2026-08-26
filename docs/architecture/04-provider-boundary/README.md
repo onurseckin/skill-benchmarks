@@ -2,7 +2,9 @@
 
 [Book index](../README.md) | [Previous: isolation](../03-isolation-and-lifecycle/README.md) | [Next: evidence](../05-evidence-and-evaluation/README.md)
 
-**Status:** fake mode is implemented and public; live adapters are source-present but not live-verified here.
+**Status:** Implemented & public
+
+Fake mode is implemented and public; live adapters are source-present but not live-verified here.
 
 ## Chapters
 

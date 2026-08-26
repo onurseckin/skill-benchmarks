@@ -2,7 +2,9 @@
 
 [Book index](../README.md) | [Appendix index](README.md) | [Limitations](current-limitations.md)
 
-**Status:** current ownership map.
+**Status:** Implemented but not public
+
+This page is the current ownership map for maintainers.
 
 ## On this page
 

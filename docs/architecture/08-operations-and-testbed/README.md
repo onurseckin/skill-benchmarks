@@ -2,7 +2,9 @@
 
 [Book index](../README.md) | [Previous: diagnostics](../07-diagnostics-and-internal-surfaces/README.md) | [Appendices](../appendices/README.md)
 
-**Status:** implemented maintainer verification and optional delivery target.
+**Status:** Implemented but not public
+
+Maintainer verification and the optional delivery target are implemented.
 
 ## Chapters
 

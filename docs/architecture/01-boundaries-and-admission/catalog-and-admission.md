@@ -2,7 +2,9 @@
 
 [Book index](../README.md) | [Part index](README.md) | [Previous: execution modes](execution-modes.md) | [Next: CLI control plane](cli-control-plane.md)
 
-**Status:** implemented and public.
+**Status:** Implemented & public
+
+The catalog and admission behavior is implemented and public.
 
 `ScenarioLoader` reads the package-owned scenario catalog, rejects malformed, duplicate, escaped, or identity-mismatched entries, then resolves scenario definitions. `SkillRegistry` preloads canonical skill manifests. Sweep admission validates selectors before runtime artifacts are created.
 

@@ -2,7 +2,9 @@
 
 [Book index](../README.md) | [Part index](README.md) | [Previous: SQLite and run records](sqlite-and-run-records.md) | [Next part: diagnostics](../07-diagnostics-and-internal-surfaces/README.md)
 
-**Status:** implemented persisted-evidence readers.
+**Status:** Implemented & public
+
+Persisted-evidence readers are implemented; the server boundary remains internally constrained as described below.
 
 Reports build a cohort snapshot before console, JSON, Markdown, HTML, or card publication. Replay validates direct or canonical persisted evidence and refuses missing or inconsistent sessions. The local reader validates an existing loopback output root and database, exposes read-only routes, and turns unavailable or invalid replay into safe responses.
 

@@ -2,7 +2,9 @@
 
 [Book index](../README.md) | [Previous: evidence](../05-evidence-and-evaluation/README.md) | [Next: diagnostics](../07-diagnostics-and-internal-surfaces/README.md)
 
-**Status:** implemented readers consume persisted evidence.
+**Status:** Implemented & public
+
+Implemented readers consume persisted evidence.
 
 ## Chapters
 

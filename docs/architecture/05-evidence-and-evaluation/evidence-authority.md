@@ -2,7 +2,9 @@
 
 [Book index](../README.md) | [Part index](README.md) | [Next: deterministic evaluation](deterministic-evaluation.md)
 
-**Status:** implemented and fail-closed.
+**Status:** Implemented but not public
+
+The evidence authority is implemented and fail-closed.
 
 `classifyBenchmarkAuthority` accepts a complete benchmark authority only when lifecycle status, provenance, evidence identity, integrity, evaluator identity, digest, evaluation, and cost evidence agree. Otherwise it preserves diagnostic facts while removing score, pass, rank, and actual-cost claim fields.
 

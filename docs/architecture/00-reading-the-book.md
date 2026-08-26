@@ -12,7 +12,9 @@
 
 Read this book when changing repository internals, verification, or persisted evidence. Read the [usage guide](../usage-guide/README.md) when operating the CLI.
 
-**Status:** current documentation navigation and scope guidance.
+**Status:** Implemented but not public
+
+This page provides current documentation navigation and scope guidance.
 
 ## How claims are labeled
 

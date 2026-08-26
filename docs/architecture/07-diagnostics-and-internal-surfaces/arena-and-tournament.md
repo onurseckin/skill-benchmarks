@@ -2,7 +2,9 @@
 
 [Book index](../README.md) | [Part index](README.md) | [Next: chaos](chaos.md)
 
-**Status:** planned or simulated diagnostics; unranked.
+**Status:** Planned/unavailable
+
+Arena and tournament behavior is planned or simulated diagnostics and remains unranked.
 
 Arena admission resolves one scenario, one skill, and two models. A dry run emits a planned pairing without candidate execution. Fake candidate execution uses the common sweep but returns diagnostic provenance. Tournament planning creates round-robin pairings or the first Swiss round and planned byes; later Swiss rounds remain unplanned when results are unavailable.
 

@@ -56,6 +56,13 @@ const archiveDirectories = [
   join(repositoryRoot, "docs", "archive", "blueprints", "2026-08-pre-reliability"),
 ] as const;
 
+const architectureStatusLines = new Set([
+  "**Status:** Implemented & public",
+  "**Status:** Implemented but not public",
+  "**Status:** Diagnostic only",
+  "**Status:** Planned/unavailable",
+]);
+
 export function verifyDocumentationContract(): void {
   const architectureDirectory = join(repositoryRoot, "docs", "architecture");
   const documentationFiles = [
@@ -141,7 +148,12 @@ function verifyArchitecturePage(file: string, architectureDirectory: string): vo
   const architectureRoot = join(architectureDirectory, "README.md");
   const relativePath = relative(architectureDirectory, file);
   requireCondition(content.startsWith("# "), `architecture_title_missing:${relativePath}`);
-  requireCondition(content.includes("**Status:**"), `architecture_status_missing:${relativePath}`);
+  const statusLines = content.match(/^\*\*Status:\*\*.*$/gm) ?? [];
+  requireCondition(statusLines.length === 1, `architecture_status_count_invalid:${relativePath}`);
+  requireCondition(
+    architectureStatusLines.has(statusLines[0] ?? ""),
+    `architecture_status_invalid:${relativePath}`,
+  );
   requireCondition(
     content.includes("## Source anchors"),
     `architecture_source_anchors_missing:${relativePath}`,

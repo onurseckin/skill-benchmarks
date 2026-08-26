@@ -2,7 +2,9 @@
 
 [Book index](../README.md) | [Part index](README.md) | [Next: live readiness](live-readiness.md)
 
-**Status:** fake adapter implemented and public through `run`; live adapters implemented but internally bounded.
+**Status:** Implemented & public
+
+The fake adapter is implemented and public through `run`; live adapters are implemented but internally bounded.
 
 The factory resolves a provider adapter from the admitted provider/model/mode. Fake mode always produces `MockProviderAdapter`. Live Anthropic, Google, and OpenAI selection preflights configured credentials before construction; unsupported custom live construction fails.
 

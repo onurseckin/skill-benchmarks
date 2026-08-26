@@ -2,7 +2,9 @@
 
 [Book index](../README.md) | [Appendix index](README.md) | [Limitations](current-limitations.md)
 
-**Status:** current terminology reference.
+**Status:** Implemented but not public
+
+This page is the current terminology reference for maintainers.
 
 ## Terms
 

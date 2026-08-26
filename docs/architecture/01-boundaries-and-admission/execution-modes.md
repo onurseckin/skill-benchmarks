@@ -2,7 +2,9 @@
 
 [Book index](../README.md) | [Part index](README.md) | [Next: catalog admission](catalog-and-admission.md)
 
-**Status:** implemented and public.
+**Status:** Implemented & public
+
+The documented execution-mode behavior is implemented and public.
 
 ## Resolution
 

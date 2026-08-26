@@ -4,7 +4,9 @@
 
 This book explains the checked-in implementation for maintainers and contributors. The [usage guide](../usage-guide/README.md) remains the concise authority for people running the repository.
 
-**Status:** authoritative current architecture documentation.
+**Status:** Implemented but not public
+
+This is the authoritative current architecture documentation for maintainers and contributors.
 
 ## Status legend
 

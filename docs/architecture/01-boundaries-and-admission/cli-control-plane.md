@@ -2,7 +2,9 @@
 
 [Book index](../README.md) | [Part index](README.md) | [Previous: catalog admission](catalog-and-admission.md) | [Next part: execution](../02-execution-and-artifacts/README.md)
 
-**Status:** implemented and public.
+**Status:** Implemented & public
+
+The CLI control plane is implemented and public.
 
 `runCli` parses one grammar specification, dispatches the supported handlers, buffers normal output, and emits safe diagnostic codes on failures. The public executable is `bin/skill-benchmarks`; commands are `run`, `arena`, `tournament`, `report`, `list`, `replay`, `help`, and `version`.
 

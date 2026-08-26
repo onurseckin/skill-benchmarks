@@ -2,7 +2,9 @@
 
 [Book index](../README.md) | [Previous: providers](../04-provider-boundary/README.md) | [Next: readers](../06-persistence-and-readers/README.md)
 
-**Status:** implemented authority boundary; benchmark eligibility is deliberately fail-closed.
+**Status:** Implemented but not public
+
+The authority boundary is implemented; benchmark eligibility is deliberately fail-closed.
 
 ## Chapters
 
