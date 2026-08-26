@@ -6,17 +6,12 @@ import {
 } from "../infrastructure/workspace/run-artifact-layout.js";
 import type { DisposableWorkspace } from "../infrastructure/workspace/types.js";
 import { createProviderAdapter } from "../providers/factory.js";
-import { ProviderRateLimitError } from "../providers/types.js";
 import { TelemetryDatabase, TerminalRunIdentityConflictError } from "../reporting/db.js";
 import type { ScenarioResult, RunTerminationReason } from "../runner/types.js";
 import { ScenarioRunnerEngine } from "../runner/runner-engine.js";
 import { ScenarioLoader } from "../runner/scenario-loader.js";
 import { createSafeArtifactPathSegment } from "../shared/artifact-sanitization.js";
-import { ExecutionAbortedError, resolveAbortReason } from "../shared/cancellation.js";
-import type {
-  ProviderTurnOutcome,
-  ProviderTurnPermit,
-} from "../shared/provider-turn-permit.js";
+import { resolveAbortReason } from "../shared/cancellation.js";
 import type {
   ITokenBucketRateLimiter,
   MatrixCellDescriptor,
@@ -115,13 +110,8 @@ export async function executeSweepCell(input: CellExecutionInput): Promise<Matri
       if (signal.aborted) break;
       attemptCount += 1;
       let container: IContainerInstance | undefined;
-      let permit: ProviderTurnPermit | undefined;
       let attemptFailed = false;
-      let permitOutcome: ProviderTurnOutcome = "failed";
-      let actualTokens: number | undefined;
-      let retryAfterMs: number | undefined;
       try {
-        permit = await limiter.acquire(2000, signal);
         if (signal.aborted) throw resolveAbortReason(signal, "sweep");
         if (config.containerPool) {
           container = await config.containerPool.acquire({
@@ -157,6 +147,7 @@ export async function executeSweepCell(input: CellExecutionInput): Promise<Matri
                 defaultModel: cell.modelId,
                 executionMode: cell.executionMode,
                 runId: cell.runId,
+                permitSource: limiter,
               }),
               prompt: scenarioDefinition.instructions,
               signal,
@@ -170,29 +161,9 @@ export async function executeSweepCell(input: CellExecutionInput): Promise<Matri
               thinkingBudget: cell.thinkingBudget,
               reasoningEffort: cell.modelEntry.reasoningEffort,
             });
-        actualTokens = scenarioResult.totalTokens.totalTokens;
-        permitOutcome =
-          scenarioResult.terminationReason === "aborted"
-            ? "aborted"
-            : scenarioResult.completed
-              ? "completed"
-              : "failed";
-      } catch (error) {
+      } catch {
         attemptFailed = true;
-        if (error instanceof ProviderRateLimitError) {
-          permitOutcome = "rate_limited";
-          retryAfterMs = error.retryAfterMs;
-        } else if (error instanceof ExecutionAbortedError || signal.aborted) {
-          permitOutcome = "aborted";
-        }
       } finally {
-        if (permit !== undefined) {
-          try {
-            await permit.release(permitOutcome, actualTokens, retryAfterMs);
-          } catch {
-            infrastructureFailure = "error";
-          }
-        }
         if (container && config.containerPool) {
           try {
             await config.containerPool.release(container);

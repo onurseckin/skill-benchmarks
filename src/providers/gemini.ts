@@ -1,6 +1,11 @@
 import { calculateTokenCostUSD } from "./pricing";
 import { executeProviderRequest } from "./transport/request-executor.js";
 import {
+  consumeProviderTurnResponse,
+  finalizeProviderStream,
+  readProviderStreamChunk,
+} from "./transport/response-lifecycle.js";
+import {
   AgentMessage,
   AgentMessageContentPart,
   CompletionChunk,
@@ -145,6 +150,7 @@ export class GeminiProviderAdapter implements LLMProviderAdapter {
       timeoutMs: config !== undefined && config.timeoutMs !== undefined ? config.timeoutMs : 60000,
       maxRetries: config !== undefined && config.maxRetries !== undefined ? config.maxRetries : 2,
       customHeaders: config !== undefined ? config.customHeaders : undefined,
+      permitSource: config?.permitSource,
       defaultModel: this.modelId,
     };
   }
@@ -229,7 +235,7 @@ export class GeminiProviderAdapter implements LLMProviderAdapter {
     options: GenerateOptions,
   ): AsyncIterable<CompletionChunk> {
     const { url, headers, body } = this.buildPayload(messages, tools, options, true);
-    const response = await executeProviderRequest({
+    const responseLease = await executeProviderRequest({
       providerId: "google",
       url,
       headers,
@@ -238,18 +244,29 @@ export class GeminiProviderAdapter implements LLMProviderAdapter {
       maxRetries: this.config.maxRetries ?? 2,
       responseMode: "stream",
       callerSignal: options.signal,
+      permitSource: this.config.permitSource,
       parseError: parseGeminiResponseError,
     });
 
-    if (response.body === null) return;
+    const response = responseLease.response;
+    if (response.body === null) {
+      await responseLease.complete();
+      return;
+    }
     const reader = response.body.getReader();
     const decoder = new TextDecoder("utf-8");
     let buffer = "";
+    let completed = false;
+    let actualTokens: number | undefined;
+    let failure: Error | undefined;
 
     try {
       while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+        const { done, value } = await readProviderStreamChunk(responseLease, reader);
+        if (done) {
+          completed = true;
+          break;
+        }
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split("\n");
         const lastLine = lines.pop();
@@ -261,6 +278,11 @@ export class GeminiProviderAdapter implements LLMProviderAdapter {
           const dataStr = trimmed.slice(5).trim();
           try {
             const payload = JSON.parse(dataStr) as GeminiResponsePayload;
+            if (payload.usageMetadata !== undefined) {
+              const usage = createGeminiTokenUsage(payload);
+              actualTokens = usage.totalTokens;
+              yield { usage };
+            }
             if (payload.candidates !== undefined && payload.candidates.length > 0) {
               const cand = payload.candidates[0];
               if (
@@ -281,8 +303,11 @@ export class GeminiProviderAdapter implements LLMProviderAdapter {
           }
         }
       }
+    } catch (error) {
+      failure = responseLease.normalizeFailure(error);
+      throw failure;
     } finally {
-      reader.releaseLock();
+      await finalizeProviderStream(responseLease, reader, completed, actualTokens, failure);
     }
   }
 
@@ -293,7 +318,7 @@ export class GeminiProviderAdapter implements LLMProviderAdapter {
   ): Promise<ModelTurnResponse> {
     const startTime = Date.now();
     const { url, headers, body } = this.buildPayload(messages, tools, options, false);
-    const response = await executeProviderRequest({
+    const responseLease = await executeProviderRequest({
       providerId: "google",
       url,
       headers,
@@ -302,60 +327,59 @@ export class GeminiProviderAdapter implements LLMProviderAdapter {
       maxRetries: this.config.maxRetries ?? 2,
       responseMode: "buffered",
       callerSignal: options.signal,
+      permitSource: this.config.permitSource,
       parseError: parseGeminiResponseError,
     });
     const duration = Date.now() - startTime;
 
-    const payload = (await response.json()) as GeminiResponsePayload;
-    let fullText = "";
-    const toolCalls: ToolCallRequest[] = [];
-    let finishReason: FinishReason = "stop";
+    return await consumeProviderTurnResponse(responseLease, async (response) => {
+      const payload = (await response.json()) as GeminiResponsePayload;
+      let fullText = "";
+      const toolCalls: ToolCallRequest[] = [];
+      let finishReason: FinishReason = "stop";
 
-    if (payload.candidates !== undefined && payload.candidates.length > 0) {
-      const cand = payload.candidates[0];
-      if (cand !== undefined) {
-        finishReason = mapGeminiFinishReason(cand.finishReason);
-        if (cand.content !== undefined && cand.content.parts !== undefined) {
-          for (const [idx, part] of cand.content.parts.entries()) {
-            if (part.text !== undefined) fullText += part.text;
-            if (part.functionCall !== undefined) {
-              toolCalls.push({
-                id: `call_${part.functionCall.name}_${idx}`,
-                name: part.functionCall.name,
-                arguments: part.functionCall.args,
-                rawArguments: JSON.stringify(part.functionCall.args),
-              });
+      if (payload.candidates !== undefined && payload.candidates.length > 0) {
+        const cand = payload.candidates[0];
+        if (cand !== undefined) {
+          finishReason = mapGeminiFinishReason(cand.finishReason);
+          if (cand.content !== undefined && cand.content.parts !== undefined) {
+            for (const [idx, part] of cand.content.parts.entries()) {
+              if (part.text !== undefined) fullText += part.text;
+              if (part.functionCall !== undefined) {
+                toolCalls.push({
+                  id: `call_${part.functionCall.name}_${idx}`,
+                  name: part.functionCall.name,
+                  arguments: part.functionCall.args,
+                  rawArguments: JSON.stringify(part.functionCall.args),
+                });
+              }
             }
           }
         }
       }
-    }
 
-    const meta = payload.usageMetadata;
-    const inputTokens =
-      meta !== undefined && meta.promptTokenCount !== undefined ? meta.promptTokenCount : 0;
-    const outputTokens =
-      meta !== undefined && meta.candidatesTokenCount !== undefined ? meta.candidatesTokenCount : 0;
-    const cacheReadInputTokens =
-      meta !== undefined && meta.cachedContentTokenCount !== undefined
-        ? meta.cachedContentTokenCount
-        : 0;
+      const usage = createGeminiTokenUsage(payload);
 
-    const usage: TokenUsage = {
-      inputTokens,
-      outputTokens,
-      cacheCreationInputTokens: 0,
-      cacheReadInputTokens,
-      totalTokens: inputTokens + outputTokens,
-    };
-
-    return {
-      text: fullText,
-      toolCalls,
-      finishReason,
-      usage,
-      timeToFirstTokenMs: duration,
-      totalTurnDurationMs: duration,
-    };
+      return {
+        text: fullText,
+        toolCalls,
+        finishReason,
+        usage,
+        timeToFirstTokenMs: duration,
+        totalTurnDurationMs: duration,
+      };
+    });
   }
+}
+
+function createGeminiTokenUsage(payload: GeminiResponsePayload): TokenUsage {
+  const inputTokens = payload.usageMetadata?.promptTokenCount ?? 0;
+  const outputTokens = payload.usageMetadata?.candidatesTokenCount ?? 0;
+  return {
+    inputTokens,
+    outputTokens,
+    cacheCreationInputTokens: 0,
+    cacheReadInputTokens: payload.usageMetadata?.cachedContentTokenCount ?? 0,
+    totalTokens: inputTokens + outputTokens,
+  };
 }

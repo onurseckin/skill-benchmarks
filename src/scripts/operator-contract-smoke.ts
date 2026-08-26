@@ -10,6 +10,8 @@ import { verifyReplayRoundTrip, verifyReportCohorts } from "./operator-contract/
 import { verifyRuntimeCancellationAndPermits } from "./operator-contract/runtime-lifecycle.js";
 import { verifyProviderRuntimeLifecycle } from "./operator-contract/runtime-providers.js";
 import { verifyCellPermitFinalization } from "./operator-contract/runtime-cell-permits.js";
+import { verifyToolProcessLifecycle } from "./operator-contract/runtime-tools.js";
+import { verifyAbortedSweepTerminalization } from "./operator-contract/runtime-sweep-abort.js";
 import { verifySelectorAdmission } from "./operator-contract/selectors.js";
 import { verifyLocalServer } from "./operator-contract/server.js";
 import { verifyScenarioCatalog, verifyStaticBoundary } from "./operator-contract/static-catalog.js";
@@ -33,6 +35,8 @@ const cases: readonly OperatorCase[] = [
   { name: "runtime-providers", execute: () => verifyProviderRuntimeLifecycle() },
   { name: "runtime-lifecycle", execute: verifyRuntimeCancellationAndPermits },
   { name: "runtime-cell-permits", execute: verifyCellPermitFinalization },
+  { name: "runtime-tools", execute: verifyToolProcessLifecycle },
+  { name: "runtime-sweep-abort", execute: verifyAbortedSweepTerminalization },
   { name: "artifacts", execute: verifyArtifactReconciliation },
   { name: "cli-invalid", execute: verifyInvalidCli },
   { name: "cli-piped", execute: verifyPipedCliOutput },

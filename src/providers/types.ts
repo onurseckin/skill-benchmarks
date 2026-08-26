@@ -1,4 +1,5 @@
 import type { ExecutionMode } from "../shared/execution-mode";
+import type { ProviderTurnPermitSource } from "../shared/provider-turn-permit.js";
 
 export type MessageRole = "system" | "user" | "assistant" | "tool";
 
@@ -146,6 +147,7 @@ export interface ProviderConfig {
   readonly timeoutMs?: number;
   readonly maxRetries?: number;
   readonly customHeaders?: Readonly<Record<string, string>>;
+  readonly permitSource?: ProviderTurnPermitSource;
 }
 
 export interface ModelPricingRate {

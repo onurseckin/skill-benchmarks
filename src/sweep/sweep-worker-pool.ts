@@ -10,6 +10,7 @@ export interface SweepWorkerPoolInput {
   readonly shouldSkip: (cell: MatrixCellDescriptor) => boolean;
   readonly updateInFlight: (count: number) => void;
   readonly executeCell: (cell: MatrixCellDescriptor) => Promise<MatrixCellResult>;
+  readonly terminalizeAbortedCell: (cell: MatrixCellDescriptor) => Promise<void>;
 }
 
 export async function runSweepWorkerPool(input: SweepWorkerPoolInput): Promise<void> {
@@ -67,4 +68,11 @@ export async function runSweepWorkerPool(input: SweepWorkerPoolInput): Promise<v
 
   const workerCount = Math.min(input.maxGlobalConcurrency, input.cells.length);
   await Promise.all(Array.from({ length: workerCount }, () => runWorker()));
+  if (!input.signal.aborted) return;
+  while (cellQueue.length > 0) {
+    const cell = cellQueue.shift();
+    if (cell === undefined) continue;
+    if (input.shouldSkip(cell)) await input.executeCell(cell);
+    else await input.terminalizeAbortedCell(cell);
+  }
 }

@@ -16,14 +16,15 @@ export type SweepExecutionStatus =
   | "running"
   | "paused"
   | "completed"
-  | "failed"
-  | "aborted";
+  | "aborted"
+  | "failed";
 
 export type CellStatus =
   | "pending"
   | "queued"
   | "running"
   | "completed"
+  | "aborted"
   | "failed"
   | "skipped"
   | "retrying";

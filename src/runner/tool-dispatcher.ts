@@ -26,6 +26,7 @@ import {
   truncateOutput,
   type ToolHandlerResult,
 } from "./tool-handlers.js";
+import { resolveToolTimeoutMs } from "./local-command-execution.js";
 
 export { STANDARD_TOOLS, resolveSafePath, truncateOutput };
 
@@ -65,7 +66,7 @@ export class StandardToolDispatcher {
   ): Promise<ToolExecutionRecord> {
     const startTime = performance.now();
     const maxBytes = limits?.maxOutputSizeBytes ?? 5242880;
-    const timeoutMs = limits?.toolTimeoutMs ?? 60000;
+    const timeoutMs = resolveToolTimeoutMs(limits?.toolTimeoutMs);
     const scope = createCancellationScope({
       scope: "tool",
       callerSignal: context.signal,

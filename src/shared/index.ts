@@ -30,6 +30,7 @@ export type {
   ProviderTurnOutcome,
   ProviderTurnPermit,
   ProviderTurnPermitFinalizer,
+  ProviderTurnPermitSource,
 } from "./provider-turn-permit.js";
 
 export {

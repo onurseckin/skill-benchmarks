@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { ProviderRateLimitError } from "../../providers/types.js";
 import { ScenarioRunnerEngine } from "../../runner/runner-engine.js";
 import { StandardToolDispatcher } from "../../runner/tool-dispatcher.js";
 import type {
@@ -16,10 +17,72 @@ export async function verifyRuntimeCancellationAndPermits(temporaryRoot: string)
   await verifyScenarioDeadline(join(temporaryRoot, "scenario-timeout"));
   await verifyTurnDeadline(join(temporaryRoot, "turn-timeout"));
   await verifyCallerAbortRejectsLateSuccess(join(temporaryRoot, "caller-abort"));
+  await verifyCustomStreamIteratorClosed(join(temporaryRoot, "stream-iterator"));
+  await verifyRateLimitFailureEscapesRunner(join(temporaryRoot, "rate-limit"));
   await verifyDispatcherRejectsLateSuccess();
   await verifyPermitReconciliation();
   await verifyQueuedAndAcquiredAbort();
   await verifyAbortedWorkerQueueStops();
+}
+
+export async function verifyCustomStreamIteratorClosed(outputDir: string): Promise<void> {
+  let iteratorClosed = false;
+  const provider: LLMProviderAdapter = {
+    providerId: "fixture",
+    modelId: "fixture-stream-model",
+    executionMode: "fake",
+    simulated: true,
+    generateStream() {
+      return {
+        [Symbol.asyncIterator]() {
+          return {
+            async next(): Promise<IteratorResult<never>> {
+              return await new Promise<IteratorResult<never>>(() => {});
+            },
+            async return(): Promise<IteratorResult<never>> {
+              iteratorClosed = true;
+              return { done: true, value: undefined as never };
+            },
+          };
+        },
+      };
+    },
+    async generateTurn(): Promise<ModelTurnResponse> {
+      throw new Error("streaming fixture must not call generateTurn");
+    },
+    calculateCostUSD: () => 0,
+  };
+  const config = createRunConfig(outputDir, provider) as ScenarioRunConfig;
+  const result = await new ScenarioRunnerEngine().run(
+    {
+      ...config,
+      limits: { ...config.limits, turnTimeoutMs: 10 },
+    },
+    { onToken() {} },
+  );
+  requireCondition(result.terminationReason === "timeout", "runner_stream_timeout_reason");
+  requireCondition(iteratorClosed, "runner_stream_iterator_closed");
+}
+
+export async function verifyRateLimitFailureEscapesRunner(outputDir: string): Promise<void> {
+  const provider: LLMProviderAdapter = {
+    providerId: "openai",
+    modelId: "fixture-rate-limit-model",
+    executionMode: "fake",
+    simulated: true,
+    async *generateStream(): AsyncIterable<never> {},
+    async generateTurn(): Promise<ModelTurnResponse> {
+      throw new ProviderRateLimitError("fixture rate limited", "openai", {
+        retryAfterMs: 25,
+      });
+    },
+    calculateCostUSD: () => 0,
+  };
+  const failure = await captureFailure(
+    new ScenarioRunnerEngine().run(createRunConfig(outputDir, provider)),
+  );
+  requireCondition(failure instanceof ProviderRateLimitError, "runner_rate_limit_escape_type");
+  requireCondition(failure.retryAfterMs === 25, "runner_rate_limit_escape_retry_after");
 }
 
 async function verifyTurnDeadline(outputDir: string): Promise<void> {
@@ -139,6 +202,7 @@ async function verifyAbortedWorkerQueueStops(): Promise<void> {
   const cells = [createCell("first"), createCell("second")];
   const controller = new AbortController();
   const executed: string[] = [];
+  const terminalized: string[] = [];
   await runSweepWorkerPool({
     cells,
     config: { concurrency: { maxGlobalConcurrency: 1 } } as never,
@@ -152,8 +216,15 @@ async function verifyAbortedWorkerQueueStops(): Promise<void> {
       controller.abort(new Error("fixture worker abort"));
       return createCellResult(cell);
     },
+    terminalizeAbortedCell: async (cell) => {
+      terminalized.push(cell.cellId);
+    },
   });
   requireCondition(executed.length === 1, "sweep_aborted_queue_started");
+  requireCondition(
+    terminalized.length === 1 && terminalized[0] === "second",
+    "sweep_aborted_queue_terminalized",
+  );
 }
 
 function createLimiter(maxConcurrentRequests = 2): TokenBucketRateLimiter {

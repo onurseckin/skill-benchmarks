@@ -1,7 +1,7 @@
 import type { AgentToolContext, ExecutionLimits } from "./types.js";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { spawnSync } from "node:child_process";
+import { executeLocalCommand, resolveToolTimeoutMs } from "./local-command-execution.js";
 import {
   collectLocalPaths,
   createToolCommandEnvironment,
@@ -29,11 +29,8 @@ export async function handleRunCommand(
 ): Promise<ToolHandlerResult> {
   const command = typeof args.command === "string" ? args.command : "";
   if (!command) throw new Error("Missing required argument 'command'");
-  const timeoutSec =
-    typeof args.timeout_seconds === "number" && args.timeout_seconds > 0
-      ? args.timeout_seconds
-      : undefined;
-  const timeoutMs = timeoutSec ? timeoutSec * 1000 : (limits?.toolTimeoutMs ?? 60000);
+  const timeoutSec = typeof args.timeout_seconds === "number" ? args.timeout_seconds : undefined;
+  const timeoutMs = resolveToolTimeoutMs(limits?.toolTimeoutMs, timeoutSec);
   const envMap =
     args.env && typeof args.env === "object" ? (args.env as Record<string, string>) : undefined;
   const environment = createToolCommandEnvironment(envMap);
@@ -62,22 +59,25 @@ export async function handleRunCommand(
 
   const rootPath = requireLocalWorkspaceRoot(context);
   const maxBuffer = limits?.maxOutputSizeBytes ?? 5242880;
-  const res = spawnSync(command, {
+  const res = await executeLocalCommand({
+    command,
     cwd: rootPath,
-    shell: true,
-    timeout: timeoutMs,
-    env: environment,
-    encoding: "utf8",
-    maxBuffer,
+    timeoutMs,
+    environment,
+    maxOutputBytes: maxBuffer,
+    signal: context.signal,
   });
-  const stdout = res.stdout ?? "";
-  const stderr = res.stderr ?? (res.error ? res.error.message : "");
-  const exitCode = res.status ?? (res.error ? 1 : 0);
+  const stdout = res.stdout;
+  const stderr = res.stderr;
+  const exitCode = res.exitCode;
   const combined = [stdout, stderr].filter((s) => s.length > 0).join("\n");
-  const isError = exitCode !== 0 || Boolean(res.error);
+  const isError = exitCode !== 0 || res.timedOut;
+  const output = res.timedOut
+    ? `${combined}${combined.length > 0 ? "\n" : ""}Command timed out after ${timeoutMs}ms`
+    : combined;
   return {
     output:
-      combined ||
+      output ||
       (isError
         ? `Command failed with exit code ${exitCode}`
         : "Command executed successfully with no output"),

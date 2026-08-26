@@ -176,7 +176,8 @@ function createCellResult(
   const executionCompleted = runRecord.status === "completed";
   return {
     cell: input.cell,
-    status: executionCompleted ? "completed" : "failed",
+    status:
+      executionCompleted ? "completed" : runRecord.status === "aborted" ? "aborted" : "failed",
     attemptCount: input.attemptCount,
     startedAt: input.context.startedAt,
     completedAt: runRecord.completedAt,

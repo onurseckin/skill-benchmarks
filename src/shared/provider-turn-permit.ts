@@ -8,6 +8,10 @@ export interface ProviderTurnPermit {
   ): Promise<void>;
 }
 
+export interface ProviderTurnPermitSource {
+  acquire(estimatedTokens: number, signal?: AbortSignal): Promise<ProviderTurnPermit>;
+}
+
 export type ProviderTurnPermitFinalizer = (
   outcome: ProviderTurnOutcome,
   actualTokens: number | undefined,

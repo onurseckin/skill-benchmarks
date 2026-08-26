@@ -10,6 +10,11 @@ import {
 } from "./anthropic-protocol.js";
 import { executeProviderRequest } from "./transport/request-executor.js";
 import {
+  consumeProviderTurnResponse,
+  finalizeProviderStream,
+  readProviderStreamChunk,
+} from "./transport/response-lifecycle.js";
+import {
   AgentMessage,
   CompletionChunk,
   GenerateOptions,
@@ -60,6 +65,7 @@ export class AnthropicProviderAdapter implements LLMProviderAdapter {
       timeoutMs: config !== undefined && config.timeoutMs !== undefined ? config.timeoutMs : 60000,
       maxRetries: config !== undefined && config.maxRetries !== undefined ? config.maxRetries : 2,
       customHeaders: config !== undefined ? config.customHeaders : undefined,
+      permitSource: config?.permitSource,
       defaultModel: this.modelId,
     };
   }
@@ -147,7 +153,7 @@ export class AnthropicProviderAdapter implements LLMProviderAdapter {
     options: GenerateOptions,
   ): AsyncIterable<CompletionChunk> {
     const { url, headers, body } = this.buildPayload(messages, tools, options, true);
-    const response = await executeProviderRequest({
+    const responseLease = await executeProviderRequest({
       providerId: "anthropic",
       url,
       headers,
@@ -156,18 +162,30 @@ export class AnthropicProviderAdapter implements LLMProviderAdapter {
       maxRetries: this.config.maxRetries ?? 2,
       responseMode: "stream",
       callerSignal: options.signal,
+      permitSource: this.config.permitSource,
       parseError: parseAnthropicResponseError,
     });
 
-    if (response.body === null) return;
+    const response = responseLease.response;
+    if (response.body === null) {
+      await responseLease.complete();
+      return;
+    }
     const reader = response.body.getReader();
     const decoder = new TextDecoder("utf-8");
     let buffer = "";
+    let completed = false;
+    let usage = createEmptyTokenUsage();
+    let actualTokens: number | undefined;
+    let failure: Error | undefined;
 
     try {
       while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+        const { done, value } = await readProviderStreamChunk(responseLease, reader);
+        if (done) {
+          completed = true;
+          break;
+        }
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split("\n");
         const lastLine = lines.pop();
@@ -177,7 +195,10 @@ export class AnthropicProviderAdapter implements LLMProviderAdapter {
           const trimmed = line.trim();
           if (!trimmed.startsWith("data:")) continue;
           const dataStr = trimmed.slice(5).trim();
-          if (dataStr === "[DONE]") return;
+          if (dataStr === "[DONE]") {
+            completed = true;
+            return;
+          }
           try {
             const event = JSON.parse(dataStr) as {
               readonly type?: string;
@@ -187,7 +208,15 @@ export class AnthropicProviderAdapter implements LLMProviderAdapter {
                 readonly thinking?: string;
                 readonly stop_reason?: string | null;
               };
+              readonly message?: { readonly usage?: AnthropicResponsePayload["usage"] };
+              readonly usage?: AnthropicResponsePayload["usage"];
             };
+            const usageUpdate = event.message?.usage ?? event.usage;
+            if (usageUpdate !== undefined) {
+              usage = mergeAnthropicTokenUsage(usage, usageUpdate);
+              actualTokens = usage.totalTokens;
+              yield { usage };
+            }
             if (event.type === "content_block_delta" && event.delta !== undefined) {
               if (event.delta.type === "text_delta" && event.delta.text !== undefined) {
                 yield { textDelta: event.delta.text };
@@ -209,8 +238,11 @@ export class AnthropicProviderAdapter implements LLMProviderAdapter {
           }
         }
       }
+    } catch (error) {
+      failure = responseLease.normalizeFailure(error);
+      throw failure;
     } finally {
-      reader.releaseLock();
+      await finalizeProviderStream(responseLease, reader, completed, actualTokens, failure);
     }
   }
 
@@ -221,7 +253,7 @@ export class AnthropicProviderAdapter implements LLMProviderAdapter {
   ): Promise<ModelTurnResponse> {
     const startTime = Date.now();
     const { url, headers, body } = this.buildPayload(messages, tools, options, false);
-    const response = await executeProviderRequest({
+    const responseLease = await executeProviderRequest({
       providerId: "anthropic",
       url,
       headers,
@@ -230,65 +262,74 @@ export class AnthropicProviderAdapter implements LLMProviderAdapter {
       maxRetries: this.config.maxRetries ?? 2,
       responseMode: "buffered",
       callerSignal: options.signal,
+      permitSource: this.config.permitSource,
       parseError: parseAnthropicResponseError,
     });
     const duration = Date.now() - startTime;
 
-    const payload = (await response.json()) as AnthropicResponsePayload;
-    let fullText = "";
-    const toolCalls: ToolCallRequest[] = [];
+    return await consumeProviderTurnResponse(responseLease, async (response) => {
+      const payload = (await response.json()) as AnthropicResponsePayload;
+      let fullText = "";
+      const toolCalls: ToolCallRequest[] = [];
 
-    if (payload.content !== undefined) {
-      for (const block of payload.content) {
-        if (block.type === "text" && block.text !== undefined) {
-          fullText += block.text;
-        } else if (
-          block.type === "tool_use" &&
-          block.id !== undefined &&
-          block.name !== undefined &&
-          block.input !== undefined
-        ) {
-          toolCalls.push({
-            id: block.id,
-            name: block.name,
-            arguments: block.input,
-            rawArguments: JSON.stringify(block.input),
-          });
+      if (payload.content !== undefined) {
+        for (const block of payload.content) {
+          if (block.type === "text" && block.text !== undefined) {
+            fullText += block.text;
+          } else if (
+            block.type === "tool_use" &&
+            block.id !== undefined &&
+            block.name !== undefined &&
+            block.input !== undefined
+          ) {
+            toolCalls.push({
+              id: block.id,
+              name: block.name,
+              arguments: block.input,
+              rawArguments: JSON.stringify(block.input),
+            });
+          }
         }
       }
-    }
 
-    const usageResp = payload.usage;
-    const inputTokens =
-      usageResp !== undefined && usageResp.input_tokens !== undefined ? usageResp.input_tokens : 0;
-    const outputTokens =
-      usageResp !== undefined && usageResp.output_tokens !== undefined
-        ? usageResp.output_tokens
-        : 0;
-    const cacheCreationInputTokens =
-      usageResp !== undefined && usageResp.cache_creation_input_tokens !== undefined
-        ? usageResp.cache_creation_input_tokens
-        : 0;
-    const cacheReadInputTokens =
-      usageResp !== undefined && usageResp.cache_read_input_tokens !== undefined
-        ? usageResp.cache_read_input_tokens
-        : 0;
+      const usage = mergeAnthropicTokenUsage(createEmptyTokenUsage(), payload.usage);
 
-    const usage: TokenUsage = {
-      inputTokens,
-      outputTokens,
-      cacheCreationInputTokens,
-      cacheReadInputTokens,
-      totalTokens: inputTokens + outputTokens + cacheCreationInputTokens + cacheReadInputTokens,
-    };
-
-    return {
-      text: fullText,
-      toolCalls,
-      finishReason: mapFinishReason(payload.stop_reason),
-      usage,
-      timeToFirstTokenMs: duration,
-      totalTurnDurationMs: duration,
-    };
+      return {
+        text: fullText,
+        toolCalls,
+        finishReason: mapFinishReason(payload.stop_reason),
+        usage,
+        timeToFirstTokenMs: duration,
+        totalTurnDurationMs: duration,
+      };
+    });
   }
+}
+
+function createEmptyTokenUsage(): TokenUsage {
+  return {
+    inputTokens: 0,
+    outputTokens: 0,
+    cacheCreationInputTokens: 0,
+    cacheReadInputTokens: 0,
+    totalTokens: 0,
+  };
+}
+
+function mergeAnthropicTokenUsage(
+  current: TokenUsage,
+  update: AnthropicResponsePayload["usage"],
+): TokenUsage {
+  const inputTokens = update?.input_tokens ?? current.inputTokens;
+  const outputTokens = update?.output_tokens ?? current.outputTokens;
+  const cacheCreationInputTokens =
+    update?.cache_creation_input_tokens ?? current.cacheCreationInputTokens;
+  const cacheReadInputTokens = update?.cache_read_input_tokens ?? current.cacheReadInputTokens;
+  return {
+    inputTokens,
+    outputTokens,
+    cacheCreationInputTokens,
+    cacheReadInputTokens,
+    totalTokens: inputTokens + outputTokens + cacheCreationInputTokens + cacheReadInputTokens,
+  };
 }

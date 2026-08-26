@@ -34,6 +34,10 @@ export async function verifyCellPermitFinalization(temporaryRoot: string): Promi
     requireCondition(result.executionCompleted === false, "cell_setup_failure_terminal_status");
     requireCondition(result.attemptCount === 1, "cell_setup_failure_attempt_count");
     requireCondition(limiter.getStatus().activePermits === 0, "cell_setup_failure_permit_leak");
+    requireCondition(
+      limiter.getStatus().availableRequests === 100,
+      "cell_setup_failure_does_not_acquire_provider_permit",
+    );
   } finally {
     database.close();
   }

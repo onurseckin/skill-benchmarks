@@ -8,6 +8,11 @@ import {
 } from "./openai-protocol.js";
 import { executeProviderRequest } from "./transport/request-executor.js";
 import {
+  consumeProviderTurnResponse,
+  finalizeProviderStream,
+  readProviderStreamChunk,
+} from "./transport/response-lifecycle.js";
+import {
   AgentMessage,
   CompletionChunk,
   FinishReason,
@@ -22,11 +27,7 @@ import {
   ToolDefinition,
 } from "./types";
 
-function parseOpenAIResponseError(
-  providerId: ProviderId,
-  response: Response,
-  rawText: string,
-) {
+function parseOpenAIResponseError(providerId: ProviderId, response: Response, rawText: string) {
   let errorMessage = `OpenAI API error ${response.status}`;
   try {
     const parsed = JSON.parse(rawText) as { readonly error?: { readonly message?: string } };
@@ -61,6 +62,7 @@ export class OpenAIProviderAdapter implements LLMProviderAdapter {
       timeoutMs: config !== undefined && config.timeoutMs !== undefined ? config.timeoutMs : 60000,
       maxRetries: config !== undefined && config.maxRetries !== undefined ? config.maxRetries : 2,
       customHeaders: config !== undefined ? config.customHeaders : undefined,
+      permitSource: config?.permitSource,
       defaultModel: this.modelId,
     };
   }
@@ -178,7 +180,7 @@ export class OpenAIProviderAdapter implements LLMProviderAdapter {
     options: GenerateOptions,
   ): AsyncIterable<CompletionChunk> {
     const { url, headers, body } = this.buildPayload(messages, tools, options, true);
-    const response = await executeProviderRequest({
+    const responseLease = await executeProviderRequest({
       providerId: this.providerId,
       url,
       headers,
@@ -187,19 +189,30 @@ export class OpenAIProviderAdapter implements LLMProviderAdapter {
       maxRetries: this.config.maxRetries ?? 2,
       responseMode: "stream",
       callerSignal: options.signal,
+      permitSource: this.config.permitSource,
       parseError: (failedResponse, rawText) =>
         parseOpenAIResponseError(this.providerId, failedResponse, rawText),
     });
 
-    if (response.body === null) return;
+    const response = responseLease.response;
+    if (response.body === null) {
+      await responseLease.complete();
+      return;
+    }
     const reader = response.body.getReader();
     const decoder = new TextDecoder("utf-8");
     let buffer = "";
+    let completed = false;
+    let actualTokens: number | undefined;
+    let failure: Error | undefined;
 
     try {
       while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+        const { done, value } = await readProviderStreamChunk(responseLease, reader);
+        if (done) {
+          completed = true;
+          break;
+        }
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split("\n");
         const lastLine = lines.pop();
@@ -209,9 +222,17 @@ export class OpenAIProviderAdapter implements LLMProviderAdapter {
           const trimmed = line.trim();
           if (!trimmed.startsWith("data:")) continue;
           const dataStr = trimmed.slice(5).trim();
-          if (dataStr === "[DONE]") return;
+          if (dataStr === "[DONE]") {
+            completed = true;
+            return;
+          }
           try {
             const payload = JSON.parse(dataStr) as OpenAIResponsePayload;
+            if (payload.usage !== undefined) {
+              const usage = createOpenAITokenUsage(payload);
+              actualTokens = usage.totalTokens;
+              yield { usage };
+            }
             if (payload.choices !== undefined && payload.choices.length > 0) {
               const choice = payload.choices[0];
               if (choice !== undefined) {
@@ -242,8 +263,11 @@ export class OpenAIProviderAdapter implements LLMProviderAdapter {
           }
         }
       }
+    } catch (error) {
+      failure = responseLease.normalizeFailure(error);
+      throw failure;
     } finally {
-      reader.releaseLock();
+      await finalizeProviderStream(responseLease, reader, completed, actualTokens, failure);
     }
   }
 
@@ -254,7 +278,7 @@ export class OpenAIProviderAdapter implements LLMProviderAdapter {
   ): Promise<ModelTurnResponse> {
     const startTime = Date.now();
     const { url, headers, body } = this.buildPayload(messages, tools, options, false);
-    const response = await executeProviderRequest({
+    const responseLease = await executeProviderRequest({
       providerId: this.providerId,
       url,
       headers,
@@ -263,81 +287,69 @@ export class OpenAIProviderAdapter implements LLMProviderAdapter {
       maxRetries: this.config.maxRetries ?? 2,
       responseMode: "buffered",
       callerSignal: options.signal,
+      permitSource: this.config.permitSource,
       parseError: (failedResponse, rawText) =>
         parseOpenAIResponseError(this.providerId, failedResponse, rawText),
     });
     const duration = Date.now() - startTime;
 
-    const payload = (await response.json()) as OpenAIResponsePayload;
-    let fullText = "";
-    const toolCalls: ToolCallRequest[] = [];
-    let finishReason: FinishReason = "stop";
+    return await consumeProviderTurnResponse(responseLease, async (response) => {
+      const payload = (await response.json()) as OpenAIResponsePayload;
+      let fullText = "";
+      const toolCalls: ToolCallRequest[] = [];
+      let finishReason: FinishReason = "stop";
 
-    if (payload.choices !== undefined && payload.choices.length > 0) {
-      const choice = payload.choices[0];
-      if (choice !== undefined) {
-        finishReason = mapOpenAIFinishReason(choice.finish_reason);
-        if (choice.message !== undefined) {
-          if (choice.message.content !== null && choice.message.content !== undefined)
-            fullText = choice.message.content;
-          if (choice.message.tool_calls !== undefined) {
-            for (const tc of choice.message.tool_calls) {
-              let parsedArgs: Record<string, unknown> = {};
-              try {
-                parsedArgs = JSON.parse(tc.function.arguments) as Record<string, unknown>;
-              } catch {
-                parsedArgs = {};
+      if (payload.choices !== undefined && payload.choices.length > 0) {
+        const choice = payload.choices[0];
+        if (choice !== undefined) {
+          finishReason = mapOpenAIFinishReason(choice.finish_reason);
+          if (choice.message !== undefined) {
+            if (choice.message.content !== null && choice.message.content !== undefined)
+              fullText = choice.message.content;
+            if (choice.message.tool_calls !== undefined) {
+              for (const tc of choice.message.tool_calls) {
+                let parsedArgs: Record<string, unknown> = {};
+                try {
+                  parsedArgs = JSON.parse(tc.function.arguments) as Record<string, unknown>;
+                } catch {
+                  parsedArgs = {};
+                }
+                toolCalls.push({
+                  id: tc.id,
+                  name: tc.function.name,
+                  arguments: parsedArgs,
+                  rawArguments: tc.function.arguments,
+                });
               }
-              toolCalls.push({
-                id: tc.id,
-                name: tc.function.name,
-                arguments: parsedArgs,
-                rawArguments: tc.function.arguments,
-              });
             }
           }
         }
       }
-    }
 
-    const usageResp = payload.usage;
-    const inputTokens =
-      usageResp !== undefined && usageResp.prompt_tokens !== undefined
-        ? usageResp.prompt_tokens
-        : 0;
-    const outputTokens =
-      usageResp !== undefined && usageResp.completion_tokens !== undefined
-        ? usageResp.completion_tokens
-        : 0;
-    const cacheReadInputTokens =
-      usageResp !== undefined &&
-      usageResp.prompt_tokens_details !== undefined &&
-      usageResp.prompt_tokens_details.cached_tokens !== undefined
-        ? usageResp.prompt_tokens_details.cached_tokens
-        : 0;
-    const reasoningOutputTokens =
-      usageResp !== undefined &&
-      usageResp.completion_tokens_details !== undefined &&
-      usageResp.completion_tokens_details.reasoning_tokens !== undefined
-        ? usageResp.completion_tokens_details.reasoning_tokens
-        : 0;
+      const usage = createOpenAITokenUsage(payload);
 
-    const usage: TokenUsage = {
-      inputTokens,
-      outputTokens,
-      cacheCreationInputTokens: 0,
-      cacheReadInputTokens,
-      reasoningOutputTokens,
-      totalTokens: inputTokens + outputTokens,
-    };
-
-    return {
-      text: fullText,
-      toolCalls,
-      finishReason,
-      usage,
-      timeToFirstTokenMs: duration,
-      totalTurnDurationMs: duration,
-    };
+      return {
+        text: fullText,
+        toolCalls,
+        finishReason,
+        usage,
+        timeToFirstTokenMs: duration,
+        totalTurnDurationMs: duration,
+      };
+    });
   }
+}
+
+function createOpenAITokenUsage(payload: OpenAIResponsePayload): TokenUsage {
+  const usage = payload.usage;
+  const inputTokens = usage?.prompt_tokens ?? 0;
+  const outputTokens = usage?.completion_tokens ?? 0;
+  return {
+    inputTokens,
+    outputTokens,
+    cacheCreationInputTokens: 0,
+    cacheReadInputTokens: usage?.prompt_tokens_details?.cached_tokens ?? 0,
+    reasoningOutputTokens: usage?.completion_tokens_details?.reasoning_tokens ?? 0,
+    totalTokens: inputTokens + outputTokens,
+  };
 }

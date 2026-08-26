@@ -17,6 +17,7 @@ import { ScenarioLoader } from "../runner/scenario-loader.js";
 import { TelemetryDatabase } from "../reporting/db.js";
 import { createSafeArtifactPathSegment } from "../shared/artifact-sanitization.js";
 import { executeSweepCell } from "./cell-execution.js";
+import { terminalizeAbortedSweepCell } from "./aborted-cell-terminalization.js";
 import { acquireSweepLease } from "./sweep-lease.js";
 import { validateMatrixSweepConfig } from "./sweep-config-validation.js";
 import {
@@ -39,10 +40,7 @@ import {
   dispatchSweepEvent,
   resolveSweepIdentity,
 } from "./sweep-engine-state.js";
-import {
-  createCheckpointPersistenceFailure,
-  createSkippedSweepCellResult,
-} from "./sweep-cell-results.js";
+import { createCheckpointPersistenceFailure, createSkippedSweepCellResult } from "./sweep-cell-results.js";
 export class MatrixSweepEngine implements IMatrixSweepEngine {
   public sweepId: string;
   private readonly constructorSweepId?: string;
@@ -320,6 +318,10 @@ export class MatrixSweepEngine implements IMatrixSweepEngine {
             this.inFlightCount = Math.max(0, this.inFlightCount + delta);
           },
           executeCell,
+          terminalizeAbortedCell: async (cell) =>
+            void (await recordCellResult(
+              await terminalizeAbortedSweepCell({ cell, config, telemetryDb, planFingerprint }),
+            )),
         });
         const completedAt =
           checkpointPersistenceFailed || terminalIdentityConflict
@@ -388,7 +390,6 @@ export class MatrixSweepEngine implements IMatrixSweepEngine {
       await sweepLease.release();
     }
   }
-
   private applyConfiguredSweepIdentity(configuredSweepId: string | undefined): void {
     if (configuredSweepId === undefined) return;
     this.sweepId = resolveSweepIdentity(this.constructorSweepId, configuredSweepId, (value) =>

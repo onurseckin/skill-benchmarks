@@ -62,31 +62,35 @@ async function consumeProviderStream(
   let usage = emptyUsage;
   let firstTokenTimeMs = 0;
 
-  while (true) {
-    const result = await raceWithCancellation(iterator.next(), input.signal, "turn");
-    throwIfTurnAborted(input.signal);
-    if (result.done) break;
-    const chunk = result.value;
-    if (chunk.textDelta !== undefined && chunk.textDelta.length > 0) {
-      if (firstTokenTimeMs === 0) firstTokenTimeMs = performance.now() - startedAtMs;
-      text += chunk.textDelta;
-      input.collector?.onToken?.(chunk.textDelta);
-    }
-    if (chunk.toolCallDeltas !== undefined) {
-      for (const delta of chunk.toolCallDeltas) {
-        const current = toolCallMap.get(delta.index) ?? {
-          id: delta.id ?? `call_${delta.index}`,
-          name: delta.name ?? "",
-          argsText: "",
-        };
-        if (delta.id !== undefined && delta.id.length > 0) current.id = delta.id;
-        if (delta.name !== undefined && delta.name.length > 0) current.name = delta.name;
-        if (delta.argumentsDelta !== undefined) current.argsText += delta.argumentsDelta;
-        toolCallMap.set(delta.index, current);
+  try {
+    while (true) {
+      const result = await raceWithCancellation(iterator.next(), input.signal, "turn");
+      throwIfTurnAborted(input.signal);
+      if (result.done) break;
+      const chunk = result.value;
+      if (chunk.textDelta !== undefined && chunk.textDelta.length > 0) {
+        if (firstTokenTimeMs === 0) firstTokenTimeMs = performance.now() - startedAtMs;
+        text += chunk.textDelta;
+        input.collector?.onToken?.(chunk.textDelta);
       }
+      if (chunk.toolCallDeltas !== undefined) {
+        for (const delta of chunk.toolCallDeltas) {
+          const current = toolCallMap.get(delta.index) ?? {
+            id: delta.id ?? `call_${delta.index}`,
+            name: delta.name ?? "",
+            argsText: "",
+          };
+          if (delta.id !== undefined && delta.id.length > 0) current.id = delta.id;
+          if (delta.name !== undefined && delta.name.length > 0) current.name = delta.name;
+          if (delta.argumentsDelta !== undefined) current.argsText += delta.argumentsDelta;
+          toolCallMap.set(delta.index, current);
+        }
+      }
+      if (chunk.finishReason !== undefined) finishReason = chunk.finishReason;
+      if (chunk.usage !== undefined) usage = chunk.usage;
     }
-    if (chunk.finishReason !== undefined) finishReason = chunk.finishReason;
-    if (chunk.usage !== undefined) usage = chunk.usage;
+  } finally {
+    await closeProviderIterator(iterator);
   }
 
   const totalTurnDurationMs = performance.now() - startedAtMs;
@@ -119,4 +123,21 @@ function createToolCall(value: MutableToolCall): ToolCallRequest {
 
 function throwIfTurnAborted(signal: AbortSignal): void {
   if (signal.aborted) throw resolveAbortReason(signal, "turn");
+}
+
+async function closeProviderIterator(iterator: AsyncIterator<unknown>): Promise<void> {
+  if (iterator.return === undefined) return;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const close = Promise.resolve(iterator.return()).then(
+    () => undefined,
+    () => undefined,
+  );
+  const timeout = new Promise<void>((resolve) => {
+    timer = setTimeout(resolve, 100);
+  });
+  try {
+    await Promise.race([close, timeout]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
 }
