@@ -1,68 +1,36 @@
 import type { TelemetryDatabase } from "../reporting/db.js";
-import type {
-  RunMetricsSummary,
-  RunRecord,
-  RunStatus,
-} from "../reporting/types.js";
+import type { RunRecord } from "../reporting/types.js";
 import type { ReportSnapshot } from "../reporting/report-cohorts.js";
-import type {
-  CgroupTelemetryPoint,
-  DiffDelta,
-  ReplaySession,
-  ThinkingEvent,
-  ToolCallEvent,
-  TrajectoryFrame,
-} from "../replay/types.js";
+import type { ReplaySession } from "../replay/types.js";
 
-export type HttpMethod = "GET" | "POST" | "PUT" | "DELETE" | "OPTIONS" | "HEAD" | "PATCH";
-
-export type SseEventType =
-  | "telemetry"
-  | "turn"
-  | "tool"
-  | "thinking"
-  | "diff"
-  | "run_status"
-  | "heartbeat"
-  | "replay_frame"
-  | "error";
+export type HttpMethod = "GET";
 
 export interface ServerOptions {
   readonly outputRoot: string;
+  readonly dbPath: string;
   readonly port?: number;
-  readonly hostname?: string;
-  readonly dbPath?: string;
-  readonly staticDir?: string;
-  readonly corsOrigin?: string | boolean;
-  readonly enableSse?: boolean;
+  readonly hostname?: "127.0.0.1";
   readonly quiet?: boolean;
-  readonly db?: TelemetryDatabase;
 }
 
 export interface ServerState {
   readonly port: number;
-  readonly hostname: string;
+  readonly hostname: "127.0.0.1";
   readonly isRunning: boolean;
-  readonly activeConnections: number;
-  readonly activeSseClients: number;
   readonly startedAt: string;
   readonly url: string;
   readonly totalRequestsHandled: number;
-  readonly totalEventsBroadcast: number;
 }
 
 export interface RouteContext {
-  readonly req: Request;
   readonly params: Readonly<Record<string, string>>;
   readonly query: URLSearchParams;
-  readonly url: URL;
   readonly db: TelemetryDatabase;
   readonly outputRoot: string;
   readonly serverState: ServerState;
-  readonly broadcast: (event: SseEvent, runIdFilter?: string) => void;
 }
 
-export type RouteHandler = (ctx: RouteContext) => Promise<Response> | Response;
+export type RouteHandler = (context: RouteContext) => Promise<Response> | Response;
 
 export interface RouteDefinition {
   readonly method: HttpMethod;
@@ -72,18 +40,31 @@ export interface RouteDefinition {
   readonly handler: RouteHandler;
 }
 
-export interface RouterMiddleware {
-  readonly name: string;
-  readonly handler: (ctx: RouteContext, next: () => Promise<Response>) => Promise<Response>;
+export interface ApiSuccessResponse<T> {
+  readonly success: true;
+  readonly data: T;
+  readonly timestamp: string;
 }
 
-export interface ApiResponse<T = unknown> {
-  readonly success: boolean;
-  readonly data?: T;
-  readonly error?: string;
+export type ServerErrorCode =
+  | "invalid_request"
+  | "method_not_allowed"
+  | "route_not_found"
+  | "run_not_found"
+  | "replay_unavailable"
+  | "replay_invalid"
+  | "internal_error";
+
+export interface ServerErrorBody {
+  readonly success: false;
+  readonly error: {
+    readonly code: ServerErrorCode;
+    readonly message: string;
+  };
   readonly timestamp: string;
-  readonly total?: number;
 }
+
+export type ApiResponse<T = unknown> = ApiSuccessResponse<T> | ServerErrorBody;
 
 export interface ApiRunsResponse {
   readonly runs: readonly RunRecord[];
@@ -109,68 +90,20 @@ export type ApiSummaryResponse = ReportSnapshot & {
 export type ApiTrendsResponse = ReportSnapshot & { readonly trends: NonNullable<ReportSnapshot["trends"]> };
 
 export interface ApiHealthResponse {
-  readonly status: "healthy" | "degraded" | "unhealthy";
+  readonly status: "healthy";
   readonly version: string;
-  readonly uptimeSeconds: number;
-  readonly activeConnections: number;
-  readonly activeSseClients: number;
-  readonly memoryRssMb: number;
-  readonly heapUsedMb: number;
+  readonly processUptimeSeconds: number;
+  readonly processMemoryRssMb: number;
+  readonly processHeapUsedMb: number;
   readonly timestamp: string;
-}
-
-export interface ApiTelemetryIngestRequest {
-  readonly runId: string;
-  readonly scenarioId: string;
-  readonly skillId?: string;
-  readonly modelId: string;
-  readonly eventType: string;
-  readonly timestampUs?: string;
-  readonly sequenceNumber?: number;
-  readonly payload?: Readonly<Record<string, unknown>>;
-}
-
-export interface LiveTelemetryPayload {
-  readonly runId: string;
-  readonly scenarioId: string;
-  readonly skillId?: string;
-  readonly modelId: string;
-  readonly timestamp: string;
-  readonly eventType: SseEventType | string;
-  readonly cgroup?: CgroupTelemetryPoint;
-  readonly toolCall?: ToolCallEvent;
-  readonly thinking?: ThinkingEvent;
-  readonly diff?: DiffDelta;
-  readonly frame?: TrajectoryFrame;
-  readonly metrics?: Partial<RunMetricsSummary>;
-  readonly status?: RunStatus;
-  readonly message?: string;
-  readonly custom?: Readonly<Record<string, unknown>>;
-}
-
-export interface SseEvent {
-  readonly id?: string;
-  readonly event: SseEventType | string;
-  readonly data: unknown;
-  readonly retry?: number;
-}
-
-export interface SseClient {
-  readonly id: string;
-  readonly controller: ReadableStreamDefaultController<Uint8Array>;
-  readonly connectedAt: string;
-  readonly filterRunId?: string;
 }
 
 export interface HttpServerInstance {
   readonly options: ServerOptions;
   readonly url: string;
   readonly port: number;
-  readonly hostname: string;
+  readonly hostname: "127.0.0.1";
   start(): Promise<void>;
   stop(): Promise<void>;
-  broadcast(event: SseEvent, runIdFilter?: string): void;
-  broadcastTelemetry(payload: LiveTelemetryPayload): void;
   getState(): ServerState;
-  getDatabase(): TelemetryDatabase;
 }

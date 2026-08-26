@@ -4,7 +4,6 @@ import { execSync } from "node:child_process";
 import { startStreamTunnel } from "../tunnel/index.js";
 import { BudgetController, OptimizerEngine } from "../optimizer/index.js";
 import type { NeoBrutalistDashboardConfig } from "../reporting/index.js";
-import type { NeoBrutalistComponentTokens } from "../dashboard-ui/types.js";
 import { runInteractiveDialogTest } from "../dialog/index.js";
 import { lookupCanonicalSkill } from "../skills/index.js";
 import { runCli, VISUAL_THEME_SPEC } from "../index.js";
@@ -18,8 +17,6 @@ void runCli;
 void VISUAL_THEME_SPEC;
 const _nbConfig: NeoBrutalistDashboardConfig | null = null;
 void _nbConfig;
-const _nbTokens: NeoBrutalistComponentTokens | null = null;
-void _nbTokens;
 
 interface Violation {
   readonly file: string;

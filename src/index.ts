@@ -5,7 +5,6 @@ export * from "./replay/index.js";
 export * from "./server/index.js";
 export * from "./generator/ast-analyzer.js";
 export * from "./generator/scenario-synthesizer.js";
-export * from "./dashboard-ui/index.js";
 export * from "./arena/index.js";
 export * from "./analytics/index.js";
 export * from "./tunnel/index.js";

@@ -65,8 +65,8 @@ The `skill-benchmarks` platform is an industrial-grade, multi-agent benchmarking
   │   └─────────┬─────────┘  └─────────┬─────────┘  └─────────┬─────────┘    │
   │             │                      │                      │              │
   │   ┌─────────▼──────────────────────▼──────────────────────▼─────────┐    │
-  │   │        SQLite Database, Leaderboards & Neo-Brutalist UI         │    │
-  │   │   (src/reporting/, src/dashboard-ui/, src/analytics/, src/ci/)  │    │
+  │   │        SQLite Database, Evidence Reports & Replay Readers       │    │
+  │   │       (src/reporting/, src/replay/, src/analytics/)             │    │
   │   └─────────────────────────────────────────────────────────────────┘    │
   └──────────────────────────────────────────────────────────────────────────┘
 ```
@@ -89,9 +89,8 @@ The `skill-benchmarks` platform is an industrial-grade, multi-agent benchmarking
 | **Sweep Orchestrator** | `src/sweep` | 5 | 1,267 | High-throughput matrix runner, adaptive token-bucket rate limiter, execution checkpointing, and dynamic concurrency worker pools. |
 | **Replay Visualizer** | `src/replay` | 5 | 1,180 | Step-by-step ANSI TUI trajectory player, standalone SVG/HTML web visual replay player, and trajectory state scrubber. |
 | **CI / CD Bot** | `src/ci` | 4 | 860 | Automated GitHub Actions benchmark workflow contract, statistical regression detection (Welch\'s t-test, Fisher\'s exact test), and PR leaderboard commenter. |
-| **Server & HTTP API** | `src/server` | 4 | 861 | Lightweight native Bun HTTP and SSE telemetry server, RESTful metrics endpoints, and live agent status streams. |
+| **Server & HTTP API** | `src/server` | 4 | 861 | Loopback-only Bun reader for authority-bound report, run, and replay evidence. |
 | **Scenario Synthesizer** | `src/generator` | 4 | 914 | Autonomous benchmark scenario generator, skill documentation AST analyzer, and self-contained verification gate authoring. |
-| **Dashboard UI** | `src/dashboard-ui` | 5 | 1,092 | Client-side SPA components in monochrome neo-brutalist design, reactive state management, and real-time telemetry stream consumers. |
 | **Arena Diagnostics** | `src/arena` | 3 | 1,159 | Claim-free debate and jury insufficiency diagnostics without synthetic turns, verdicts, or ratings. |
 | **Semantic Analytics** | `src/analytics` | 4 | 890 | Semantic trajectory analyzer, anomaly detector, multi-label failure mode taxonomy classifier, and error recovery tracker. |
 | **PTY Terminal Tunnel** | `src/tunnel` | 4 | 1,243 | Live terminal streaming multiplexer, PTY manager, bidirectional WebSocket streaming tunnel, and remote session viewer. |
@@ -128,10 +127,9 @@ The `skill-benchmarks` platform is an industrial-grade, multi-agent benchmarking
 | `orchestrator-replay` | Gen 6 (cand-rep) | `src/replay/` | ANSI TUI player, web player, scrubber | Sealed |
 | `orchestrator-ci` | Gen 6 (cand-ci) | `src/ci/` | CI/CD bot, regression detector, PR commenter | Sealed |
 | `orchestrator-scenarios-advanced`| Gen 6 (cand-adv) | `scenarios/` | Composite, security, and optimization scenarios | Sealed |
-| `orchestrator-server` | Gen 7 (cand-srv) | `src/server/` | Native HTTP/SSE server and REST API | Sealed |
+| `orchestrator-server` | Gen 7 (cand-srv) | `src/server/` | Loopback read-only evidence server and REST API | Sealed |
 | `orchestrator-trials` | Gen 7 (cand-tri) | `data/` | Benchmark trial execution and golden dataset | Sealed |
 | `orchestrator-generator` | Gen 7 (cand-10) | `src/generator/` | Autonomous scenario synthesizer | Sealed |
-| `orchestrator-dashboard-ui` | Gen 7 (cand-8) | `src/dashboard-ui/` | Client SPA dashboard components | Sealed |
 | `orchestrator-arena` | Gen 8 (cand-9) | `src/arena/` | Unranked arena diagnostics and jury-insufficiency arbitration | Sealed |
 | `orchestrator-analytics` | Gen 8 (cand-13) | `src/analytics/` | Semantic trajectory analyzer, failure classifier | Sealed |
 | `orchestrator-tunnel` | Gen 8 (cand-tun) | `src/tunnel/` | Live PTY terminal streaming and multiplexer | Sealed |
@@ -210,7 +208,7 @@ Generation 9 represents the Convergence & Usability Wave of the `skill-benchmark
 - **Deliverables**: High-impact root documentation featuring ASCII architecture diagrams, quickstart instructions, full CLI subcommands table, pre-computed benchmark leaderboards, 22-subsystem matrix, and design philosophy.
 
 #### cand-23: Dark Neo-Brutalist Visual Design Overhaul (`orchestrator-neobrutalist`)
-- **Scope**: `src/reporting/html-dashboard.ts`, `src/dashboard-ui/`, SVG telemetry charts
+- **Scope**: `src/reporting/html-dashboard.ts`, `src/replay/web-player.ts`, SVG telemetry charts
 - **Deliverables**: High-contrast, dark true-black (`#000000`) and crisp white (`#FFFFFF`) monochrome aesthetic with bold borders (`3px solid #000000`), sharp square corners (`border-radius: 0px`), stark elevation drop shadows (`4px 4px 0px #000000`), monospace typography, and responsive layouts across desktop, tablet, and mobile.
 
 #### cand-24: Master Roadmap & Session Continuity Blueprint (`orchestrator-roadmap`)

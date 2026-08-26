@@ -1,205 +1,144 @@
-import type { TelemetryDatabase } from "../reporting/db.js";
-import type { RunRecord, TelemetryEventRecord } from "../reporting/types.js";
-import { generateWebReplayHtml } from "../replay/web-player.js";
 import { createRunArtifactLayout } from "../infrastructure/workspace/run-artifact-layout.js";
-import { loadReplaySession } from "../replay/event-session-loader.js";
+import type { TelemetryDatabase } from "../reporting/db.js";
+import type { RunRecord } from "../reporting/types.js";
 import { ReplayEvidenceInvalidError, ReplayEvidenceUnavailableError } from "../replay/errors.js";
+import { loadReplaySession } from "../replay/event-session-loader.js";
 import type { ReplayEvidenceIdentity, ReplaySession } from "../replay/types.js";
-import type {
-  HttpMethod,
-  LiveTelemetryPayload,
-  RouteContext,
-  RouteDefinition,
-  RouteHandler,
-  RouterMiddleware,
-  ServerState,
-  SseEvent,
-} from "./types.js";
-import { defaultCorsHeaders, errorResponse, jsonResponse } from "./http-responses.js";
+import { generateWebReplayHtml } from "../replay/web-player.js";
 import { registerReportRoutes } from "./report-routes.js";
+import { errorResponse, headResponse, htmlResponse, jsonResponse } from "./server-response.js";
+import type { HttpMethod, RouteContext, RouteDefinition, RouteHandler, ServerState } from "./types.js";
 
-export { errorResponse, jsonResponse } from "./http-responses.js";
-
-export function parsePattern(pattern: string): { regex: RegExp; paramNames: string[] } {
+export function parsePattern(pattern: string): { readonly regex: RegExp; readonly paramNames: readonly string[] } {
   const paramNames: string[] = [];
-  const regexStr = pattern
-    .replace(/:([a-zA-Z0-9_]+)/g, (_, name: string) => {
-      paramNames.push(name);
-      return "([^/]+)";
-    })
-    .replace(/\*/g, ".*");
-  return { regex: new RegExp(`^${regexStr}$`), paramNames };
+  const regexValue = pattern.replace(/:([a-zA-Z0-9_]+)/g, (_, name: string) => {
+    paramNames.push(name);
+    return "([^/]+)";
+  });
+  return { regex: new RegExp(`^${regexValue}$`), paramNames: Object.freeze(paramNames) };
 }
 
 export class ApiRouter {
   private readonly routes: RouteDefinition[] = [];
-  private readonly middlewares: RouterMiddleware[] = [];
 
   public constructor() {
+    registerReportRoutes(this);
     this.registerBuiltInRoutes();
-  }
-
-  public use(name: string, handler: (ctx: RouteContext, next: () => Promise<Response>) => Promise<Response>): this {
-    this.middlewares.push({ name, handler });
-    return this;
   }
 
   public register(method: HttpMethod, pattern: string, handler: RouteHandler): this {
     const { regex, paramNames } = parsePattern(pattern);
-    this.routes.push({ method, pattern, regex, paramNames, handler });
+    this.routes.push(Object.freeze({ method, pattern, regex, paramNames, handler }));
     return this;
   }
 
-  public get(pattern: string, handler: RouteHandler): this {
-    return this.register("GET", pattern, handler);
-  }
-
-  public post(pattern: string, handler: RouteHandler): this {
-    return this.register("POST", pattern, handler);
-  }
-
   public async handle(
-    req: Request,
-    db: TelemetryDatabase,
+    request: Request,
+    database: TelemetryDatabase,
     outputRoot: string,
-    serverState: ServerState,
-    broadcast: (event: SseEvent, runIdFilter?: string) => void
+    serverState: ServerState
   ): Promise<Response> {
-    if (req.method === "OPTIONS") {
-      return new Response(null, { status: 204, headers: defaultCorsHeaders });
+    let url: URL;
+    try {
+      url = new URL(request.url);
+      decodeURIComponent(url.pathname);
+    } catch {
+      return errorResponse("invalid_request", 400);
     }
-
-    const url = new URL(req.url);
-    const path = url.pathname;
-    const method = req.method as HttpMethod;
-
-    for (const route of this.routes) {
-      if (route.method !== method) continue;
-      const match = path.match(route.regex);
-      if (!match) continue;
-
-      const params: Record<string, string> = {};
-      route.paramNames.forEach((name, index) => {
-        const val = match[index + 1];
-        if (val !== undefined) params[name] = decodeURIComponent(val);
-      });
-
-      const ctx: RouteContext = { req, params, query: url.searchParams, url, db, outputRoot, serverState, broadcast };
-      return this.executePipeline(ctx, route.handler);
+    const route = this.routes.find((candidate) => candidate.regex.test(url.pathname));
+    if (route === undefined) return errorResponse("route_not_found", 404);
+    if (request.method !== "GET" && request.method !== "HEAD") {
+      return errorResponse("method_not_allowed", 405, { Allow: "GET, HEAD" });
     }
-
-    return errorResponse(`Route not found: ${method} ${path}`, 404);
-  }
-
-  private async executePipeline(ctx: RouteContext, finalHandler: RouteHandler): Promise<Response> {
-    let index = 0;
-    const next = async (): Promise<Response> => {
-      if (index < this.middlewares.length) {
-        const middleware = this.middlewares[index++];
-        if (middleware) return middleware.handler(ctx, next);
-      }
-      return finalHandler(ctx);
+    let params: Readonly<Record<string, string>>;
+    try {
+      params = readParameters(route, url.pathname);
+    } catch {
+      return errorResponse("invalid_request", 400);
+    }
+    const context: RouteContext = {
+      params,
+      query: url.searchParams,
+      db: database,
+      outputRoot,
+      serverState,
     };
     try {
-      return await next();
+      const response = await route.handler(context);
+      return request.method === "HEAD" ? headResponse(response) : response;
     } catch {
-      return errorResponse("Internal server error", 500);
+      return errorResponse("internal_error", 500);
     }
   }
 
   private registerBuiltInRoutes(): void {
-    registerReportRoutes(this);
-    this.get("/api/health", (ctx) => {
-      const mem = process.memoryUsage();
+    this.register("GET", "/api/health", (context) => {
+      const memory = process.memoryUsage();
       return jsonResponse({
         status: "healthy",
         version: "0.1.0",
-        uptimeSeconds: Math.floor((Date.now() - new Date(ctx.serverState.startedAt).getTime()) / 1000),
-        activeConnections: ctx.serverState.activeConnections,
-        activeSseClients: ctx.serverState.activeSseClients,
-        memoryRssMb: Math.round((mem.rss / 1024 / 1024) * 100) / 100,
-        heapUsedMb: Math.round((mem.heapUsed / 1024 / 1024) * 100) / 100,
+        processUptimeSeconds: Math.max(0, Math.floor((Date.now() - Date.parse(context.serverState.startedAt)) / 1000)),
+        processMemoryRssMb: roundMegabytes(memory.rss),
+        processHeapUsedMb: roundMegabytes(memory.heapUsed),
         timestamp: new Date().toISOString(),
       });
     });
-
-    this.get("/api/runs/:id", (ctx) => {
-      const id = ctx.params.id ?? "";
-      const run = ctx.db.getRunRecord(id);
-      return run ? jsonResponse(run) : errorResponse(`Run record not found: ${id}`, 404);
+    this.register("GET", "/api/runs/:id", (context) => {
+      const run = context.db.getRunRecord(context.params.id ?? "");
+      return run === undefined ? errorResponse("run_not_found", 404) : jsonResponse(run);
     });
-
-    this.get("/api/replay/:id", (ctx) => {
-      const id = ctx.params.id ?? "";
-      const replay = this.loadPersistedReplay(ctx, id);
+    this.register("GET", "/api/replay/:id", (context) => {
+      const replay = loadPersistedReplay(context, context.params.id ?? "");
       return replay instanceof Response ? replay : jsonResponse({ session: replay });
     });
-
-    this.post("/api/telemetry/live", async (ctx) => {
-      try {
-        const body = (await ctx.req.json()) as LiveTelemetryPayload;
-        if (!body.runId || !body.scenarioId || !body.modelId) {
-          return errorResponse("Missing mandatory fields: runId, scenarioId, modelId", 400);
-        }
-        const eventRecord: TelemetryEventRecord = {
-          runId: body.runId,
-          scenarioId: body.scenarioId,
-          skillId: body.skillId,
-          modelId: body.modelId,
-          timestampUs: String(Date.now() * 1000),
-          eventType: body.eventType ?? "telemetry",
-          payload: (body.custom ?? body) as Readonly<Record<string, unknown>>,
-        };
-        ctx.db.saveTelemetryEvents([eventRecord]);
-        ctx.broadcast({ event: body.eventType ?? "telemetry", data: body }, body.runId);
-        return jsonResponse({ ingested: true, runId: body.runId });
-      } catch (err) {
-        return errorResponse(`Malformed telemetry payload: ${String(err)}`, 400);
-      }
-    });
-
-    this.get("/replay/:id", (ctx) => {
-      const id = ctx.params.id ?? "";
-      const replay = this.loadPersistedReplay(ctx, id);
-      if (replay instanceof Response) return replay;
-      return new Response(generateWebReplayHtml(replay), { headers: { "Content-Type": "text/html; charset=utf-8" } });
+    this.register("GET", "/replay/:id", (context) => {
+      const replay = loadPersistedReplay(context, context.params.id ?? "");
+      return replay instanceof Response ? replay : htmlResponse(generateWebReplayHtml(replay));
     });
   }
+}
 
-  private loadPersistedReplay(ctx: RouteContext, id: string): ReplaySession | Response {
-    let record: RunRecord | undefined;
-    try {
-      record = ctx.db.getRunRecord(id);
-    } catch {
-      return errorResponse("Replay record is invalid", 422);
-    }
-    if (record === undefined) return errorResponse("Replay run was not found", 404);
-    try {
-      const layout = createRunArtifactLayout(ctx.outputRoot, id);
-      return loadReplaySession({
-        eventsPath: layout.eventsPath,
-        manifestPath: layout.manifestPath,
-        resultPath: layout.resultPath,
-        expectedRunId: id,
-        expectedIdentity: createExpectedReplayIdentity(record),
-      });
-    } catch (error) {
-      if (error instanceof ReplayEvidenceUnavailableError) return errorResponse("Replay evidence is unavailable", 409);
-      if (error instanceof ReplayEvidenceInvalidError || error instanceof TypeError) return errorResponse("Replay evidence is invalid", 422);
-      return errorResponse("Replay evidence could not be read", 500);
-    }
+function readParameters(route: RouteDefinition, path: string): Readonly<Record<string, string>> {
+  const match = path.match(route.regex);
+  if (match === null) return Object.freeze({});
+  return Object.freeze(Object.fromEntries(route.paramNames.map((name, index) => [name, decodeURIComponent(match[index + 1] ?? "")])));
+}
+
+function loadPersistedReplay(context: RouteContext, runId: string): ReplaySession | Response {
+  let record: RunRecord | undefined;
+  try {
+    record = context.db.getRunRecord(runId);
+  } catch {
+    return errorResponse("internal_error", 500);
   }
-
+  if (record === undefined) return errorResponse("run_not_found", 404);
+  try {
+    const layout = createRunArtifactLayout(context.outputRoot, runId);
+    return loadReplaySession({
+      eventsPath: layout.eventsPath,
+      manifestPath: layout.manifestPath,
+      resultPath: layout.resultPath,
+      expectedRunId: runId,
+      expectedIdentity: createExpectedReplayIdentity(record),
+    });
+  } catch (error) {
+    if (error instanceof ReplayEvidenceUnavailableError) return errorResponse("replay_unavailable", 409);
+    if (error instanceof ReplayEvidenceInvalidError || error instanceof TypeError) return errorResponse("replay_invalid", 422);
+    return errorResponse("internal_error", 500);
+  }
 }
 
 function createExpectedReplayIdentity(record: RunRecord): ReplayEvidenceIdentity {
+  if (record.matrixOccurrenceIndex === undefined || !Number.isSafeInteger(record.matrixOccurrenceIndex) || record.matrixOccurrenceIndex < 0) {
+    throw new ReplayEvidenceInvalidError();
+  }
   return {
     sourceKind: "canonical-run",
     runId: record.runId,
     sweepId: record.sweepId,
     cellId: record.cellId,
     planFingerprint: record.planFingerprint,
-    matrixOccurrenceIndex: requireMatrixOccurrenceIndex(record.matrixOccurrenceIndex),
+    matrixOccurrenceIndex: record.matrixOccurrenceIndex,
     scenarioId: record.scenarioId,
     category: record.category,
     skillId: record.skillId,
@@ -223,9 +162,6 @@ function createExpectedReplayIdentity(record: RunRecord): ReplayEvidenceIdentity
   };
 }
 
-function requireMatrixOccurrenceIndex(value: number | undefined): number {
-  if (value === undefined || !Number.isSafeInteger(value) || value < 0) {
-    throw new TypeError("Replay run identity is incomplete");
-  }
-  return value;
+function roundMegabytes(bytes: number): number {
+  return Math.round((bytes / 1024 / 1024) * 100) / 100;
 }

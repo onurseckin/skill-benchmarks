@@ -1,59 +1,42 @@
-import { ApiRouter, jsonResponse, errorResponse, parsePattern } from "./api-router.js";
 import { HttpServer } from "./http-server.js";
 import type {
-  ApiResponse,
   ApiHealthResponse,
   ApiLeaderboardResponse,
   ApiReplayResponse,
+  ApiResponse,
   ApiRunsResponse,
   ApiSummaryResponse,
-  ApiTelemetryIngestRequest,
   ApiTrendsResponse,
-  HttpMethod,
   HttpServerInstance,
-  LiveTelemetryPayload,
-  RouteContext,
-  RouteDefinition,
-  RouteHandler,
-  RouterMiddleware,
+  ServerErrorBody,
+  ServerErrorCode,
   ServerOptions,
   ServerState,
-  SseClient,
-  SseEvent,
-  SseEventType,
 } from "./types.js";
 
 export type {
-  ApiResponse,
   ApiHealthResponse,
   ApiLeaderboardResponse,
   ApiReplayResponse,
+  ApiResponse,
   ApiRunsResponse,
   ApiSummaryResponse,
-  ApiTelemetryIngestRequest,
   ApiTrendsResponse,
-  HttpMethod,
   HttpServerInstance,
-  LiveTelemetryPayload,
-  RouteContext,
-  RouteDefinition,
-  RouteHandler,
-  RouterMiddleware,
+  ServerErrorBody,
+  ServerErrorCode,
   ServerOptions,
   ServerState,
-  SseClient,
-  SseEvent,
-  SseEventType,
 };
 
-export { ApiRouter, HttpServer, jsonResponse, errorResponse, parsePattern };
+export { HttpServer };
 
-export function createServer(options: ServerOptions, router?: ApiRouter): HttpServer {
-  return new HttpServer(options, router);
+export function createServer(options: ServerOptions): HttpServer {
+  return new HttpServer(options);
 }
 
-export async function startServer(options: ServerOptions, router?: ApiRouter): Promise<HttpServer> {
-  const server = new HttpServer(options, router);
+export async function startServer(options: ServerOptions): Promise<HttpServer> {
+  const server = new HttpServer(options);
   await server.start();
   return server;
 }

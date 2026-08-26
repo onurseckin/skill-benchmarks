@@ -9,7 +9,7 @@ import type {
   RunQueryFilter,
 } from "../reporting/report-cohorts.js";
 import { normalizeRunQueryFilter } from "../reporting/run-query.js";
-import { errorResponse, jsonResponse } from "./http-responses.js";
+import { errorResponse, htmlResponse, jsonResponse } from "./server-response.js";
 import type { HttpMethod, RouteContext, RouteHandler } from "./types.js";
 
 export interface ReportRouteRegistrar {
@@ -70,9 +70,7 @@ export function registerReportRoutes(router: ReportRouteRegistrar): void {
       includeTrends: true,
       includeCostEfficiency: true,
     });
-    return new Response(generateHtmlDashboard(snapshot, { title: "Skill Benchmarks Live Evidence" }), {
-      headers: { "Content-Type": "text/html; charset=utf-8" },
-    });
+    return htmlResponse(generateHtmlDashboard(snapshot, { title: "Skill Benchmarks Live Evidence" }));
   });
 }
 
@@ -121,7 +119,7 @@ function parseQuery<T>(operation: () => T): T | Response {
   try {
     return operation();
   } catch (error) {
-    if (error instanceof TypeError) return errorResponse("Invalid report query", 400);
+    if (error instanceof TypeError) return errorResponse("invalid_request", 400);
     throw error;
   }
 }
