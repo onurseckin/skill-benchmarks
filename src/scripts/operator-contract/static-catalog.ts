@@ -41,8 +41,12 @@ function verifyStaticRejections(temporaryRoot: string): void {
     join(temporaryRoot, "src", "boundary.sh"),
     "#!/bin/sh\nprintf '%s\\n' '# literal'\nprintf '%s\\n' \\#escaped\ntrue;# forbidden\nprintf '%s\\n' \"$(true;# nested forbidden\nprintf x)\"\n",
   );
+  writeFileSync(
+    join(temporaryRoot, "src", "case-boundary.sh"),
+    '#!/bin/sh\nprintf "%s\\n" "$(case x in\nx)# forbidden\nprintf x\n;;\nesac)"\n',
+  );
   const audit = auditMaintainedSources(temporaryRoot);
-  requireCondition(audit.violations.length === 5, "static_rejection_count_invalid");
+  requireCondition(audit.violations.length === 6, "static_rejection_count_invalid");
   requireCondition(
     audit.violations.some(
       (violation) =>
@@ -59,7 +63,17 @@ function verifyStaticRejections(temporaryRoot: string): void {
     );
   }
   requireCondition(
-    audit.violations.filter((violation) => violation.file.endsWith("boundary.sh")).length === 2,
+    audit.violations.filter(
+      (violation) => violation.file === join(temporaryRoot, "src", "boundary.sh"),
+    ).length === 2,
     "static_nested_shell_comment_admitted",
+  );
+  requireCondition(
+    audit.violations.some(
+      (violation) =>
+        violation.type === "FORBIDDEN_COMMENT" &&
+        violation.file === join(temporaryRoot, "src", "case-boundary.sh"),
+    ),
+    "static_case_shell_comment_admitted",
   );
 }

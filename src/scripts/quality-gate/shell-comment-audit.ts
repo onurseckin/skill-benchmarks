@@ -6,9 +6,12 @@ export interface ShellCommentScan {
 interface BaseContext {
   readonly kind: "base";
   readonly closesCommand: boolean;
+  readonly caseStates: CaseState[];
   parenthesisDepth: number;
   wordStart: boolean;
 }
+
+type CaseState = "awaiting_in" | "pattern" | "body";
 
 interface QuoteContext {
   readonly kind: "single" | "double";
@@ -72,7 +75,12 @@ export function scanShellComments(content: string): ShellCommentScan {
       continue;
     }
     if (context.kind !== "base") return uncertain(commentLines, "invalid_quote_state");
-    if (character === "\\") {
+    const caseWord = readCaseWord(content, index, context);
+    if (caseWord !== undefined) {
+      applyCaseWord(context, caseWord.word);
+      context.wordStart = false;
+      index = caseWord.end - 1;
+    } else if (character === "\\") {
       const escaped = content[index + 1];
       if (escaped === "\n") lineNumber += 1;
       else if (escaped !== undefined) context.wordStart = false;
@@ -89,11 +97,26 @@ export function scanShellComments(content: string): ShellCommentScan {
     } else if (character === "$" && content[index + 1] === "(") {
       context.wordStart = false;
       index = enterExpansion(content, index, contexts);
+    } else if (character === "(" && activeCaseState(context) === "pattern") {
+      context.wordStart = true;
+    } else if (character === ")" && activeCaseState(context) === "pattern") {
+      context.caseStates[context.caseStates.length - 1] = "body";
+      context.wordStart = true;
+    } else if (
+      character === ";" &&
+      activeCaseState(context) === "body" &&
+      (content[index + 1] === ";" || content[index + 1] === "&")
+    ) {
+      context.caseStates[context.caseStates.length - 1] = "pattern";
+      context.wordStart = true;
     } else if (character === "(" && context.closesCommand) {
       context.parenthesisDepth += 1;
       context.wordStart = true;
     } else if (character === ")" && context.closesCommand) {
       if (context.parenthesisDepth === 0) {
+        if (context.caseStates.length > 0) {
+          return uncertain(commentLines, `unclosed_case:${lineNumber}`);
+        }
         contexts.pop();
         markExpansionAsWord(contexts);
       } else {
@@ -108,14 +131,14 @@ export function scanShellComments(content: string): ShellCommentScan {
       context.wordStart = true;
     } else context.wordStart = /[\t\r |&;<>]/.test(character);
   }
-  if (contexts.length !== 1 || contexts[0]?.kind !== "base") {
+  if (contexts.length !== 1 || contexts[0]?.kind !== "base" || contexts[0].caseStates.length > 0) {
     return uncertain(commentLines, `unclosed_shell_construct:${lineNumber}`);
   }
   return { commentLines, uncertainty: undefined };
 }
 
 function createBaseContext(closesCommand: boolean): BaseContext {
-  return { kind: "base", closesCommand, parenthesisDepth: 0, wordStart: true };
+  return { kind: "base", closesCommand, caseStates: [], parenthesisDepth: 0, wordStart: true };
 }
 
 function enterExpansion(content: string, dollarIndex: number, contexts: ShellContext[]): number {
@@ -130,6 +153,37 @@ function enterExpansion(content: string, dollarIndex: number, contexts: ShellCon
 function markExpansionAsWord(contexts: ShellContext[]): void {
   const parent = contexts.at(-1);
   if (parent?.kind === "base") parent.wordStart = false;
+}
+
+function readCaseWord(
+  content: string,
+  index: number,
+  context: BaseContext,
+): { readonly word: "case" | "in" | "esac"; readonly end: number } | undefined {
+  if (!context.wordStart || !/[A-Za-z_]/.test(content[index] ?? "")) return undefined;
+  let end = index + 1;
+  while (/[A-Za-z0-9_]/.test(content[end] ?? "")) end += 1;
+  if (!isShellBoundary(content[end])) return undefined;
+  const word = content.slice(index, end);
+  const state = activeCaseState(context);
+  if (word === "case" && state !== "pattern") return { word, end };
+  if (word === "in" && state === "awaiting_in") return { word, end };
+  if (word === "esac" && (state === "pattern" || state === "body")) return { word, end };
+  return undefined;
+}
+
+function applyCaseWord(context: BaseContext, word: "case" | "in" | "esac"): void {
+  if (word === "case") context.caseStates.push("awaiting_in");
+  else if (word === "in") context.caseStates[context.caseStates.length - 1] = "pattern";
+  else context.caseStates.pop();
+}
+
+function activeCaseState(context: BaseContext): CaseState | undefined {
+  return context.caseStates.at(-1);
+}
+
+function isShellBoundary(character: string | undefined): boolean {
+  return character === undefined || /[\s|&;()<>#]/.test(character);
 }
 
 function uncertain(commentLines: readonly number[], uncertainty: string): ShellCommentScan {
