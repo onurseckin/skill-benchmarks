@@ -6,7 +6,7 @@
 
 ## 1. 16-Byte Binary Streaming Protocol Specification
 
-For high-throughput, low-latency live streaming of agent terminal outputs and execution telemetry, **Skill-Benchmarks** defines a compact **16-byte binary framing protocol** implemented in [`src/tunnel/stream-tunnel.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/tunnel/stream-tunnel.ts) and [`src/streaming/canvas-streamer.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/streaming/canvas-streamer.ts).
+For high-throughput, low-latency live streaming of agent terminal outputs and execution telemetry, **Skill-Benchmarks** defines a compact **16-byte binary framing protocol** implemented in [`src/tunnel/stream-tunnel.ts`](../../../../src/tunnel/stream-tunnel.ts) and [`src/streaming/canvas-streamer.ts`](../../../../src/streaming/canvas-streamer.ts).
 
 ### 1.1 Fixed-Header Binary Layout (16 Bytes)
 
@@ -53,7 +53,7 @@ For high-throughput, low-latency live streaming of agent terminal outputs and ex
 
 ## 2. Pseudo-Terminal (PTY) Multiplexer & WebSocket Tunnel
 
-The **PTY Multiplexer** ([`src/tunnel/pty-multiplexer.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/tunnel/pty-multiplexer.ts)) handles multi-client broadcasting and flow control:
+The **PTY Multiplexer** ([`src/tunnel/pty-multiplexer.ts`](../../../../src/tunnel/pty-multiplexer.ts)) handles multi-client broadcasting and flow control:
 
 ```
 +-------------------------------------------------------------------------------+
@@ -79,7 +79,7 @@ The **PTY Multiplexer** ([`src/tunnel/pty-multiplexer.ts`](file:///Users/onursec
 
 ## 3. Double-Buffered UTF-8 Canvas Screen Renderer
 
-To render flicker-free terminal sessions in headless or terminal UI environments, [`src/streaming/canvas-streamer.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/streaming/canvas-streamer.ts) maintains a double-buffered UTF-8 character matrix:
+To render flicker-free terminal sessions in headless or terminal UI environments, [`src/streaming/canvas-streamer.ts`](../../../../src/streaming/canvas-streamer.ts) maintains a double-buffered UTF-8 character matrix:
 
 ```
 +-------------------------------------------------------------------------------+
@@ -105,10 +105,10 @@ To render flicker-free terminal sessions in headless or terminal UI environments
 
 ## 4. Streaming & Tunnel Module Reference
 
-- [`src/streaming/canvas-streamer.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/streaming/canvas-streamer.ts): Double-buffered screen matrix and ANSI terminal renderer.
-- [`src/streaming/telemetry-broadcaster.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/streaming/telemetry-broadcaster.ts): Real-time telemetry broadcasting engine.
-- [`src/tunnel/stream-tunnel.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/tunnel/stream-tunnel.ts): Binary WebSocket protocol tunnel server.
-- [`src/tunnel/pty-multiplexer.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/tunnel/pty-multiplexer.ts): PTY stream multiplexer and frame serializer.
+- [`src/streaming/canvas-streamer.ts`](../../../../src/streaming/canvas-streamer.ts): Double-buffered screen matrix and ANSI terminal renderer.
+- [`src/streaming/telemetry-broadcaster.ts`](../../../../src/streaming/telemetry-broadcaster.ts): Real-time telemetry broadcasting engine.
+- [`src/tunnel/stream-tunnel.ts`](../../../../src/tunnel/stream-tunnel.ts): Binary WebSocket protocol tunnel server.
+- [`src/tunnel/pty-multiplexer.ts`](../../../../src/tunnel/pty-multiplexer.ts): PTY stream multiplexer and frame serializer.
 
 ---
 

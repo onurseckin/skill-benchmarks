@@ -6,7 +6,7 @@
 
 ## 1. Multi-Provider Normalization Layer
 
-Frontier LLM providers (Anthropic, Google Gemini, OpenAI) exhibit substantial divergence in their wire protocols, message schemas, tool definitions, streaming deltas, and token telemetry accounting. **Skill-Benchmarks** encapsulates these differences through a unified provider abstraction layer governed by the Provider Factory in [`src/providers/factory.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/providers/factory.ts) and contracts in [`src/providers/types.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/providers/types.ts).
+Frontier LLM providers (Anthropic, Google Gemini, OpenAI) exhibit substantial divergence in their wire protocols, message schemas, tool definitions, streaming deltas, and token telemetry accounting. **Skill-Benchmarks** encapsulates these differences through a unified provider abstraction layer governed by the Provider Factory in [`src/providers/factory.ts`](../../../../src/providers/factory.ts) and contracts in [`src/providers/types.ts`](../../../../src/providers/types.ts).
 
 ```
                       ┌─────────────────────────────────┐
@@ -62,7 +62,7 @@ Adapters normalize incoming server-sent events (SSE) into a standardized `AsyncI
 
 ## 3. Dynamic Pricing Engine & Cost Calculation
 
-To evaluate model economic efficiency, [`src/providers/pricing.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/providers/pricing.ts) evaluates exact micro-dollar costs per inference turn:
+To evaluate model economic efficiency, [`src/providers/pricing.ts`](../../../../src/providers/pricing.ts) evaluates exact micro-dollar costs per inference turn:
 
 $$\text{Cost}_{\text{turn}} = (N_{\text{input}} \times R_{\text{input}}) + (N_{\text{cached}} \times R_{\text{cached}}) + (N_{\text{output}} \times R_{\text{output}})$$
 
@@ -112,10 +112,10 @@ $$t_{\text{sleep}} = \min\left(t_{\max},\; t_{\text{base}} \times 2^{\text{attem
 
 ## 5. Frontier Adapter Module Reference
 
-- [`src/providers/anthropic.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/providers/anthropic.ts): Anthropic Messages API client, tool definition generator, content block parser.
-- [`src/providers/gemini.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/providers/gemini.ts): Gemini GenerateContent client, function declaration serializer, part stream accumulator.
-- [`src/providers/openai.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/providers/openai.ts): OpenAI Chat Completions client, structured schema validation, streaming delta processor.
-- [`src/providers/pricing.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/providers/pricing.ts): Model cost rate cards and micro-dollar accounting math.
+- [`src/providers/anthropic.ts`](../../../../src/providers/anthropic.ts): Anthropic Messages API client, tool definition generator, content block parser.
+- [`src/providers/gemini.ts`](../../../../src/providers/gemini.ts): Gemini GenerateContent client, function declaration serializer, part stream accumulator.
+- [`src/providers/openai.ts`](../../../../src/providers/openai.ts): OpenAI Chat Completions client, structured schema validation, streaming delta processor.
+- [`src/providers/pricing.ts`](../../../../src/providers/pricing.ts): Model cost rate cards and micro-dollar accounting math.
 
 ---
 

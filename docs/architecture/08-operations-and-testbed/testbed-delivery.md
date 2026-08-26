@@ -8,7 +8,7 @@ The testbed combines frontend, backend, supervisor, and Go microservice workload
 
 ## Source anchors
 
-[`testbed/package.json`](../../../testbed/package.json), [`testbed/Dockerfile`](../../../testbed/Dockerfile), [`testbed/microservice`](../../../testbed/microservice), and [`docs/usage-guide/maintenance/testbed-delivery.md`](../../usage-guide/maintenance/testbed-delivery.md).
+[`src/scripts/operator-contract/testbed.ts`](../../../src/scripts/operator-contract/testbed.ts), [`testbed/package.json`](../../../testbed/package.json), [`testbed/Dockerfile`](../../../testbed/Dockerfile), [`testbed/microservice`](../../../testbed/microservice), and [`docs/usage-guide/maintenance/testbed-delivery.md`](../../usage-guide/maintenance/testbed-delivery.md).
 
 ## Limitations
 

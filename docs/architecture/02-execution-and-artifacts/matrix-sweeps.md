@@ -4,7 +4,7 @@
 
 **Status:** implemented and public for admitted execution.
 
-The sweep engine validates a matrix, derives deterministic cells and plan identity, acquires an output-root lease, opens the evidence database, persists checkpoints, applies concurrency accounting, and records terminal outcomes. A terminalized cell record can be `completed`, `failed`, `aborted`, or `skipped`; the immutable sweep outcome also represents planned cells without a durable record as `unstarted`. Sweep status is independently `completed`, `failed`, or `aborted` after worker-pool and reconciliation outcomes are known.
+The sweep engine validates a matrix, derives deterministic cells and plan identity, acquires an output-root lease, opens the evidence database, persists checkpoints, applies concurrency accounting, and records terminal outcomes. In `outcome.json`, a cell is `completed`, `failed`, `timed_out`, `aborted`, `skipped`, or `unstarted`; `timed_out` is the durable run-record status for a timeout, while `unstarted` means no durable record was written. The related public cell status is `completed`, `failed`, `aborted`, `skipped`, or `pending`. Sweep status is independently `completed`, `failed`, or `aborted` after worker-pool and reconciliation outcomes are known.
 
 ## Source anchors
 

@@ -8,7 +8,7 @@ The maintained chaos subsystem schedules explicit faults against a running conta
 
 ## 2. Fault Scheduling
 
-[`src/chaos/chaos-engine.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/chaos/chaos-engine.ts) validates a chaos plan and coordinates [`src/chaos/fault-injector.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/chaos/fault-injector.ts). Supported injections include network delay or loss, process pause, resource pressure, and signals.
+[`src/chaos/chaos-engine.ts`](../../../../src/chaos/chaos-engine.ts) validates a chaos plan and coordinates [`src/chaos/fault-injector.ts`](../../../../src/chaos/fault-injector.ts). Supported injections include network delay or loss, process pause, resource pressure, and signals.
 
 ```text
 validated fault plan
@@ -35,9 +35,9 @@ Fault observations are operational diagnostics. They cannot be converted into be
 
 ## 4. Module Reference
 
-- [`src/chaos/chaos-engine.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/chaos/chaos-engine.ts): validates plans and coordinates fault schedules.
-- [`src/chaos/fault-injector.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/chaos/fault-injector.ts): applies and removes container faults.
-- [`src/chaos/types.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/chaos/types.ts): fault plan and diagnostic observation contracts.
+- [`src/chaos/chaos-engine.ts`](../../../../src/chaos/chaos-engine.ts): validates plans and coordinates fault schedules.
+- [`src/chaos/fault-injector.ts`](../../../../src/chaos/fault-injector.ts): applies and removes container faults.
+- [`src/chaos/types.ts`](../../../../src/chaos/types.ts): fault plan and diagnostic observation contracts.
 
 ## 5. Automated Fault Scenarios Summary
 

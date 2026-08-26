@@ -3,6 +3,7 @@
 ## 1. Executive Overview & Isolation Requirements
 
 A core requirement of the `skill-benchmarks` platform is **hermetic reproducibility**:
+
 1. **Zero Cross-Contamination**: Benchmark run $R_B$ must never inherit modified files, cached node_modules, temp files, or environment variables from run $R_A$.
 2. **Deterministic Baseline**: Every execution of a scenario starts from an identical byte-for-byte file tree snapshot.
 3. **High-Performance Filesystem Operations**: Fast file reads, writes, and git diff generation without virtiofs/FUSE disk bottlenecks on macOS.
@@ -14,12 +15,12 @@ A core requirement of the `skill-benchmarks` platform is **hermetic reproducibil
 
 ### 2.1 Storage Mechanism Comparison
 
-| Storage Mechanism | macOS Performance | Linux Performance | Isolation Level | Persistence / Diffability | Verdict |
-|---|---|---|---|---|---|
-| **Direct Host Bind Mount** (`-v /host/path:/workspace`) | Medium-Low (VirtioFS bridge overhead on small I/O operations) | Maximum (Native direct inode access) | Medium (Host permissions and umask leak into container) | High (Directly visible on host) | Suboptimal for compilation and intensive package resolution |
-| **Pure Tmpfs (RAM Disk)** (`--tmpfs /workspace:rw,size=2G`) | Maximum (In-memory) | Maximum (In-memory) | Maximum (Destroyed on container exit) | Low (Crash or OOM destroys state before diff extraction) | Risky for failure forensics |
-| **Ephemeral Named Volume** (`-v sb-vol-<id>:/workspace`) | Maximum (Native ext4 in Linux VM) | Maximum (Native Docker rootfs overlay) | Maximum (Completely isolated per run) | High (Persists until explicit orchestrator teardown) | **SELECTED for `/workspace`** |
-| **Direct Host Artifact Mount** (`-v /host/runs/<id>:/artifacts:rw`) | High (Sequential append log writes) | Maximum | High | Maximum (Real-time telemetry streaming to host) | **SELECTED for `/artifacts`** |
+| Storage Mechanism                                                   | macOS Performance                                             | Linux Performance                      | Isolation Level                                         | Persistence / Diffability                                | Verdict                                                     |
+| ------------------------------------------------------------------- | ------------------------------------------------------------- | -------------------------------------- | ------------------------------------------------------- | -------------------------------------------------------- | ----------------------------------------------------------- |
+| **Direct Host Bind Mount** (`-v /host/path:/workspace`)             | Medium-Low (VirtioFS bridge overhead on small I/O operations) | Maximum (Native direct inode access)   | Medium (Host permissions and umask leak into container) | High (Directly visible on host)                          | Suboptimal for compilation and intensive package resolution |
+| **Pure Tmpfs (RAM Disk)** (`--tmpfs /workspace:rw,size=2G`)         | Maximum (In-memory)                                           | Maximum (In-memory)                    | Maximum (Destroyed on container exit)                   | Low (Crash or OOM destroys state before diff extraction) | Risky for failure forensics                                 |
+| **Ephemeral Named Volume** (`-v sb-vol-<id>:/workspace`)            | Maximum (Native ext4 in Linux VM)                             | Maximum (Native Docker rootfs overlay) | Maximum (Completely isolated per run)                   | High (Persists until explicit orchestrator teardown)     | **SELECTED for `/workspace`**                               |
+| **Direct Host Artifact Mount** (`-v /host/runs/<id>:/artifacts:rw`) | High (Sequential append log writes)                           | Maximum                                | High                                                    | Maximum (Real-time telemetry streaming to host)          | **SELECTED for `/artifacts`**                               |
 
 ### 2.2 The Hybrid Storage Architecture
 
@@ -31,7 +32,7 @@ The orchestrator combines **Ephemeral Named Volumes** for active workspace code 
 +-----------------------------------------------------------------------------------+
 |                                                                                   |
 |   HOST FILESYSTEM (Developer Machine)                                             |
-|   /Users/developer/repos/skill-benchmarks/                                        |
+|   <repository-root>/                                        |
 |   ├── scenarios/bugfix-01/fixture/  --------+ (Read-Only Source Template)         |
 |   └── .benchmarks/runs/<run-id>/    <----+  |                                     |
 |       ├── events.jsonl                   |  | (Direct Bind Mount: /artifacts)     |
@@ -95,6 +96,7 @@ To ensure sub-second workspace initialization without host permission friction, 
 ```
 
 ### 3.1 Pre-Run File Tree Fingerprinting
+
 Before handing control to the agent, the host captures a cryptographic SHA-256 manifest of all files in the workspace:
 
 ```json
@@ -196,6 +198,7 @@ export interface DiffManifest {
 ### 5.2 Permissions Reconciliation Policy
 
 On Linux host systems, bind-mounting directories can create file ownership issues if the container user (`UID 1000`) differs from the host developer. The benchmark harness reconciles permissions via:
+
 1. **Container User Matching**: The container runs under `sandbox (UID 1000, GID 1000)`.
 2. **Artifact Directory Ownership**: Host creates `.benchmarks/runs/<run-id>/` before container launch with `0777` permissions, allowing the container's non-root `sandbox` user to write telemetry streams without permission denials.
 3. **Strict Non-Root Guarantee**: The agent inside the container is never granted `sudo` or root capabilities, preventing it from tampering with host-level filesystems.
@@ -246,5 +249,6 @@ bun run gc:containers
 ```
 
 Which executes:
+
 1. Pruning stale containers labeled with `io.skill-benchmarks.managed=true` created more than 1 hour ago.
 2. Pruning dangling named volumes labeled with `io.skill-benchmarks.volume=workspace`.

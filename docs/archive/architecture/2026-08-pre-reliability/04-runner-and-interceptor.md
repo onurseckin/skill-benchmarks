@@ -6,7 +6,7 @@
 
 ## 1. Agentic Loop State Machine
 
-The **Runner Engine** ([`src/runner/runner-engine.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/runner/runner-engine.ts)) coordinates the multi-turn conversational loop between the Frontier LLM and the sandboxed container environment.
+The **Runner Engine** ([`src/runner/runner-engine.ts`](../../../../src/runner/runner-engine.ts)) coordinates the multi-turn conversational loop between the Frontier LLM and the sandboxed container environment.
 
 ```
                     ┌────────────────────────────┐
@@ -51,7 +51,7 @@ The **Runner Engine** ([`src/runner/runner-engine.ts`](file:///Users/onurseckins
 
 ## 2. Tool Execution Interception & Sandboxing
 
-All agent tool calls are trapped and validated by the **Tool Dispatcher** ([`src/runner/tool-dispatcher.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/runner/tool-dispatcher.ts)) and executed via [`src/runner/tool-handlers.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/runner/tool-handlers.ts):
+All agent tool calls are trapped and validated by the **Tool Dispatcher** ([`src/runner/tool-dispatcher.ts`](../../../../src/runner/tool-dispatcher.ts)) and executed via [`src/runner/tool-handlers.ts`](../../../../src/runner/tool-handlers.ts):
 
 ```
 +-------------------------------------------------------------------------------+
@@ -94,7 +94,7 @@ function assertPathWithinWorkspace(workspaceRoot: string, targetPath: string): s
 
 ## 3. Context Window Management & Compaction
 
-Long-running agent benchmarks can exceed model context limits. The **Context Manager** ([`src/runner/context-manager.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/runner/context-manager.ts)) implements dynamic token budgeting:
+Long-running agent benchmarks can exceed model context limits. The **Context Manager** ([`src/runner/context-manager.ts`](../../../../src/runner/context-manager.ts)) implements dynamic token budgeting:
 
 $$\text{Tokens}_{\text{total}} = \text{Tokens}_{\text{system}} + \text{Tokens}_{\text{skills}} + \sum_{k=1}^M \text{Tokens}_{\text{turn}_k}$$
 
@@ -121,7 +121,7 @@ $$\text{Tokens}_{\text{total}} = \text{Tokens}_{\text{system}} + \text{Tokens}_{
 
 ## 4. Real-Time Step Telemetry Streaming
 
-Every intermediate step is serialized into a structured `StepEvent` by [`src/infrastructure/telemetry/event-scribe.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/infrastructure/telemetry/event-scribe.ts) and streamed live:
+Every intermediate step is serialized into a structured `StepEvent` by [`src/infrastructure/telemetry/event-scribe.ts`](../../../../src/infrastructure/telemetry/event-scribe.ts) and streamed live:
 
 ```typescript
 interface StepTelemetry {
@@ -142,10 +142,10 @@ interface StepTelemetry {
 
 ## 5. Tool Runner Module Reference
 
-- [`src/runner/runner-engine.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/runner/runner-engine.ts): Core multi-turn execution loop.
-- [`src/runner/tool-dispatcher.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/runner/tool-dispatcher.ts): Safe tool call routing and argument parser.
-- [`src/runner/tool-handlers.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/runner/tool-handlers.ts): Containerized shell and filesystem tool implementations.
-- [`src/runner/context-manager.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/runner/context-manager.ts): Context window compaction and token budgeting.
+- [`src/runner/runner-engine.ts`](../../../../src/runner/runner-engine.ts): Core multi-turn execution loop.
+- [`src/runner/tool-dispatcher.ts`](../../../../src/runner/tool-dispatcher.ts): Safe tool call routing and argument parser.
+- [`src/runner/tool-handlers.ts`](../../../../src/runner/tool-handlers.ts): Containerized shell and filesystem tool implementations.
+- [`src/runner/context-manager.ts`](../../../../src/runner/context-manager.ts): Context window compaction and token budgeting.
 
 ---
 
