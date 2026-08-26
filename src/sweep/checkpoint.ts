@@ -274,6 +274,6 @@ function resolveCheckpointStatus(
 ): SweepExecutionStatus {
   const terminalIds = new Set([...completedIds, ...failedIds, ...abortedIds, ...skippedIds]);
   if (terminalIds.size < current.totalPlannedCells) return "running";
-  if (failedIds.size > 0) return "failed";
-  return abortedIds.size > 0 ? "aborted" : "completed";
+  if (abortedIds.size > 0) return "aborted";
+  return failedIds.size > 0 ? "failed" : "completed";
 }

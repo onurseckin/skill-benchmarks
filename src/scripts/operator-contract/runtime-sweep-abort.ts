@@ -1,7 +1,13 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import type { IContainerPoolManager } from "../../infrastructure/container/types.js";
+import { TelemetryDatabase } from "../../reporting/db.js";
 import { MatrixSweepEngine } from "../../sweep/sweep-engine.js";
 import { createSweepOutcomePath } from "../../sweep/sweep-outcome.js";
+import {
+  validateCheckpointTerminalEvidence,
+  validateSweepOutcomeEvidence,
+} from "../../sweep/terminal-reconciliation.js";
 import type { CheckpointState, MatrixSweepConfig } from "../../sweep/types.js";
 import { requireCondition } from "./assertions.js";
 
@@ -104,6 +110,63 @@ export async function verifyAbortedSweepTerminalization(temporaryRoot: string): 
       summary.failedCount === outcome.failedCount,
     "sweep_abort_accounting_agreement",
   );
+  await verifyMixedFailureAbortPrecedence(temporaryRoot);
+}
+
+async function verifyMixedFailureAbortPrecedence(temporaryRoot: string): Promise<void> {
+  const outputRoot = join(temporaryRoot, "mixed-output");
+  const checkpointPath = join(outputRoot, "checkpoint.json");
+  const sweepId = "fixture-mixed-terminal-precedence";
+  const config = createMixedFailureConfig(outputRoot, checkpointPath, sweepId);
+  const summary = await new MatrixSweepEngine(sweepId).run(config);
+  const outcomePath = createSweepOutcomePath(outputRoot, sweepId);
+  const outcome = JSON.parse(readFileSync(outcomePath, "utf8")) as SweepOutcomeFixture;
+  const checkpoint = JSON.parse(readFileSync(checkpointPath, "utf8")) as CheckpointState;
+
+  requireCondition(summary.status === "aborted", "sweep_mixed_summary_status");
+  requireCondition(outcome.status === "aborted", "sweep_mixed_outcome_status");
+  requireCondition(checkpoint.status === "aborted", "sweep_mixed_checkpoint_status");
+  requireCondition(summary.failedCount === 1, "sweep_mixed_summary_failed_count");
+  requireCondition(summary.abortedCount === 1, "sweep_mixed_summary_aborted_count");
+  requireCondition(outcome.failedCount === 1, "sweep_mixed_outcome_failed_count");
+  requireCondition(outcome.abortedCount === 1, "sweep_mixed_outcome_aborted_count");
+  requireCondition(checkpoint.failedCellIds.length === 1, "sweep_mixed_checkpoint_failed_ids");
+  requireCondition(checkpoint.abortedCellIds.length === 1, "sweep_mixed_checkpoint_aborted_ids");
+  requireCondition(
+    checkpoint.completedResults[checkpoint.failedCellIds[0] ?? ""]?.status === "failed",
+    "sweep_mixed_checkpoint_failed_status",
+  );
+  requireCondition(
+    checkpoint.completedResults[checkpoint.abortedCellIds[0] ?? ""]?.status === "aborted",
+    "sweep_mixed_checkpoint_aborted_status",
+  );
+
+  const database = new TelemetryDatabase(join(outputRoot, "db", "benchmarks.sqlite"), {
+    readonly: true,
+    authorityRoot: outputRoot,
+  });
+  try {
+    const cells = summary.results.map((result) => result.cell);
+    try {
+      validateCheckpointTerminalEvidence(cells, checkpoint, database, config);
+    } catch (error) {
+      throw new Error("sweep_mixed_checkpoint_reconciliation", { cause: error });
+    }
+    try {
+      validateSweepOutcomeEvidence(
+        outcomePath,
+        cells,
+        checkpoint,
+        database,
+        checkpoint.metadata.planFingerprint,
+        true,
+      );
+    } catch (error) {
+      throw new Error("sweep_mixed_outcome_reconciliation", { cause: error });
+    }
+  } finally {
+    database.close();
+  }
 }
 
 function createConfig(
@@ -122,5 +185,27 @@ function createConfig(
     maxRetriesPerCell: 0,
     concurrency: { maxGlobalConcurrency: 1 },
     checkpoint: { enabled: true, filePath: checkpointPath },
+  };
+}
+
+function createMixedFailureConfig(
+  outputRoot: string,
+  checkpointPath: string,
+  sweepId: string,
+): MatrixSweepConfig {
+  const containerPool: IContainerPoolManager = {
+    activeCount: 0,
+    queuedCount: 0,
+    maxConcurrency: 1,
+    async acquire() {
+      throw new Error("fixture durable setup failure");
+    },
+    async release() {},
+    async drain() {},
+  };
+  return {
+    ...createConfig(outputRoot, checkpointPath, sweepId),
+    containerPool,
+    stopOnFirstFailure: true,
   };
 }

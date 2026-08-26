@@ -111,8 +111,8 @@ function expectedCheckpointStatus(
   if (terminalIds.size + skippedIds.size < checkpoint.totalPlannedCells) {
     return terminalIds.size + skippedIds.size === 0 ? "pending" : "running";
   }
-  if (failedIds.size > 0) return "failed";
-  return abortedIds.size > 0 ? "aborted" : "completed";
+  if (abortedIds.size > 0) return "aborted";
+  return failedIds.size > 0 ? "failed" : "completed";
 }
 
 function validateCheckpointAggregates(

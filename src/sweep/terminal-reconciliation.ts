@@ -156,14 +156,19 @@ export function validateSweepOutcomeEvidence(
     )
       failReconciliation();
   }
+  const expectedTerminationReason =
+    checkpoint.status === "completed"
+      ? "success"
+      : checkpoint.status === "aborted"
+        ? "aborted"
+        : "cell_failure";
   if (
     outcome.completedCount !== completedCount ||
     outcome.failedCount !== failedCount ||
     outcome.abortedCount !== abortedCount ||
     outcome.skippedCount !== skippedCount ||
     completedCount + failedCount + abortedCount + skippedCount !== cells.length ||
-    outcome.status !== "completed" ||
-    outcome.terminationReason !== "success" ||
+    outcome.terminationReason !== expectedTerminationReason ||
     outcome.orchestrationFailure !== undefined
   )
     failReconciliation();
