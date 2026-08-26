@@ -1,23 +1,38 @@
 # Usage Guide
 
-The documented benchmark workflow is deterministic and fake-first. It runs without provider credentials, keeps tool work inside a generated workspace, and records execution provenance under the selected output root.
+[Repository README](../../README.md) | [CLI reference](cli-reference/commands.md)
+
+This guide is for people running the repository. It covers commands, inputs, outputs, and verification. Implementation internals belong in the separate [architecture documentation](../architecture/README.md).
+
+The normal workflow is fake-first and no-key. Fake and dry-run records are simulated, ineligible, and not evaluated. Arena and tournament output is always unranked.
 
 ## Start here
 
-- [Installation](getting-started/installation.md) explains the local Bun setup.
-- [Configuration](getting-started/configuration.md) defines fake/live selection, credentials, and runtime output.
-- [CLI command reference](cli-reference/commands.md) lists the supported benchmark and report commands.
+1. [Install and run the first trajectory](getting-started/installation.md)
+2. [Configure execution and output](getting-started/configuration.md)
+3. [Select checked-in scenarios and skills](getting-started/catalog-selection.md)
 
-## Run and inspect benchmarks
+## Run commands
 
-- [Single benchmark](running-benchmarks/single-trial.md) runs and inspects one fake trajectory.
-- [Matrix sweeps](running-benchmarks/matrix-sweeps.md) runs a local matrix and exports its stored records.
-- [CLI interaction](cli-reference/interactive-shell.md) shows command discovery and terminal execution output.
+- [Run one trajectory](running-benchmarks/single-trial.md)
+- [Run a matrix](running-benchmarks/matrix-sweeps.md)
+- [Plan or run arena and tournament diagnostics](interactive-features/arena-debates.md)
 
-The guide intentionally does not describe arena rankings, live web streaming, or synthetic judge verdicts as benchmark evidence. A fake `COMPLETE` run is an execution result, not a benchmark `PASS`.
+## Inspect output
 
-## CI diagnostic
+- [Generate reports](reports/generating-reports.md)
+- [Replay persisted events](interactive-features/tui-player.md)
+- [Discover commands and read piped output](cli-reference/interactive-shell.md)
+- [Look up every public command and option](cli-reference/commands.md)
 
-Continuous integration runs one no-key simulated trajectory for `git-worktrees`, `tdd`, and `gpt-4o` through the installed executable. The uploaded `simulated-diagnostic-<sha>` bundle contains the operator log, canonical run and sweep evidence, SQLite index, and diagnostic JSON report.
+## Maintain delivery
 
-The package verifier reconciles command identity, isolation, event order, terminal evidence, persistence, provenance, and the report empty state before upload. This diagnostic proves operational health only. It produces no benchmark ranking or regression decision. The exact temporary-root reproduction command is in the root [local verification section](../../README.md#local-verification).
+- [Run repository and CI verification](maintenance/verification.md)
+- [Build and start the optional testbed](maintenance/testbed-delivery.md)
+
+## Unavailable public workflows
+
+- [Custom scenario authoring](custom-scenarios/authoring-scenarios.md) has no public CLI workflow.
+- [Web streaming](interactive-features/web-streaming.md) has no public server, stream, or tunnel command.
+
+The CLI also has no public model-list, sync, fuzz, or automatic checkpoint-resume command.

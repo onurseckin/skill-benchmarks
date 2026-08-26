@@ -1,5 +1,5 @@
-import { readdirSync, statSync, readFileSync, existsSync, utimesSync } from "node:fs";
-import { join, extname } from "node:path";
+import { readFileSync, existsSync } from "node:fs";
+import { join } from "node:path";
 import { execSync } from "node:child_process";
 import { startStreamTunnel } from "../tunnel/index.js";
 import { BudgetController, OptimizerEngine } from "../optimizer/index.js";
@@ -7,6 +7,7 @@ import type { NeoBrutalistDashboardConfig } from "../reporting/index.js";
 import { runInteractiveDialogTest } from "../dialog/index.js";
 import { lookupCanonicalSkill } from "../skills/index.js";
 import { runCli, VISUAL_THEME_SPEC } from "../index.js";
+import { auditMaintainedSources } from "./quality-gate/source-audit.js";
 
 void startStreamTunnel;
 void BudgetController;
@@ -18,84 +19,6 @@ void VISUAL_THEME_SPEC;
 const _nbConfig: NeoBrutalistDashboardConfig | null = null;
 void _nbConfig;
 
-interface Violation {
-  readonly file: string;
-  readonly type: "LINE_COUNT_EXCEEDED" | "FORBIDDEN_COMMENT";
-  readonly detail: string;
-}
-
-const MAXIMUM_ALLOWED_LINES = 400;
-const SCANNED_EXTENSIONS = new Set([".ts", ".js", ".mjs"]);
-const EXCLUDED_DIRS = new Set(["node_modules", ".git", ".olt", ".benchmarks", "dist"]);
-
-function collectSourceFiles(directoryPath: string): readonly string[] {
-  const collectedFiles: string[] = [];
-  const entries = readdirSync(directoryPath);
-
-  for (const entry of entries) {
-    if (EXCLUDED_DIRS.has(entry)) {
-      continue;
-    }
-
-    const fullPath = join(directoryPath, entry);
-    const stats = statSync(fullPath);
-
-    if (stats.isDirectory()) {
-      collectedFiles.push(...collectSourceFiles(fullPath));
-    } else if (stats.isFile() && SCANNED_EXTENSIONS.has(extname(fullPath))) {
-      collectedFiles.push(fullPath);
-    }
-  }
-
-  return collectedFiles;
-}
-
-function scanFileForViolations(filePath: string): readonly Violation[] {
-  const violations: Violation[] = [];
-  const content = readFileSync(filePath, "utf8");
-  const lines = content.split("\n");
-
-  if (lines.length > MAXIMUM_ALLOWED_LINES) {
-    violations.push({
-      file: filePath,
-      type: "LINE_COUNT_EXCEEDED",
-      detail: `File has ${lines.length} lines (maximum allowed is ${MAXIMUM_ALLOWED_LINES})`,
-    });
-  }
-
-  for (const [lineNumber, rawLine] of lines.entries()) {
-    const trimmed = rawLine.trim();
-
-    if (trimmed.startsWith("//") || trimmed.startsWith("/*") || trimmed.startsWith("*") || trimmed.endsWith("*/")) {
-      violations.push({
-        file: filePath,
-        type: "FORBIDDEN_COMMENT",
-        detail: `Line ${lineNumber + 1}: Contains forbidden comment syntax "${trimmed}"`,
-      });
-      continue;
-    }
-
-    const doubleSlashIndex = rawLine.indexOf("//");
-    if (doubleSlashIndex > -1) {
-      const beforeComment = rawLine.substring(0, doubleSlashIndex);
-      const singleQuotes = (beforeComment.match(/'/g) || []).length;
-      const doubleQuotes = (beforeComment.match(/"/g) || []).length;
-      const backticks = (beforeComment.match(/`/g) || []).length;
-
-      const isInsideString = (singleQuotes % 2 === 1) || (doubleQuotes % 2 === 1) || (backticks % 2 === 1);
-      if (!isInsideString) {
-        violations.push({
-          file: filePath,
-          type: "FORBIDDEN_COMMENT",
-          detail: `Line ${lineNumber + 1}: Contains trailing comment "${rawLine.substring(doubleSlashIndex)}"`,
-        });
-      }
-    }
-  }
-
-  return violations;
-}
-
 function runQualityAudit(): void {
   try {
     execSync("bun x tsc --noEmit", { stdio: "pipe" });
@@ -105,7 +28,6 @@ function runQualityAudit(): void {
   }
 
   const rootDir = process.cwd();
-  const srcDir = join(rootDir, "src");
   const rootReadme = join(rootDir, "README.md");
   const usageReadme = join(rootDir, "docs/usage-guide/README.md");
   const usageInstall = join(rootDir, "docs/usage-guide/getting-started/installation.md");
@@ -118,6 +40,10 @@ function runQualityAudit(): void {
   const usageStream = join(rootDir, "docs/usage-guide/interactive-features/web-streaming.md");
   const usageArena = join(rootDir, "docs/usage-guide/interactive-features/arena-debates.md");
   const usageScenario = join(rootDir, "docs/usage-guide/custom-scenarios/authoring-scenarios.md");
+  const usageCatalog = join(rootDir, "docs/usage-guide/getting-started/catalog-selection.md");
+  const usageReports = join(rootDir, "docs/usage-guide/reports/generating-reports.md");
+  const usageVerification = join(rootDir, "docs/usage-guide/maintenance/verification.md");
+  const usageTestbed = join(rootDir, "docs/usage-guide/maintenance/testbed-delivery.md");
   const archReadme = join(rootDir, "docs/architecture/README.md");
   const archOverview = join(rootDir, "docs/architecture/01-system-overview.md");
   const archSandbox = join(rootDir, "docs/architecture/02-container-sandbox.md");
@@ -143,6 +69,10 @@ function runQualityAudit(): void {
     usageStream,
     usageArena,
     usageScenario,
+    usageCatalog,
+    usageReports,
+    usageVerification,
+    usageTestbed,
     archReadme,
     archOverview,
     archSandbox,
@@ -178,36 +108,30 @@ function runQualityAudit(): void {
   }
   const streamContent = readFileSync(archStreaming, "utf8");
   if (!streamContent.includes("## 5. Binary Protocol Interoperability Summary")) {
-    process.stderr.write("Streaming doc missing binary protocol interoperability summary section.\n");
+    process.stderr.write(
+      "Streaming doc missing binary protocol interoperability summary section.\n",
+    );
     process.exit(1);
   }
 
-  const allViolations: Violation[] = [];
-  let scannedFileCount = 0;
-
   try {
-    const sourceFiles = collectSourceFiles(srcDir);
-    scannedFileCount = sourceFiles.length;
-    for (const file of sourceFiles) {
-      const fileViolations = scanFileForViolations(file);
-      allViolations.push(...fileViolations);
+    const audit = auditMaintainedSources(rootDir);
+    if (audit.violations.length > 0) {
+      process.stderr.write(
+        `\nQuality Gate Failed: ${audit.violations.length} violation(s) detected.\n\n`,
+      );
+      for (const violation of audit.violations) {
+        process.stderr.write(`- [${violation.type}] ${violation.file}\n  ${violation.detail}\n`);
+      }
+      process.exit(1);
     }
+    process.stdout.write(
+      `\nQuality Gate Passed: ${audit.files.length} maintained source file(s) verified (0 comments, <400 lines); all required deliverables present.\nStatic checks only; this gate performs no viewport rendering and produces no visual evidence.\n\n`,
+    );
   } catch (error) {
     process.stderr.write(`Quality gate scanner encountered an error: ${String(error)}\n`);
     process.exit(1);
   }
-
-  if (allViolations.length > 0) {
-    process.stderr.write(`\n❌ Quality Gate Failed: ${allViolations.length} violation(s) detected.\n\n`);
-    for (const v of allViolations) {
-      process.stderr.write(`- [${v.type}] ${v.file}\n  ${v.detail}\n`);
-    }
-    process.exit(1);
-  }
-
-  process.stdout.write(
-    `\n✅ Quality Gate Passed: ${scannedFileCount} source file(s) verified (0 comments, <= ${MAXIMUM_ALLOWED_LINES} lines); all required deliverables present.\nStatic checks only — this gate performs no viewport rendering and produces no visual evidence.\n\n`
-  );
   process.exit(0);
 }
 

@@ -1,10 +1,8 @@
-# Running a Single Benchmark
+# Run One Trajectory
 
-[Configuration](../getting-started/configuration.md) | [CLI reference](../cli-reference/commands.md) | [Matrix sweeps](matrix-sweeps.md)
+[Previous: catalog](../getting-started/catalog-selection.md) | [Usage guide](../README.md) | [Next: matrix](matrix-sweeps.md)
 
-A benchmark cell combines a scenario, a skill, and a model. The `run` command accepts one value for each, or lists that expand into a matrix. The command is fake-first: without a live selection it runs the deterministic fake provider and does not contact a provider API.
-
-## Run the local deterministic trajectory
+## Run fake mode
 
 ```bash
 bun run cli -- run \
@@ -15,11 +13,49 @@ bun run cli -- run \
   --output-dir .benchmarks
 ```
 
-The CLI reports `COMPLETE` when the execution finishes. It reports `PASS` only when benchmark evaluation evidence exists and all required execution conditions succeed. A fake run normally completes with zero provider cost and an unevaluated benchmark result; it must not be read as a model-quality score.
+Fake mode is deterministic and needs no credential. The tool workspace is confined below the generated run directory rather than the repository checkout.
 
-## Select a live provider intentionally
+`COMPLETE` means the cell reached a successful execution terminal. The record remains simulated, ineligible, and not evaluated. Do not infer model quality from it.
 
-Live execution must be selected with `--live` or `SKILL_BENCHMARKS_USE_MOCK=false`. The selected provider credential is required before any provider request.
+## Validate a selection with dry run
+
+```bash
+bun run cli -- run \
+  --dry-run \
+  --scenario git-worktrees \
+  --skill tdd \
+  --model gpt-4o \
+  --output-dir .benchmarks-plan
+```
+
+Dry run still follows the run command's admitted matrix and persistence contract. Treat its output as simulated diagnostic evidence, not as a no-artifact command.
+
+## Limit execution
+
+```bash
+bun run cli -- run \
+  --mock \
+  --scenario git-worktrees \
+  --skill tdd \
+  --model gpt-4o \
+  --timeout 120 \
+  --max-turns 10 \
+  --max-cost 0.50 \
+  --output-dir .benchmarks
+```
+
+`--timeout` is positive seconds with millisecond precision. `--max-turns` is a positive integer. `--max-cost` is a nonnegative finite USD limit.
+
+## Inspect one run
+
+```bash
+find .benchmarks/runs -maxdepth 2 -type f
+bun run cli -- report --db .benchmarks/db/benchmarks.sqlite
+```
+
+Use [replay](../interactive-features/tui-player.md) for `events.jsonl` and [reports](../reports/generating-reports.md) for database queries.
+
+## Select live mode intentionally
 
 ```bash
 GEMINI_API_KEY="replace-with-a-real-key" bun run cli -- run \
@@ -31,32 +67,4 @@ GEMINI_API_KEY="replace-with-a-real-key" bun run cli -- run \
   --output-dir .benchmarks
 ```
 
-Do not combine `--live` with `--mock`.
-
-## Inspect the run bundle
-
-The default output root is `.benchmarks/`. Every cell receives a distinct run directory:
-
-```text
-.benchmarks/runs/<run-id>/
-├── manifest.json
-├── result.json
-└── workspace/
-```
-
-`manifest.json` identifies the effective provider, model, scenario, execution mode, and simulated status before provider work begins. `result.json` records the terminal status, termination reason, and available aggregate runtime values. The fake workspace is below the run directory; tool calls do not fall back to the repository checkout.
-
-The SQLite index is `.benchmarks/db/benchmarks.sqlite`. For a custom output root, replace `.benchmarks` in that path with the value passed to `--output-dir`. The command-line workflow does not expose automatic checkpoint resume.
-
-## Export a report
-
-After a run, use the generated SQLite index and choose an explicit path below `exports/`:
-
-```bash
-bun run cli -- report \
-  --db .benchmarks/db/benchmarks.sqlite \
-  --format markdown \
-  --output .benchmarks/exports/single-trial.md
-```
-
-The report summarizes stored run records. It does not turn an unevaluated fake execution into a benchmark pass.
+This is an opt-in provider request. See [configuration](../getting-started/configuration.md) before running it. Do not combine `--live` and `--mock`.

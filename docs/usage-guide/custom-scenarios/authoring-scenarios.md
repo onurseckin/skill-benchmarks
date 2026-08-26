@@ -1,5 +1,7 @@
-# Custom Scenarios
+# Custom Scenario Authoring Is Unavailable
 
-Custom scenario authoring is not a documented benchmark workflow yet. The public fake-first contract covers the checked-in scenarios and skills only.
+[Usage guide](../README.md) | [Catalog selection](../getting-started/catalog-selection.md) | [CLI reference](../cli-reference/commands.md)
 
-Do not treat an unverified scenario schema, custom validator, or synthetic score as benchmark evidence.
+The public CLI runs checked-in catalog scenarios. It has no command for creating, importing, validating, or registering a custom scenario.
+
+Use `bun run cli -- list scenarios` to see admitted IDs. A JSON file placed beside the catalog is not automatically a supported consumer scenario and must not be treated as benchmark evidence.

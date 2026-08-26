@@ -1,8 +1,4 @@
 # syntax=docker/dockerfile:1.7-labs
-
-# ==============================================================================
-# Stage 1: Tool & Binary Downloader Stage
-# ==============================================================================
 FROM debian:trixie-slim AS binary-builder
 
 ARG TARGETPLATFORM
@@ -21,7 +17,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /extracted
 
-# Download and extract Bun (platform-aware)
 RUN case "${TARGETPLATFORM}" in \
       "linux/amd64") BUN_ARCH="x64" ;; \
       "linux/arm64") BUN_ARCH="aarch64" ;; \
@@ -34,7 +29,6 @@ RUN case "${TARGETPLATFORM}" in \
     chmod +x /extracted/bin/bun && \
     ln -s /extracted/bin/bun /extracted/bin/bunx
 
-# Download and extract Astral uv (platform-aware)
 RUN case "${TARGETPLATFORM}" in \
       "linux/amd64") UV_ARCH="x86_64-unknown-linux-gnu" ;; \
       "linux/arm64") UV_ARCH="aarch64-unknown-linux-gnu" ;; \
@@ -46,9 +40,6 @@ RUN case "${TARGETPLATFORM}" in \
     mv /tmp/uv-${UV_ARCH}/uvx /extracted/bin/uvx && \
     chmod +x /extracted/bin/uv /extracted/bin/uvx
 
-# ==============================================================================
-# Stage 2: Final Runtime Image
-# ==============================================================================
 FROM debian:trixie-slim AS sandbox-base
 
 LABEL maintainer="infrastructure@skill-benchmarks.dev"
@@ -59,7 +50,6 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV LANG=C.UTF-8
 ENV LC_ALL=C.UTF-8
 
-# 1. Install base OS dependencies, Node.js repository, Python, and CLI utilities
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
@@ -96,13 +86,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-# 2. Copy binaries from builder stage
 COPY --from=binary-builder /extracted/bin/bun /usr/local/bin/bun
 COPY --from=binary-builder /extracted/bin/bunx /usr/local/bin/bunx
 COPY --from=binary-builder /extracted/bin/uv /usr/local/bin/uv
 COPY --from=binary-builder /extracted/bin/uvx /usr/local/bin/uvx
 
-# 3. Create sandbox non-root user and directories
 ARG USERNAME=sandbox
 ARG USER_UID=1000
 ARG USER_GID=1000
@@ -112,7 +100,6 @@ RUN groupadd --gid ${USER_GID} ${USERNAME} \
     && mkdir -p /workspace /home/${USERNAME}/.cache /home/${USERNAME}/.npm /home/${USERNAME}/.bun \
     && chown -R ${USERNAME}:${USERNAME} /workspace /home/${USERNAME}
 
-# 4. Configure Git identity for deterministic commits inside sandboxes
 USER ${USERNAME}
 WORKDIR /home/${USERNAME}
 
@@ -121,13 +108,11 @@ RUN git config --global user.name "Skill Benchmark Sandbox" \
     && git config --global init.defaultBranch main \
     && git config --global advice.detachedHead false
 
-# 5. Environment configuration
 ENV USER=${USERNAME}
 ENV HOME=/home/${USERNAME}
 ENV WORKSPACE=/workspace
 ENV PATH=/home/${USERNAME}/.local/bin:/usr/local/bin:/usr/bin:/bin
 
-# 6. Copy environment verification script and execution wrapper
 USER root
 COPY --chmod=0755 verify-env.sh /usr/local/bin/verify-env.sh
 COPY --chmod=0755 exec-wrapper.sh /usr/local/bin/exec-wrapper.sh
@@ -135,5 +120,4 @@ USER ${USERNAME}
 
 WORKDIR /workspace
 
-# Keep container idle and responsive for incoming exec invocations
 CMD ["sleep", "infinity"]

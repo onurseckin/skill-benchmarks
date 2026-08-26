@@ -1,28 +1,28 @@
-# Installation
+# Installation and First Run
 
-[Usage guide](../README.md) | [Configuration](configuration.md)
+[Usage guide](../README.md) | [Next: configuration](configuration.md)
 
 ## Prerequisite
 
-Install a current [Bun](https://bun.sh) runtime. The documented fake-first workflow does not require Docker or provider credentials.
+Install Bun. Docker and provider credentials are not required for the fake-first consumer workflow.
 
-## Install dependencies
+## Install the checkout
 
 ```bash
 git clone https://github.com/onurseckin/skill-benchmarks.git
 cd skill-benchmarks
-bun install
+bun install --frozen-lockfile
 ```
 
-## Verify the checkout
+## Inspect the catalog
 
 ```bash
-bun run typecheck
-bun run src/scripts/quality-gate.ts
 bun run cli -- list all
 ```
 
-## Run the first local benchmark
+`list` shows the checked-in scenarios and skills. It does not list models or emit JSON.
+
+## Run the deterministic trajectory
 
 ```bash
 bun run cli -- run \
@@ -33,4 +33,13 @@ bun run cli -- run \
   --output-dir .benchmarks
 ```
 
-This command uses the deterministic fake provider and performs no provider request. It produces a `COMPLETE` execution record. See [single benchmark](../running-benchmarks/single-trial.md) for the artifact paths and [configuration](configuration.md) before selecting live mode.
+The public checkout entry point is `bun run cli --`. This run removes the need for provider credentials, makes no provider request, and writes only beneath `.benchmarks/`. `COMPLETE` means the execution ended successfully; the fake record remains simulated, ineligible, and not evaluated.
+
+## Inspect the generated paths
+
+```bash
+find .benchmarks/runs -maxdepth 2 -type f
+find .benchmarks/sweeps -maxdepth 2 -type f
+```
+
+Continue with [configuration](configuration.md), then [run a single trajectory](../running-benchmarks/single-trial.md).

@@ -1,71 +1,108 @@
 # CLI Command Reference
 
-[Configuration](../getting-started/configuration.md) | [Single trial](../running-benchmarks/single-trial.md)
+[Usage guide](../README.md) | [Configuration](../getting-started/configuration.md) | [Command discovery](interactive-shell.md)
 
-Use the installed package entry point:
+Use the public checkout entry point:
 
 ```bash
 bun run cli -- <command> [options]
 ```
 
-The public commands are `run`, `arena`, `tournament`, `report`, `list`, `replay`, `help`, and `version`. Unknown commands, flags, targets, duplicate scalar options, malformed values, and command-inapplicable options exit nonzero before command execution.
+Unknown commands, flags, targets, duplicate scalar options, malformed values, and command-inapplicable options exit nonzero before command execution. Array options may repeat and merge only when every normalized value remains unique.
+
+## On this page
+
+- [`run`](#run)
+- [`arena`](#arena)
+- [`tournament`](#tournament)
+- [`report`](#report)
+- [`list`](#list)
+- [`replay`](#replay)
+- [Help and version](#help-and-version)
 
 ## `run`
 
-`run` executes an admitted matrix of scenarios, substantive skills, models, and repetitions. Fake execution is the default.
-
-```bash
-bun run cli -- run \
-  --mock \
-  --scenario git-worktrees \
-  --skill tdd \
-  --model gpt-4o \
-  --output-dir .benchmarks
+```text
+skill-benchmarks run [options] [scenario-ids...]
 ```
 
-| Option | Meaning |
-| --- | --- |
-| `-s`, `--scenario <ids>` | Scenario ID or comma-separated unique IDs |
-| `-k`, `--skill <ids>` | Skill ID or comma-separated unique IDs |
-| `-m`, `--model <ids>` | Model ID or comma-separated unique IDs |
-| `-p`, `--provider <id>` | Exact model provider |
-| `-c`, `--category <name>` | Scenario category |
-| `-j`, `--concurrency <n>` | Positive integer parallelism |
-| `-r`, `--repetitions <n>` | Positive integer repetitions |
-| `--temperature <number>` | Finite model temperature |
-| `--thinking <level>` | `none`, `low`, `medium`, `high`, or `max` |
-| `--reasoning <level>` | `low`, `medium`, or `high` |
-| `--thinking-budget <n>` | Nonnegative integer thinking budget |
-| `--matrix-thinking <levels>` | Comma-separated unique thinking levels |
-| `--timeout <seconds>` | Positive wall-clock limit with millisecond precision |
-| `--max-turns <n>` | Positive integer turn limit |
-| `--max-cost <usd>` | Nonnegative finite cost limit |
-| `--mock` | Deterministic fake execution |
-| `--live` | Provider-backed execution |
-| `--dry-run` | Plan the admitted matrix without cell execution |
-| `--output-dir <path>` | Runtime output root |
-| `--db <path>` | SQLite evidence database |
+`--skill` is required. Scenarios may be positional or selected with `--scenario`; the default is `git-worktrees`. The current default model is `claude-3-7-sonnet-20250219`. Fake execution is the default.
 
-Array selectors may repeat and merge when every normalized value remains unique. Scalar and boolean options may appear once. `--mock` and `--live` conflict.
+| Option                         | Constraint                                                                         |
+| ------------------------------ | ---------------------------------------------------------------------------------- |
+| `-s`, `--scenario <values>`    | Scenario ID or comma-separated unique IDs                                          |
+| `-k`, `--skill <values>`       | Required skill ID or comma-separated unique IDs                                    |
+| `-m`, `--model <values>`       | Model ID or comma-separated unique IDs                                             |
+| `-p`, `--provider <id>`        | `anthropic`, `openai`, `google`, `ollama`, or `custom`; must match selected models |
+| `-c`, `--category <name>`      | Select a category or constrain every explicit scenario                             |
+| `-j`, `--concurrency <number>` | Integer at least 1                                                                 |
+| `-r`, `--repetitions <number>` | Integer at least 1                                                                 |
+| `--temperature <number>`       | Finite number                                                                      |
+| `--thinking <value>`           | `none`, `low`, `medium`, `high`, or `max`                                          |
+| `--reasoning <value>`          | `low`, `medium`, or `high`                                                         |
+| `--thinking-budget <number>`   | Nonnegative integer                                                                |
+| `--matrix-thinking <values>`   | Unique thinking-level list                                                         |
+| `--timeout <seconds>`          | Positive value with millisecond precision                                          |
+| `--max-turns <number>`         | Integer at least 1                                                                 |
+| `--max-cost <usd>`             | Nonnegative finite value                                                           |
+| `--mock`                       | Select deterministic fake execution                                                |
+| `--live`                       | Select provider-backed execution                                                   |
+| `--dry-run`                    | Run the admitted matrix without provider cell execution                            |
+| `--output-dir <path>`          | Runtime output root                                                                |
+| `--db <path>`                  | SQLite evidence database                                                           |
+| `--help`                       | Show run grammar                                                                   |
+
+`--mock` and `--live` conflict. Dry-run records are still simulated diagnostic records and may create runtime artifacts.
+
+```bash
+bun run cli -- run --mock --scenario git-worktrees --skill tdd --model gpt-4o
+```
 
 ## `arena`
 
-`arena` requires one scenario, one skill, and exactly two distinct models in `--arena`. It emits only planned or unranked diagnostic facts.
+Arena requires exactly one scenario, exactly one skill, and exactly two distinct models in `--arena`.
+
+| Option                | Constraint                                                           |
+| --------------------- | -------------------------------------------------------------------- |
+| `--scenario <values>` | Exactly one scenario                                                 |
+| `--skill <values>`    | Exactly one skill                                                    |
+| `--arena <values>`    | Exactly two distinct models                                          |
+| `--dry-run`           | Emit a planned, unranked pairing                                     |
+| `--mock`              | Run both fake candidates; result remains simulated and unranked      |
+| `--live`              | Unavailable comparison mode; fails closed before candidate execution |
+| `--output-dir <path>` | Diagnostic runtime root                                              |
+| `--output <path>`     | Diagnostic JSON output                                               |
+| `--help`              | Show arena grammar                                                   |
 
 ```bash
 bun run cli -- arena \
   --dry-run \
   --scenario git-worktrees \
   --skill tdd \
-  --arena gpt-4o,claude-3-7-sonnet-20250219 \
-  --output arena-plan.json
+  --arena gpt-4o,claude-3-7-sonnet-20250219
 ```
 
-The retained controls are `--scenario`, `--skill`, `--arena`, `--dry-run`, `--mock`, `--live`, `--output-dir`, and `--output`.
+Arena does not produce a winner, rating, or ranking.
 
 ## `tournament`
 
-`tournament` requires at least one scenario, one skill, and at least two distinct models. It emits planned or unranked diagnostic schedules.
+Tournament requires one or more scenarios, exactly one skill, and at least two distinct models.
+
+| Option                     | Constraint                                                           |
+| -------------------------- | -------------------------------------------------------------------- |
+| `--scenario <values>`      | One or more unique scenarios                                         |
+| `--skill <values>`         | Exactly one skill                                                    |
+| `--model <values>`         | At least two distinct models                                         |
+| `--tournament-mode <mode>` | `round-robin` or `swiss`                                             |
+| `--rounds <number>`        | Positive integer within the selected mode's derived limit            |
+| `--dry-run`                | Emit a planned, unranked schedule                                    |
+| `--mock`                   | Run fake pairings; result remains simulated and unranked             |
+| `--live`                   | Unavailable comparison mode; fails closed before candidate execution |
+| `--output-dir <path>`      | Diagnostic runtime root                                              |
+| `--output <path>`          | Diagnostic JSON output                                               |
+| `--help`                   | Show tournament grammar                                              |
+
+The default mode is round-robin for six or fewer models and Swiss for more than six. A Swiss plan materializes round one and identifies later round numbers as unplanned; it is not a completed Swiss competition.
 
 ```bash
 bun run cli -- tournament \
@@ -76,40 +113,69 @@ bun run cli -- tournament \
   --tournament-mode round-robin
 ```
 
-The retained controls are `--scenario`, `--skill`, `--model`, `--tournament-mode`, `--rounds`, `--dry-run`, `--mock`, `--live`, `--output-dir`, and `--output`.
-
 ## `report`
 
-`report` requires an existing SQLite database and reads it without creating a missing file.
+`report` requires an existing file supplied with `--db`. A missing database is rejected without creating it.
 
-```bash
-bun run cli -- report \
-  --db .benchmarks/db/benchmarks.sqlite \
-  --format markdown \
-  --output .benchmarks/exports/leaderboard.md
-```
+| Option                         | Constraint                                                          |
+| ------------------------------ | ------------------------------------------------------------------- |
+| `--db <path>`                  | Required existing SQLite database                                   |
+| `--format <format>`            | `console`, `json`, `markdown`, or `html`; default `console`         |
+| `--output <path>`              | Required for Markdown/HTML; optional for JSON; rejected for console |
+| `--scenario <values>`          | Scenario filters                                                    |
+| `--category <values>`          | Category filters                                                    |
+| `--skill <values>`             | Skill filters                                                       |
+| `--model <values>`             | Model filters                                                       |
+| `--provider <values>`          | Provider filters                                                    |
+| `--status <values>`            | `completed`, `failed`, `timed_out`, `aborted`                       |
+| `--execution-mode <values>`    | `fake` or `live`                                                    |
+| `--simulated <value>`          | `true` or `false`                                                   |
+| `--authority <value>`          | `eligible` or `diagnostic`                                          |
+| `--cohort <values>`            | `eligible`, `validation`, or `operational`                          |
+| `--eligibility <values>`       | `eligible`, `ineligible`, or `unknown`                              |
+| `--evaluation-status <values>` | `not_requested`, `not_evaluated`, `evaluated`, or `invalid`         |
+| `--evidence-status <values>`   | `unavailable`, `collecting`, `complete`, or `invalid`               |
+| `--from-date <timestamp>`      | Inclusive parseable timestamp                                       |
+| `--to-date <timestamp>`        | Inclusive parseable timestamp, not before `--from-date`             |
+| `--title <text>`               | HTML report title                                                   |
+| `--include-cost`               | Include verified eligible cost facts only                           |
+| `--export-card <format>`       | `svg` or `html`                                                     |
+| `--card-output <path>`         | Required with `--export-card`                                       |
+| `--help`                       | Show report grammar                                                 |
 
-`--format` accepts `console`, `json`, `markdown`, or `html`. JSON without `--output` writes exactly one JSON document to stdout. JSON with an output path leaves stdout empty. Markdown and HTML require `--output`; console rejects it.
+JSON without `--output` writes exactly one JSON document to stdout. JSON with an output path leaves stdout empty. Markdown and HTML require an output path. Console rejects one.
 
-Query filters are `--scenario`, `--category`, `--skill`, `--model`, `--provider`, `--status`, `--execution-mode`, `--simulated`, `--authority`, `--cohort`, `--eligibility`, `--evaluation-status`, `--evidence-status`, `--from-date`, and `--to-date`. Evidence-backed cost facts use `--include-cost`. A report card requires both `--export-card <svg|html>` and `--card-output <path>`.
+A report card additionally requires one exact skill filter and exactly one eligible skill cohort. It fails against fake-only diagnostic evidence.
 
 ## `list`
 
-`list` accepts one optional target: `scenarios`, `skills`, or `all`. It defaults to `all` and has no filter or machine-format flags.
-
-```bash
-bun run cli -- list scenarios
+```text
+skill-benchmarks list [scenarios|skills|all]
 ```
+
+The optional target defaults to `all`. The only command option is `--help`. There are no model, filter, or JSON options.
 
 ## `replay`
 
-`replay` reads persisted evidence from either one direct JSONL/JSON target or a canonical `--run-id` with `--db` and `--output-dir`.
+Choose exactly one source form:
 
-```bash
-bun run cli -- replay .benchmarks/runs/<run-id>/events.jsonl --format json
-```
+1. One direct positional `.jsonl` or `.json` target, or the equivalent `--target <path>`.
+2. One canonical `--run-id` together with `--db` and `--output-dir`.
 
-`--format` accepts `tui`, `json`, or `html`. JSON writes one document to stdout unless `--output` is supplied. HTML requires `--output`. TUI requires an interactive terminal, rejects output files, and alone accepts `--speed` from `0.1` through `20`.
+Do not mix direct and canonical source forms. A direct source validates its own persisted content but does not establish database, manifest, and result identity.
+
+| Option                | Constraint                                             |
+| --------------------- | ------------------------------------------------------ |
+| `--target <path>`     | Direct `.jsonl` or replay `.json` source               |
+| `--run-id <id>`       | Canonical persisted run ID                             |
+| `--db <path>`         | Existing canonical database                            |
+| `--output-dir <path>` | Canonical runtime root                                 |
+| `--format <format>`   | `tui`, `json`, or `html`; default `tui`                |
+| `--output <path>`     | Optional for JSON, required for HTML, rejected for TUI |
+| `--speed <number>`    | TUI only, from 0.1 through 20                          |
+| `--help`              | Show replay grammar                                    |
+
+TUI requires an interactive terminal. JSON writes one document to stdout unless `--output` is supplied. HTML requires `--output`. An output path must not collide with the direct source or canonical events, manifest, result, or database paths.
 
 ## Help and version
 
@@ -118,10 +184,9 @@ bun run cli -- --help
 bun run cli -- help replay
 bun run cli -- replay --help
 bun run cli -- --version
+bun run cli -- version
 ```
 
-Global help and version output are deterministic plain text. Public errors have stable safe diagnostic codes on stderr and never print raw exception details.
+`help` accepts one optional command name from the public command set. `version` accepts no command option. Do not use `help --help` or `version --help`.
 
-## Runtime output
-
-`run` creates `db/`, `runs/`, and `sweeps/` below its output root. `exports/` contains only requested derived outputs. Fake and dry-run records remain simulated and unevaluated unless complete eligible evaluation evidence exists.
+Public errors use stable safe diagnostic codes on stderr. When output is piped, normal command output contains no terminal escape sequences.

@@ -1,10 +1,10 @@
-# CLI Interaction
+# Command Discovery and Piped Output
 
-[Command reference](commands.md) | [Single benchmark](../running-benchmarks/single-trial.md)
+[Usage guide](../README.md) | [CLI reference](commands.md) | [Next: reports](../reports/generating-reports.md)
 
-The current package exposes a command-oriented CLI. It does not provide an interactive scenario selector or an in-place benchmark control shell.
+The package exposes a command-oriented CLI. It has no interactive scenario selector or benchmark control shell.
 
-## Discover commands
+## Discover grammar
 
 ```bash
 bun run cli -- --help
@@ -12,17 +12,9 @@ bun run cli -- help run
 bun run cli -- run --help
 ```
 
-The run help lists the fake/live mode controls and the output root:
+Use command help as the executable grammar. The long-form [CLI reference](commands.md) adds constraints and examples.
 
-```text
---mock
---live
---output-dir <path>
-```
-
-## Follow execution in the terminal
-
-Use the benchmark command directly. It emits a start banner, one terminal status per cell, and a completion summary.
+## Read execution output
 
 ```bash
 bun run cli -- run \
@@ -33,4 +25,20 @@ bun run cli -- run \
   --output-dir .benchmarks
 ```
 
-`COMPLETE` signals that a cell's execution reached a successful terminal state. `PASS` requires evaluation evidence. For the recorded run identity, status, and aggregate values, inspect `.benchmarks/runs/<run-id>/manifest.json` and `result.json`.
+The run command prints one terminal status per cell and one sweep summary. `COMPLETE` describes execution lifecycle only. Inspect `manifest.json`, `result.json`, and the database for persisted provenance.
+
+## Pipe machine-readable output
+
+```bash
+bun run cli -- report \
+  --db .benchmarks/db/benchmarks.sqlite \
+  --format json > .benchmarks/exports/report.json
+
+bun run cli -- replay \
+  --run-id <run-id> \
+  --db .benchmarks/db/benchmarks.sqlite \
+  --output-dir .benchmarks \
+  --format json > .benchmarks/exports/replay.json
+```
+
+JSON stdout is one document and contains no terminal escape sequences. Errors are written to stderr and return nonzero. TUI replay is rejected when stdout is not an interactive terminal.

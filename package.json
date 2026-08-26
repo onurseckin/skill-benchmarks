@@ -2,7 +2,6 @@
   "name": "skill-benchmarks",
   "version": "0.1.0",
   "description": "Deterministic, high-throughput LLM agent skill benchmarking and evaluation harness",
-  "type": "module",
   "bin": {
     "skill-benchmarks": "bin/skill-benchmarks"
   },
@@ -15,13 +14,17 @@
     "docs/architecture/",
     "README.md"
   ],
+  "type": "module",
   "scripts": {
-    "test": "bun run typecheck",
+    "test": "bun run typecheck && bun run src/scripts/operator-contract-smoke.ts",
     "typecheck": "tsc --noEmit && bun src/scripts/quality-gate.ts",
     "gc:containers": "bun run src/infrastructure/container/gc.ts",
     "sync:skills": "bun run src/scripts/sync-skills.ts",
     "verify:ci-diagnostic": "bun run src/scripts/verify-ci-diagnostic.ts",
     "cli": "bun run bin/skill-benchmarks"
+  },
+  "dependencies": {
+    "oxc-parser": "^0.147.0"
   },
   "devDependencies": {
     "@types/node": "^26.3.0",
@@ -30,8 +33,5 @@
     "oxlint": "^1.80.0",
     "oxlint-tsgolint": "^7.0.2001",
     "typescript": "^7.0.2"
-  },
-  "dependencies": {
-    "oxc-parser": "^0.147.0"
   }
 }
