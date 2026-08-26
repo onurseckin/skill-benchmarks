@@ -7,6 +7,9 @@ import {
 import { verifyNoKeySubprocess } from "./operator-contract/environment.js";
 import { withIsolatedCase } from "./operator-contract/fixture.js";
 import { verifyReplayRoundTrip, verifyReportCohorts } from "./operator-contract/replay-report.js";
+import { verifyRuntimeCancellationAndPermits } from "./operator-contract/runtime-lifecycle.js";
+import { verifyProviderRuntimeLifecycle } from "./operator-contract/runtime-providers.js";
+import { verifyCellPermitFinalization } from "./operator-contract/runtime-cell-permits.js";
 import { verifySelectorAdmission } from "./operator-contract/selectors.js";
 import { verifyLocalServer } from "./operator-contract/server.js";
 import { verifyScenarioCatalog, verifyStaticBoundary } from "./operator-contract/static-catalog.js";
@@ -27,6 +30,9 @@ const cases: readonly OperatorCase[] = [
   { name: "catalog", execute: () => verifyScenarioCatalog() },
   { name: "selectors", execute: verifySelectorAdmission },
   { name: "fake-run", execute: verifyNoKeyFakeRun },
+  { name: "runtime-providers", execute: () => verifyProviderRuntimeLifecycle() },
+  { name: "runtime-lifecycle", execute: verifyRuntimeCancellationAndPermits },
+  { name: "runtime-cell-permits", execute: verifyCellPermitFinalization },
   { name: "artifacts", execute: verifyArtifactReconciliation },
   { name: "cli-invalid", execute: verifyInvalidCli },
   { name: "cli-piped", execute: verifyPipedCliOutput },

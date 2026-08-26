@@ -9,6 +9,7 @@ import type { IContainerPoolManager } from "../infrastructure/container/types.js
 import type { RunRecord } from "../reporting/types.js";
 import type { BenchmarkRuntimeConfig } from "../shared/benchmark-runtime-config.js";
 import type { ExecutionMode } from "../shared/execution-mode.js";
+import type { ProviderTurnPermit } from "../shared/provider-turn-permit.js";
 
 export type SweepExecutionStatus =
   | "pending"
@@ -242,14 +243,13 @@ export interface MatrixSweepSummary {
 export interface ITokenBucketRateLimiter {
   readonly providerId: string;
   readonly modelId?: string;
-  acquire(estimatedTokens: number, signal?: AbortSignal): Promise<void>;
-  recordConsumption(actualTokens: number): void;
-  reportRateLimitViolation(retryAfterMs?: number): Promise<void>;
+  acquire(estimatedTokens: number, signal?: AbortSignal): Promise<ProviderTurnPermit>;
   getStatus(): {
     readonly availableTokens: number;
     readonly availableRequests: number;
     readonly isThrottled: boolean;
     readonly queueDepth: number;
+    readonly activePermits: number;
   };
 }
 

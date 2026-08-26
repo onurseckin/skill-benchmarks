@@ -6,6 +6,7 @@ import {
   type OpenAIChatMessage,
   type OpenAIResponsePayload,
 } from "./openai-protocol.js";
+import { executeProviderRequest } from "./transport/request-executor.js";
 import {
   AgentMessage,
   CompletionChunk,
@@ -14,13 +15,27 @@ import {
   LLMProviderAdapter,
   ModelTurnResponse,
   ProviderConfig,
-  ProviderError,
   ProviderId,
   TokenUsage,
   ToolCallDelta,
   ToolCallRequest,
   ToolDefinition,
 } from "./types";
+
+function parseOpenAIResponseError(
+  providerId: ProviderId,
+  response: Response,
+  rawText: string,
+) {
+  let errorMessage = `OpenAI API error ${response.status}`;
+  try {
+    const parsed = JSON.parse(rawText) as { readonly error?: { readonly message?: string } };
+    if (parsed.error?.message !== undefined) errorMessage = parsed.error.message;
+  } catch {
+    if (rawText.length > 0) errorMessage = rawText;
+  }
+  return parseOpenAIError(response.status, errorMessage, rawText, providerId);
+}
 
 export class OpenAIProviderAdapter implements LLMProviderAdapter {
   public readonly providerId: ProviderId;
@@ -163,29 +178,18 @@ export class OpenAIProviderAdapter implements LLMProviderAdapter {
     options: GenerateOptions,
   ): AsyncIterable<CompletionChunk> {
     const { url, headers, body } = this.buildPayload(messages, tools, options, true);
-    let response: Response;
-    try {
-      response = await fetch(url, { method: "POST", headers, body, signal: options.signal });
-    } catch (err: unknown) {
-      throw new ProviderError(
-        `OpenAI network failure: ${err instanceof Error ? err.message : String(err)}`,
-        this.providerId,
-        { cause: err, isRetryable: true },
-      );
-    }
-
-    if (!response.ok) {
-      const rawText = await response.text().catch(() => "");
-      let errMsg = `OpenAI API error ${response.status}`;
-      try {
-        const parsed = JSON.parse(rawText) as { readonly error?: { readonly message?: string } };
-        if (parsed.error !== undefined && parsed.error.message !== undefined)
-          errMsg = parsed.error.message;
-      } catch {
-        if (rawText.length > 0) errMsg = rawText;
-      }
-      throw parseOpenAIError(response.status, errMsg, rawText, this.providerId);
-    }
+    const response = await executeProviderRequest({
+      providerId: this.providerId,
+      url,
+      headers,
+      body,
+      timeoutMs: this.config.timeoutMs ?? 60_000,
+      maxRetries: this.config.maxRetries ?? 2,
+      responseMode: "stream",
+      callerSignal: options.signal,
+      parseError: (failedResponse, rawText) =>
+        parseOpenAIResponseError(this.providerId, failedResponse, rawText),
+    });
 
     if (response.body === null) return;
     const reader = response.body.getReader();
@@ -250,30 +254,19 @@ export class OpenAIProviderAdapter implements LLMProviderAdapter {
   ): Promise<ModelTurnResponse> {
     const startTime = Date.now();
     const { url, headers, body } = this.buildPayload(messages, tools, options, false);
-    let response: Response;
-    try {
-      response = await fetch(url, { method: "POST", headers, body, signal: options.signal });
-    } catch (err: unknown) {
-      throw new ProviderError(
-        `OpenAI network failure: ${err instanceof Error ? err.message : String(err)}`,
-        this.providerId,
-        { cause: err, isRetryable: true },
-      );
-    }
-
+    const response = await executeProviderRequest({
+      providerId: this.providerId,
+      url,
+      headers,
+      body,
+      timeoutMs: this.config.timeoutMs ?? 60_000,
+      maxRetries: this.config.maxRetries ?? 2,
+      responseMode: "buffered",
+      callerSignal: options.signal,
+      parseError: (failedResponse, rawText) =>
+        parseOpenAIResponseError(this.providerId, failedResponse, rawText),
+    });
     const duration = Date.now() - startTime;
-    if (!response.ok) {
-      const rawText = await response.text().catch(() => "");
-      let errMsg = `OpenAI API error ${response.status}`;
-      try {
-        const parsed = JSON.parse(rawText) as { readonly error?: { readonly message?: string } };
-        if (parsed.error !== undefined && parsed.error.message !== undefined)
-          errMsg = parsed.error.message;
-      } catch {
-        if (rawText.length > 0) errMsg = rawText;
-      }
-      throw parseOpenAIError(response.status, errMsg, rawText, this.providerId);
-    }
 
     const payload = (await response.json()) as OpenAIResponsePayload;
     let fullText = "";

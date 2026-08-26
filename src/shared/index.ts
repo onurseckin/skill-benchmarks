@@ -10,6 +10,29 @@ export type {
 } from "./benchmark-runtime-config.js";
 
 export {
+  createCancellationScope,
+  ExecutionAbortedError,
+  ExecutionTimeoutError,
+  raceWithCancellation,
+  resolveAbortReason,
+  waitForRetry,
+} from "./cancellation.js";
+
+export type {
+  CancellationScope,
+  CancellationScopeOptions,
+  ExecutionScope,
+} from "./cancellation.js";
+
+export { createProviderTurnPermit } from "./provider-turn-permit.js";
+
+export type {
+  ProviderTurnOutcome,
+  ProviderTurnPermit,
+  ProviderTurnPermitFinalizer,
+} from "./provider-turn-permit.js";
+
+export {
   BenchmarkArtifactTextStreamSanitizer,
   BenchmarkArtifactValueStreamSanitizer,
   createSafeArtifactPathSegment,

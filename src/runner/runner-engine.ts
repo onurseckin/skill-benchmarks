@@ -1,20 +1,25 @@
+import { EventScribe, createTelemetryEvent } from "../infrastructure/telemetry/event-scribe.js";
+import { resolveArtifactPaths } from "../infrastructure/workspace/storage.js";
+import {
+  createCancellationScope,
+  ExecutionAbortedError,
+  ExecutionTimeoutError,
+  type CancellationScope,
+} from "../shared/cancellation.js";
+import { AgentContextManager } from "./context-manager.js";
+import { StandardToolDispatcher } from "./tool-dispatcher.js";
+import { executeProviderTurn } from "./turn-provider-execution.js";
 import type {
   AgentToolContext,
   GenerateOptions,
-  ModelTurnResponse,
   RunTerminationReason,
   ScenarioResult,
   ScenarioRunConfig,
   StreamCollector,
   TokenUsage,
-  ToolCallRequest,
   ToolExecutionRecord,
   TurnTelemetry,
 } from "./types.js";
-import { AgentContextManager } from "./context-manager.js";
-import { StandardToolDispatcher } from "./tool-dispatcher.js";
-import { EventScribe, createTelemetryEvent } from "../infrastructure/telemetry/event-scribe.js";
-import { resolveArtifactPaths } from "../infrastructure/workspace/storage.js";
 
 export { createTelemetryEvent };
 
@@ -33,17 +38,33 @@ export class ScenarioRunnerEngine {
     config: ScenarioRunConfig,
     collector?: StreamCollector,
   ): Promise<ScenarioResult> {
+    const scenarioScope = createCancellationScope({
+      scope: "scenario",
+      callerSignal: config.signal,
+      timeoutMs: config.limits.maxWallClockTimeMs,
+    });
+    try {
+      return await this.runWithinScenario(config, scenarioScope, collector);
+    } finally {
+      scenarioScope.dispose();
+    }
+  }
+
+  private async runWithinScenario(
+    config: ScenarioRunConfig,
+    scenarioScope: CancellationScope,
+    collector?: StreamCollector,
+  ): Promise<ScenarioResult> {
     const startedAt = new Date().toISOString();
     const startTimeMs = performance.now();
     const basePath =
-      config.artifactOutputDir ?? config.workspace?.rootPath ?? ".benchmarks/runs/" + config.runId;
+      config.artifactOutputDir ?? config.workspace?.rootPath ?? `.benchmarks/runs/${config.runId}`;
     const artifactPaths = resolveArtifactPaths(basePath);
     const scribe = new EventScribe({
       runId: config.runId,
       outputDir: artifactPaths.runDir,
       artifactLayout: config.artifactLayout,
     });
-
     scribe.emit("run:start", {
       runId: config.runId,
       scenarioId: config.scenarioId,
@@ -59,13 +80,7 @@ export class ScenarioRunnerEngine {
     let turnIndex = 0;
     const turnHistory: TurnTelemetry[] = [];
     const toolHistory: ToolExecutionRecord[] = [];
-    let totalUsage: TokenUsage = {
-      inputTokens: 0,
-      outputTokens: 0,
-      cacheCreationInputTokens: 0,
-      cacheReadInputTokens: 0,
-      totalTokens: 0,
-    };
+    let totalUsage = createEmptyUsage();
     let totalCostUSD = 0;
     let consecutiveToolErrors = 0;
     let terminationReason: RunTerminationReason = "success";
@@ -73,8 +88,10 @@ export class ScenarioRunnerEngine {
     let errorMessage: string | undefined;
 
     while (turnIndex < config.limits.maxTurns) {
-      if (performance.now() - startTimeMs > config.limits.maxWallClockTimeMs) {
-        terminationReason = "timeout";
+      const preflightFailure = captureCancellationFailure(scenarioScope);
+      if (preflightFailure !== undefined) {
+        terminationReason = preflightFailure.reason;
+        errorMessage = preflightFailure.message;
         break;
       }
       if (totalCostUSD >= config.limits.maxCostUSD) {
@@ -86,219 +103,136 @@ export class ScenarioRunnerEngine {
         break;
       }
 
+      const remainingScenarioMs = Math.max(
+        0,
+        (scenarioScope.deadlineAtMs ?? Date.now()) - Date.now(),
+      );
+      const turnScope = createCancellationScope({
+        scope: "turn",
+        callerSignal: scenarioScope.signal,
+        timeoutMs: Math.min(
+          remainingScenarioMs,
+          config.limits.turnTimeoutMs ?? remainingScenarioMs,
+        ),
+      });
       scribe.emit("turn:start", {
         turnIndex,
         messageCount: contextManager.getMessageCount(),
       });
 
-      const messages = contextManager.getMessages();
-      const tools = this.defaultToolDispatcher.getToolDefinitions();
-      const options: GenerateOptions = {
-        temperature: config.temperature ?? 0.0,
-        thinkingEffortLevel: config.thinkingLevel,
-        thinkingBudgetTokens: config.thinkingBudget,
-        reasoningEffort: config.reasoningEffort,
-      };
-
-      let turnResponse: ModelTurnResponse;
-      const turnStartTimeMs = performance.now();
-
-      try {
-        if (
-          collector?.onToken !== undefined &&
-          typeof config.provider.generateStream === "function"
-        ) {
-          let accumulatedText = "";
-          const toolCallMap = new Map<number, { id: string; name: string; argsText: string }>();
-          let finishReason: ModelTurnResponse["finishReason"] = "stop";
-          let streamUsage: TokenUsage = {
-            inputTokens: 0,
-            outputTokens: 0,
-            cacheCreationInputTokens: 0,
-            cacheReadInputTokens: 0,
-            totalTokens: 0,
-          };
-          let firstTokenTimeMs = 0;
-
-          for await (const chunk of config.provider.generateStream(messages, tools, options)) {
-            if (chunk.textDelta !== undefined && chunk.textDelta.length > 0) {
-              if (firstTokenTimeMs === 0) firstTokenTimeMs = performance.now() - turnStartTimeMs;
-              accumulatedText += chunk.textDelta;
-              collector.onToken(chunk.textDelta);
-            }
-            if (chunk.toolCallDeltas !== undefined) {
-              for (const delta of chunk.toolCallDeltas) {
-                const existing = toolCallMap.get(delta.index) ?? {
-                  id: delta.id ?? `call_${delta.index}`,
-                  name: delta.name ?? "",
-                  argsText: "",
-                };
-                if (delta.id !== undefined && delta.id.length > 0) existing.id = delta.id;
-                if (delta.name !== undefined && delta.name.length > 0) existing.name = delta.name;
-                if (delta.argumentsDelta !== undefined) existing.argsText += delta.argumentsDelta;
-                toolCallMap.set(delta.index, existing);
-              }
-            }
-            if (chunk.finishReason !== undefined) finishReason = chunk.finishReason;
-            if (chunk.usage !== undefined) streamUsage = chunk.usage;
-          }
-
-          const toolCalls: ToolCallRequest[] = [];
-          for (const [, tc] of toolCallMap) {
-            let parsedArgs: Record<string, unknown> = {};
-            try {
-              if (tc.argsText.trim().length > 0)
-                parsedArgs = JSON.parse(tc.argsText) as Record<string, unknown>;
-            } catch {
-              parsedArgs = {};
-            }
-            toolCalls.push({
-              id: tc.id,
-              name: tc.name,
-              arguments: parsedArgs,
-              rawArguments: tc.argsText,
-            });
-          }
-
-          const totalTurnDurationMs = performance.now() - turnStartTimeMs;
-          turnResponse = {
-            text: accumulatedText,
-            toolCalls,
-            finishReason,
-            usage: streamUsage,
-            timeToFirstTokenMs: firstTokenTimeMs > 0 ? firstTokenTimeMs : totalTurnDurationMs,
-            totalTurnDurationMs,
-          };
-        } else {
-          turnResponse = await config.provider.generateTurn(messages, tools, options);
-          if (collector?.onToken !== undefined && turnResponse.text.length > 0) {
-            collector.onToken(turnResponse.text);
-          }
-        }
-      } catch (error) {
-        const errorText = error instanceof Error ? error.message : String(error);
-        errorMessage = errorText;
-        terminationReason = "error";
-        scribe.emit("turn:error", { turnIndex, error: errorText });
-        break;
-      }
-
-      const turnCostUSD = config.provider.calculateCostUSD(turnResponse.usage);
-      totalCostUSD += turnCostUSD;
-      totalUsage = {
-        inputTokens: totalUsage.inputTokens + turnResponse.usage.inputTokens,
-        outputTokens: totalUsage.outputTokens + turnResponse.usage.outputTokens,
-        cacheCreationInputTokens:
-          totalUsage.cacheCreationInputTokens + turnResponse.usage.cacheCreationInputTokens,
-        cacheReadInputTokens:
-          totalUsage.cacheReadInputTokens + turnResponse.usage.cacheReadInputTokens,
-        totalTokens: totalUsage.totalTokens + turnResponse.usage.totalTokens,
-      };
-
-      contextManager.addAssistantTurn(turnResponse.text, turnResponse.toolCalls);
-
-      let turnToolExecutionDurationMs = 0;
-      let turnToolErrorsCount = 0;
       let shouldStopOnToolFailure = false;
-
-      if (turnResponse.toolCalls.length > 0) {
-        const toolContext: AgentToolContext = {
-          workspace: config.workspace,
-          container: config.container,
-          runId: config.runId,
-          scenarioId: config.scenarioId,
+      try {
+        const options: GenerateOptions = {
+          temperature: config.temperature ?? 0,
+          thinkingEffortLevel: config.thinkingLevel,
+          thinkingBudgetTokens: config.thinkingBudget,
+          reasoningEffort: config.reasoningEffort,
+          signal: turnScope.signal,
         };
+        const turnResponse = await executeProviderTurn({
+          provider: config.provider,
+          messages: contextManager.getMessages(),
+          tools: this.defaultToolDispatcher.getToolDefinitions(),
+          options,
+          signal: turnScope.signal,
+          collector,
+        });
+        turnScope.throwIfAborted();
 
-        for (const toolCall of turnResponse.toolCalls) {
-          if (collector?.onToolStart !== undefined) {
-            collector.onToolStart(toolCall);
+        const turnCostUSD = config.provider.calculateCostUSD(turnResponse.usage);
+        totalCostUSD += turnCostUSD;
+        totalUsage = addUsage(totalUsage, turnResponse.usage);
+        contextManager.addAssistantTurn(turnResponse.text, turnResponse.toolCalls);
+
+        let toolExecutionDurationMs = 0;
+        let toolErrorsCount = 0;
+        if (turnResponse.toolCalls.length > 0) {
+          const toolContext: AgentToolContext = {
+            workspace: config.workspace,
+            container: config.container,
+            signal: turnScope.signal,
+            runId: config.runId,
+            scenarioId: config.scenarioId,
+          };
+          for (const toolCall of turnResponse.toolCalls) {
+            turnScope.throwIfAborted();
+            collector?.onToolStart?.(toolCall);
+            scribe.emit("tool:dispatch", {
+              turnIndex,
+              toolCallId: toolCall.id,
+              toolName: toolCall.name,
+              arguments: toolCall.arguments,
+            });
+            const record = await this.defaultToolDispatcher.dispatch(
+              toolCall,
+              toolContext,
+              config.limits,
+            );
+            turnScope.throwIfAborted();
+            toolHistory.push(record);
+            toolExecutionDurationMs += record.durationMs;
+            if (record.isError) toolErrorsCount += 1;
+            scribe.emit("tool:finish", {
+              turnIndex,
+              toolCallId: record.toolCallId,
+              toolName: record.toolName,
+              isError: record.isError,
+              durationMs: record.durationMs,
+              exitCode: record.exitCode,
+            });
+            collector?.onToolEnd?.(record);
+            contextManager.addToolResult(
+              record.toolCallId,
+              record.toolName,
+              record.output,
+              record.isError,
+            );
           }
-          scribe.emit("tool:dispatch", {
-            turnIndex,
-            toolCallId: toolCall.id,
-            toolName: toolCall.name,
-            arguments: toolCall.arguments,
-          });
-
-          const record = await this.defaultToolDispatcher.dispatch(
-            toolCall,
-            toolContext,
-            config.limits,
-          );
-          toolHistory.push(record);
-          turnToolExecutionDurationMs += record.durationMs;
-          if (record.isError) turnToolErrorsCount += 1;
-
-          scribe.emit("tool:finish", {
-            turnIndex,
-            toolCallId: record.toolCallId,
-            toolName: record.toolName,
-            isError: record.isError,
-            durationMs: record.durationMs,
-            exitCode: record.exitCode,
-          });
-
-          if (collector?.onToolEnd !== undefined) {
-            collector.onToolEnd(record);
+          consecutiveToolErrors =
+            toolErrorsCount === turnResponse.toolCalls.length ? consecutiveToolErrors + 1 : 0;
+          if (config.limits.stopOnToolFailures === true && toolErrorsCount > 0) {
+            terminationReason = "tool_error_loop";
+            shouldStopOnToolFailure = true;
           }
-
-          contextManager.addToolResult(
-            record.toolCallId,
-            record.toolName,
-            record.output,
-            record.isError,
-          );
-        }
-
-        if (turnToolErrorsCount === turnResponse.toolCalls.length) {
-          consecutiveToolErrors += 1;
         } else {
-          consecutiveToolErrors = 0;
+          finalOutput = turnResponse.text;
+          terminationReason = "success";
         }
 
-        if (config.limits.stopOnToolFailures === true && turnToolErrorsCount > 0) {
-          terminationReason = "tool_error_loop";
-          shouldStopOnToolFailure = true;
-        }
-      } else {
-        finalOutput = turnResponse.text;
-        terminationReason = "success";
-      }
-
-      const turnTelemetry: TurnTelemetry = {
-        turnIndex,
-        promptTokens: turnResponse.usage.inputTokens,
-        completionTokens: turnResponse.usage.outputTokens,
-        cacheReadTokens: turnResponse.usage.cacheReadInputTokens,
-        cacheWriteTokens: turnResponse.usage.cacheCreationInputTokens,
-        turnCostUSD,
-        timeToFirstTokenMs: turnResponse.timeToFirstTokenMs,
-        turnDurationMs: turnResponse.totalTurnDurationMs,
-        toolExecutionDurationMs: turnToolExecutionDurationMs,
-        toolCallsCount: turnResponse.toolCalls.length,
-        toolErrorsCount: turnToolErrorsCount,
-        finishReason: turnResponse.finishReason,
-      };
-
-      turnHistory.push(turnTelemetry);
-
-      scribe.emit("turn:finish", {
-        turnIndex,
-        turnCostUSD,
-        turnDurationMs: turnResponse.totalTurnDurationMs,
-        toolCallsCount: turnResponse.toolCalls.length,
-        toolErrorsCount: turnToolErrorsCount,
-        finishReason: turnResponse.finishReason,
-      });
-
-      if (collector?.onTurnComplete !== undefined) {
-        collector.onTurnComplete(turnTelemetry);
-      }
-
-      turnIndex += 1;
-
-      if (turnResponse.toolCalls.length === 0 || shouldStopOnToolFailure) {
+        const telemetry: TurnTelemetry = {
+          turnIndex,
+          promptTokens: turnResponse.usage.inputTokens,
+          completionTokens: turnResponse.usage.outputTokens,
+          cacheReadTokens: turnResponse.usage.cacheReadInputTokens,
+          cacheWriteTokens: turnResponse.usage.cacheCreationInputTokens,
+          turnCostUSD,
+          timeToFirstTokenMs: turnResponse.timeToFirstTokenMs,
+          turnDurationMs: turnResponse.totalTurnDurationMs,
+          toolExecutionDurationMs,
+          toolCallsCount: turnResponse.toolCalls.length,
+          toolErrorsCount,
+          finishReason: turnResponse.finishReason,
+        };
+        turnHistory.push(telemetry);
+        scribe.emit("turn:finish", {
+          turnIndex,
+          turnCostUSD,
+          turnDurationMs: turnResponse.totalTurnDurationMs,
+          toolCallsCount: turnResponse.toolCalls.length,
+          toolErrorsCount,
+          finishReason: turnResponse.finishReason,
+        });
+        collector?.onTurnComplete?.(telemetry);
+        turnIndex += 1;
+        if (turnResponse.toolCalls.length === 0 || shouldStopOnToolFailure) break;
+      } catch (error) {
+        const failure = classifyTurnFailure(error);
+        terminationReason = failure.reason;
+        errorMessage = failure.message;
+        scribe.emit("turn:error", { turnIndex, error: failure.message });
         break;
+      } finally {
+        turnScope.dispose();
       }
     }
 
@@ -309,11 +243,9 @@ export class ScenarioRunnerEngine {
     ) {
       terminationReason = "max_turns";
     }
-
     const totalDurationMs = performance.now() - startTimeMs;
     const finishedAt = new Date().toISOString();
     const completed = terminationReason === "success";
-
     scribe.emit("run:finish", {
       runId: config.runId,
       terminationReason,
@@ -322,10 +254,8 @@ export class ScenarioRunnerEngine {
       totalTurns: turnIndex,
       completed,
     });
-
     await scribe.close();
-
-    const result: ScenarioResult = {
+    return {
       runId: config.runId,
       scenarioId: config.scenarioId,
       skillIds: config.skillIds,
@@ -343,13 +273,55 @@ export class ScenarioRunnerEngine {
       finalOutput,
       totalDurationMs: Math.round(totalDurationMs * 100) / 100,
       totalTokens: totalUsage,
-      totalCostUSD: Math.round(totalCostUSD * 1000000) / 1000000,
+      totalCostUSD: Math.round(totalCostUSD * 1_000_000) / 1_000_000,
       consecutiveToolErrors,
       startedAt,
       finishedAt,
       errorMessage,
     };
-
-    return result;
   }
+}
+
+function createEmptyUsage(): TokenUsage {
+  return {
+    inputTokens: 0,
+    outputTokens: 0,
+    cacheCreationInputTokens: 0,
+    cacheReadInputTokens: 0,
+    totalTokens: 0,
+  };
+}
+
+function addUsage(total: TokenUsage, turn: TokenUsage): TokenUsage {
+  return {
+    inputTokens: total.inputTokens + turn.inputTokens,
+    outputTokens: total.outputTokens + turn.outputTokens,
+    cacheCreationInputTokens: total.cacheCreationInputTokens + turn.cacheCreationInputTokens,
+    cacheReadInputTokens: total.cacheReadInputTokens + turn.cacheReadInputTokens,
+    totalTokens: total.totalTokens + turn.totalTokens,
+  };
+}
+
+function captureCancellationFailure(scope: CancellationScope) {
+  try {
+    scope.throwIfAborted();
+    return undefined;
+  } catch (error) {
+    return classifyTurnFailure(error);
+  }
+}
+
+function classifyTurnFailure(error: unknown): {
+  readonly reason: RunTerminationReason;
+  readonly message: string;
+} {
+  const message = error instanceof Error ? error.message : String(error);
+  if (
+    error instanceof ExecutionTimeoutError ||
+    (error instanceof Error && error.name === "ProviderTimeoutError")
+  ) {
+    return { reason: "timeout", message };
+  }
+  if (error instanceof ExecutionAbortedError) return { reason: "aborted", message };
+  return { reason: "error", message };
 }

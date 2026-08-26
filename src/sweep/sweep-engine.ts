@@ -302,7 +302,7 @@ export class MatrixSweepEngine implements IMatrixSweepEngine {
               runnerEngine,
               telemetryDb,
               limiter,
-              aborted: () => this.abortController.signal.aborted,
+              signal: this.abortController.signal,
               planFingerprint,
             }),
           );
@@ -311,7 +311,7 @@ export class MatrixSweepEngine implements IMatrixSweepEngine {
           cells: allPlannedCells,
           config,
           maxGlobalConcurrency: config.concurrency?.maxGlobalConcurrency ?? 4,
-          isAborted: () => this.abortController.signal.aborted,
+          signal: this.abortController.signal,
           waitIfPaused: async () => {
             if (this.isPaused) await this.pausePromise;
           },

@@ -1,4 +1,5 @@
 import { calculateTokenCostUSD } from "./pricing";
+import { executeProviderRequest } from "./transport/request-executor.js";
 import {
   AgentMessage,
   AgentMessageContentPart,
@@ -30,6 +31,17 @@ interface GeminiPart {
     readonly name: string;
     readonly response: Readonly<Record<string, unknown>>;
   };
+}
+
+function parseGeminiResponseError(response: Response, rawText: string): ProviderError {
+  let errorMessage = `Gemini API error ${response.status}`;
+  try {
+    const parsed = JSON.parse(rawText) as { readonly error?: { readonly message?: string } };
+    if (parsed.error?.message !== undefined) errorMessage = parsed.error.message;
+  } catch {
+    if (rawText.length > 0) errorMessage = rawText;
+  }
+  return parseGeminiError(response.status, errorMessage, rawText);
 }
 
 interface GeminiContent {
@@ -217,29 +229,17 @@ export class GeminiProviderAdapter implements LLMProviderAdapter {
     options: GenerateOptions,
   ): AsyncIterable<CompletionChunk> {
     const { url, headers, body } = this.buildPayload(messages, tools, options, true);
-    let response: Response;
-    try {
-      response = await fetch(url, { method: "POST", headers, body, signal: options.signal });
-    } catch (err: unknown) {
-      throw new ProviderError(
-        `Gemini network failure: ${err instanceof Error ? err.message : String(err)}`,
-        "google",
-        { cause: err, isRetryable: true },
-      );
-    }
-
-    if (!response.ok) {
-      const rawText = await response.text().catch(() => "");
-      let errMsg = `Gemini API error ${response.status}`;
-      try {
-        const parsed = JSON.parse(rawText) as { readonly error?: { readonly message?: string } };
-        if (parsed.error !== undefined && parsed.error.message !== undefined)
-          errMsg = parsed.error.message;
-      } catch {
-        if (rawText.length > 0) errMsg = rawText;
-      }
-      throw parseGeminiError(response.status, errMsg, rawText);
-    }
+    const response = await executeProviderRequest({
+      providerId: "google",
+      url,
+      headers,
+      body,
+      timeoutMs: this.config.timeoutMs ?? 60_000,
+      maxRetries: this.config.maxRetries ?? 2,
+      responseMode: "stream",
+      callerSignal: options.signal,
+      parseError: parseGeminiResponseError,
+    });
 
     if (response.body === null) return;
     const reader = response.body.getReader();
@@ -293,30 +293,18 @@ export class GeminiProviderAdapter implements LLMProviderAdapter {
   ): Promise<ModelTurnResponse> {
     const startTime = Date.now();
     const { url, headers, body } = this.buildPayload(messages, tools, options, false);
-    let response: Response;
-    try {
-      response = await fetch(url, { method: "POST", headers, body, signal: options.signal });
-    } catch (err: unknown) {
-      throw new ProviderError(
-        `Gemini network failure: ${err instanceof Error ? err.message : String(err)}`,
-        "google",
-        { cause: err, isRetryable: true },
-      );
-    }
-
+    const response = await executeProviderRequest({
+      providerId: "google",
+      url,
+      headers,
+      body,
+      timeoutMs: this.config.timeoutMs ?? 60_000,
+      maxRetries: this.config.maxRetries ?? 2,
+      responseMode: "buffered",
+      callerSignal: options.signal,
+      parseError: parseGeminiResponseError,
+    });
     const duration = Date.now() - startTime;
-    if (!response.ok) {
-      const rawText = await response.text().catch(() => "");
-      let errMsg = `Gemini API error ${response.status}`;
-      try {
-        const parsed = JSON.parse(rawText) as { readonly error?: { readonly message?: string } };
-        if (parsed.error !== undefined && parsed.error.message !== undefined)
-          errMsg = parsed.error.message;
-      } catch {
-        if (rawText.length > 0) errMsg = rawText;
-      }
-      throw parseGeminiError(response.status, errMsg, rawText);
-    }
 
     const payload = (await response.json()) as GeminiResponsePayload;
     let fullText = "";

@@ -1,10 +1,11 @@
 import type { MatrixCellDescriptor, MatrixCellResult, MatrixSweepConfig } from "./types.js";
+import { waitForRetry } from "../shared/cancellation.js";
 
 export interface SweepWorkerPoolInput {
   readonly cells: readonly MatrixCellDescriptor[];
   readonly config: MatrixSweepConfig;
   readonly maxGlobalConcurrency: number;
-  readonly isAborted: () => boolean;
+  readonly signal: AbortSignal;
   readonly waitIfPaused: () => Promise<void>;
   readonly shouldSkip: (cell: MatrixCellDescriptor) => boolean;
   readonly updateInFlight: (count: number) => void;
@@ -37,8 +38,9 @@ export async function runSweepWorkerPool(input: SweepWorkerPoolInput): Promise<v
   };
 
   const runWorker = async (): Promise<void> => {
-    while (cellQueue.length > 0 && !input.isAborted()) {
+    while (cellQueue.length > 0 && !input.signal.aborted) {
       await input.waitIfPaused();
+      if (input.signal.aborted) return;
       const index = cellQueue.findIndex((cell) => {
         const modelCount = modelInFlight.get(cell.modelId) ?? 0;
         const providerCount = providerInFlight.get(cell.providerId) ?? 0;
@@ -50,7 +52,12 @@ export async function runSweepWorkerPool(input: SweepWorkerPoolInput): Promise<v
         return modelCount < maxModel && providerCount < maxProvider;
       });
       if (index === -1) {
-        await new Promise((resolve) => setTimeout(resolve, 50));
+        try {
+          await waitForRetry(50, input.signal);
+        } catch {
+          if (input.signal.aborted) return;
+          throw new Error("Sweep worker wait failed");
+        }
         continue;
       }
       const cell = cellQueue.splice(index, 1)[0];
@@ -60,8 +67,4 @@ export async function runSweepWorkerPool(input: SweepWorkerPoolInput): Promise<v
 
   const workerCount = Math.min(input.maxGlobalConcurrency, input.cells.length);
   await Promise.all(Array.from({ length: workerCount }, () => runWorker()));
-  while (cellQueue.length > 0) {
-    const cell = cellQueue.shift();
-    if (cell !== undefined) await executeScheduledCell(cell);
-  }
 }

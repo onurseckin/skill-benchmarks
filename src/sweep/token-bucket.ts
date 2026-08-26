@@ -1,16 +1,21 @@
 import type { RateLimitConfig, ITokenBucketRateLimiter, ProviderRateLimitPolicy } from "./types.js";
+import { ExecutionAbortedError, resolveAbortReason } from "../shared/cancellation.js";
+import {
+  createProviderTurnPermit,
+  type ProviderTurnOutcome,
+  type ProviderTurnPermit,
+} from "../shared/provider-turn-permit.js";
 
 interface QueuedTokenRequest {
   readonly estimatedTokens: number;
-  readonly resolve: () => void;
+  readonly resolve: (permit: ProviderTurnPermit) => void;
   readonly reject: (error: Error) => void;
   readonly signal?: AbortSignal;
-  readonly queuedAt: number;
 }
 
-export class RateLimiterAbortedError extends Error {
+export class RateLimiterAbortedError extends ExecutionAbortedError {
   constructor(message = "Rate limiter request aborted") {
-    super(message);
+    super("rate_limit", message);
     this.name = "RateLimiterAbortedError";
   }
 }
@@ -36,6 +41,7 @@ export class TokenBucketRateLimiter implements ITokenBucketRateLimiter {
 
   private readonly queue: QueuedTokenRequest[] = [];
   private drainScheduled = false;
+  private drainTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(providerId: string, config: RateLimitConfig, modelId?: string) {
     this.providerId = providerId;
@@ -87,6 +93,10 @@ export class TokenBucketRateLimiter implements ITokenBucketRateLimiter {
 
   private processQueue(): void {
     if (this.queue.length === 0) {
+      if (this.drainTimer !== undefined) {
+        clearTimeout(this.drainTimer);
+        this.drainTimer = undefined;
+      }
       this.drainScheduled = false;
       return;
     }
@@ -98,7 +108,8 @@ export class TokenBucketRateLimiter implements ITokenBucketRateLimiter {
       const waitMs = this.backoffUntilTimestamp - now;
       if (!this.drainScheduled) {
         this.drainScheduled = true;
-        setTimeout(() => {
+        this.drainTimer = setTimeout(() => {
+          this.drainTimer = undefined;
           this.drainScheduled = false;
           this.processQueue();
         }, waitMs);
@@ -114,7 +125,7 @@ export class TokenBucketRateLimiter implements ITokenBucketRateLimiter {
 
       if (next.signal?.aborted) {
         this.queue.shift();
-        next.reject(new RateLimiterAbortedError());
+        next.reject(resolveAbortReason(next.signal, "rate_limit"));
         continue;
       }
 
@@ -132,10 +143,7 @@ export class TokenBucketRateLimiter implements ITokenBucketRateLimiter {
       }
 
       this.queue.shift();
-      this.availableRequests -= 1.0;
-      this.availableTokens = Math.max(0, this.availableTokens - requiredTokens);
-      this.inFlightRequests += 1;
-      next.resolve();
+      next.resolve(this.reservePermit(requiredTokens));
     }
 
     if (this.queue.length > 0 && !this.drainScheduled) {
@@ -149,16 +157,17 @@ export class TokenBucketRateLimiter implements ITokenBucketRateLimiter {
         tpmRefillPerMs > 0 ? Math.ceil((nextEst - this.availableTokens) / tpmRefillPerMs) : 100;
       const delayMs = Math.max(20, Math.min(2000, Math.max(timeForReqMs, timeForTokMs)));
 
-      setTimeout(() => {
+      this.drainTimer = setTimeout(() => {
+        this.drainTimer = undefined;
         this.drainScheduled = false;
         this.processQueue();
       }, delayMs);
     }
   }
 
-  async acquire(estimatedTokens: number, signal?: AbortSignal): Promise<void> {
+  async acquire(estimatedTokens: number, signal?: AbortSignal): Promise<ProviderTurnPermit> {
     if (signal?.aborted) {
-      throw new RateLimiterAbortedError();
+      throw resolveAbortReason(signal, "rate_limit");
     }
 
     this.refillTokens();
@@ -173,35 +182,31 @@ export class TokenBucketRateLimiter implements ITokenBucketRateLimiter {
       (this.availableTokens >= estimatedTokens || this.availableTokens >= this.maxTpm * 0.1);
 
     if (hasCapacity) {
-      this.availableRequests -= 1.0;
-      this.availableTokens = Math.max(
-        0,
-        this.availableTokens - Math.min(estimatedTokens, this.maxTpm),
-      );
-      this.inFlightRequests += 1;
-      return;
+      return this.reservePermit(Math.min(estimatedTokens, this.maxTpm));
     }
 
-    return new Promise<void>((resolve, reject) => {
+    return new Promise<ProviderTurnPermit>((resolve, reject) => {
+      let queuedRequest: QueuedTokenRequest;
       const abortListener = () => {
-        const idx = this.queue.findIndex((q) => q.resolve === resolve);
+        const idx = this.queue.indexOf(queuedRequest);
         if (idx !== -1) {
           this.queue.splice(idx, 1);
         }
-        reject(new RateLimiterAbortedError());
+        reject(resolveAbortReason(signal, "rate_limit"));
+        this.processQueue();
       };
 
       if (signal) {
         signal.addEventListener("abort", abortListener, { once: true });
       }
 
-      this.queue.push({
+      queuedRequest = {
         estimatedTokens,
-        resolve: () => {
+        resolve: (permit) => {
           if (signal) {
             signal.removeEventListener("abort", abortListener);
           }
-          resolve();
+          resolve(permit);
         },
         reject: (err) => {
           if (signal) {
@@ -210,33 +215,53 @@ export class TokenBucketRateLimiter implements ITokenBucketRateLimiter {
           reject(err);
         },
         signal,
-        queuedAt: Date.now(),
-      });
+      };
+      this.queue.push(queuedRequest);
 
       this.processQueue();
     });
   }
 
-  recordConsumption(actualTokens: number): void {
+  private reservePermit(estimatedTokens: number): ProviderTurnPermit {
+    const reservedTokens = Math.min(this.maxTpm, Math.max(0, estimatedTokens));
+    this.availableRequests -= 1;
+    this.availableTokens = Math.max(0, this.availableTokens - reservedTokens);
+    this.inFlightRequests += 1;
+    return createProviderTurnPermit((outcome, actualTokens, retryAfterMs) => {
+      this.finalizePermit(reservedTokens, outcome, actualTokens, retryAfterMs);
+    });
+  }
+
+  private finalizePermit(
+    reservedTokens: number,
+    outcome: ProviderTurnOutcome,
+    actualTokens: number | undefined,
+    retryAfterMs: number | undefined,
+  ): void {
     this.inFlightRequests = Math.max(0, this.inFlightRequests - 1);
     this.refillTokens();
 
-    if (this.consecutiveThrottles > 0) {
+    if (outcome === "rate_limited") {
+      this.consecutiveThrottles += 1;
+      const backoffMs = Math.min(
+        this.backoffMaxMs,
+        Math.max(0, retryAfterMs ?? this.calculateBackoffDelay()),
+      );
+      this.backoffUntilTimestamp = Date.now() + backoffMs;
+      this.availableRequests = 0;
+      this.availableTokens = 0;
+    } else {
+      const reconciledTokens = resolveReconciledTokens(
+        outcome,
+        actualTokens,
+        reservedTokens,
+      );
+      this.availableTokens = Math.min(
+        this.maxTpm,
+        Math.max(0, this.availableTokens + reservedTokens - reconciledTokens),
+      );
       this.consecutiveThrottles = Math.max(0, this.consecutiveThrottles - 1);
     }
-
-    this.processQueue();
-  }
-
-  async reportRateLimitViolation(retryAfterMs?: number): Promise<void> {
-    this.inFlightRequests = Math.max(0, this.inFlightRequests - 1);
-    this.consecutiveThrottles += 1;
-
-    const backoffMs = retryAfterMs ?? this.calculateBackoffDelay();
-    this.backoffUntilTimestamp = Date.now() + backoffMs;
-    this.availableRequests = 0;
-    this.availableTokens = 0;
-
     this.processQueue();
   }
 
@@ -245,6 +270,7 @@ export class TokenBucketRateLimiter implements ITokenBucketRateLimiter {
     readonly availableRequests: number;
     readonly isThrottled: boolean;
     readonly queueDepth: number;
+    readonly activePermits: number;
   } {
     this.refillTokens();
     return {
@@ -252,8 +278,23 @@ export class TokenBucketRateLimiter implements ITokenBucketRateLimiter {
       availableRequests: Math.floor(this.availableRequests),
       isThrottled: Date.now() < this.backoffUntilTimestamp,
       queueDepth: this.queue.length,
+      activePermits: this.inFlightRequests,
     };
   }
+}
+
+function normalizeActualTokens(actualTokens: number | undefined, estimatedTokens: number): number {
+  if (actualTokens === undefined || !Number.isFinite(actualTokens)) return estimatedTokens;
+  return Math.max(0, actualTokens);
+}
+
+function resolveReconciledTokens(
+  outcome: ProviderTurnOutcome,
+  actualTokens: number | undefined,
+  estimatedTokens: number,
+): number {
+  if (actualTokens !== undefined) return normalizeActualTokens(actualTokens, estimatedTokens);
+  return outcome === "completed" ? estimatedTokens : 0;
 }
 
 export class MultiProviderRateLimiter {

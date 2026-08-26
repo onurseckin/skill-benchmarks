@@ -163,6 +163,7 @@ function validateLimits(value: Partial<ExecutionLimits> | undefined): void {
   optionalFiniteNumber(value.maxCostUSD, 0);
   optionalInteger(value.maxConsecutiveToolFailures, 0);
   optionalInteger(value.toolTimeoutMs, 1);
+  optionalInteger(value.turnTimeoutMs, 1);
   optionalInteger(value.maxOutputSizeBytes, 1);
   optionalBoolean(value.stopOnToolFailures);
 }

@@ -22,6 +22,11 @@ export type {
   IMatrixSweepEngine,
 } from "./types.js";
 
+export type {
+  ProviderTurnOutcome,
+  ProviderTurnPermit,
+} from "../shared/provider-turn-permit.js";
+
 export {
   TokenBucketRateLimiter,
   MultiProviderRateLimiter,

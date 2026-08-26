@@ -8,6 +8,7 @@ import {
   type AnthropicToolDeclaration,
   type AnthropicWireMessage,
 } from "./anthropic-protocol.js";
+import { executeProviderRequest } from "./transport/request-executor.js";
 import {
   AgentMessage,
   CompletionChunk,
@@ -15,12 +16,28 @@ import {
   LLMProviderAdapter,
   ModelTurnResponse,
   ProviderConfig,
-  ProviderError,
   ProviderId,
   TokenUsage,
   ToolCallRequest,
   ToolDefinition,
 } from "./types";
+
+function parseAnthropicResponseError(response: Response, rawText: string) {
+  let errorType = "unknown";
+  let errorMessage = `Anthropic API error ${response.status}`;
+  try {
+    const parsed = JSON.parse(rawText) as {
+      readonly error?: { readonly type?: string; readonly message?: string };
+    };
+    if (parsed.error !== undefined) {
+      if (parsed.error.type !== undefined) errorType = parsed.error.type;
+      if (parsed.error.message !== undefined) errorMessage = parsed.error.message;
+    }
+  } catch {
+    if (rawText.length > 0) errorMessage = rawText;
+  }
+  return parseAnthropicError(response.status, errorType, errorMessage, rawText);
+}
 
 export class AnthropicProviderAdapter implements LLMProviderAdapter {
   public readonly providerId: ProviderId = "anthropic";
@@ -130,34 +147,17 @@ export class AnthropicProviderAdapter implements LLMProviderAdapter {
     options: GenerateOptions,
   ): AsyncIterable<CompletionChunk> {
     const { url, headers, body } = this.buildPayload(messages, tools, options, true);
-    let response: Response;
-    try {
-      response = await fetch(url, { method: "POST", headers, body, signal: options.signal });
-    } catch (err: unknown) {
-      throw new ProviderError(
-        `Anthropic network failure: ${err instanceof Error ? err.message : String(err)}`,
-        "anthropic",
-        { cause: err, isRetryable: true },
-      );
-    }
-
-    if (!response.ok) {
-      const rawText = await response.text().catch(() => "");
-      let errType = "unknown";
-      let errMsg = `Anthropic API error ${response.status}`;
-      try {
-        const parsed = JSON.parse(rawText) as {
-          readonly error?: { readonly type?: string; readonly message?: string };
-        };
-        if (parsed.error !== undefined) {
-          if (parsed.error.type !== undefined) errType = parsed.error.type;
-          if (parsed.error.message !== undefined) errMsg = parsed.error.message;
-        }
-      } catch {
-        if (rawText.length > 0) errMsg = rawText;
-      }
-      throw parseAnthropicError(response.status, errType, errMsg, rawText);
-    }
+    const response = await executeProviderRequest({
+      providerId: "anthropic",
+      url,
+      headers,
+      body,
+      timeoutMs: this.config.timeoutMs ?? 60_000,
+      maxRetries: this.config.maxRetries ?? 2,
+      responseMode: "stream",
+      callerSignal: options.signal,
+      parseError: parseAnthropicResponseError,
+    });
 
     if (response.body === null) return;
     const reader = response.body.getReader();
@@ -221,35 +221,18 @@ export class AnthropicProviderAdapter implements LLMProviderAdapter {
   ): Promise<ModelTurnResponse> {
     const startTime = Date.now();
     const { url, headers, body } = this.buildPayload(messages, tools, options, false);
-    let response: Response;
-    try {
-      response = await fetch(url, { method: "POST", headers, body, signal: options.signal });
-    } catch (err: unknown) {
-      throw new ProviderError(
-        `Anthropic network failure: ${err instanceof Error ? err.message : String(err)}`,
-        "anthropic",
-        { cause: err, isRetryable: true },
-      );
-    }
-
+    const response = await executeProviderRequest({
+      providerId: "anthropic",
+      url,
+      headers,
+      body,
+      timeoutMs: this.config.timeoutMs ?? 60_000,
+      maxRetries: this.config.maxRetries ?? 2,
+      responseMode: "buffered",
+      callerSignal: options.signal,
+      parseError: parseAnthropicResponseError,
+    });
     const duration = Date.now() - startTime;
-    if (!response.ok) {
-      const rawText = await response.text().catch(() => "");
-      let errType = "unknown";
-      let errMsg = `Anthropic API error ${response.status}`;
-      try {
-        const parsed = JSON.parse(rawText) as {
-          readonly error?: { readonly type?: string; readonly message?: string };
-        };
-        if (parsed.error !== undefined) {
-          if (parsed.error.type !== undefined) errType = parsed.error.type;
-          if (parsed.error.message !== undefined) errMsg = parsed.error.message;
-        }
-      } catch {
-        if (rawText.length > 0) errMsg = rawText;
-      }
-      throw parseAnthropicError(response.status, errType, errMsg, rawText);
-    }
 
     const payload = (await response.json()) as AnthropicResponsePayload;
     let fullText = "";

@@ -6,11 +6,17 @@ import {
 } from "../infrastructure/workspace/run-artifact-layout.js";
 import type { DisposableWorkspace } from "../infrastructure/workspace/types.js";
 import { createProviderAdapter } from "../providers/factory.js";
+import { ProviderRateLimitError } from "../providers/types.js";
 import { TelemetryDatabase, TerminalRunIdentityConflictError } from "../reporting/db.js";
 import type { ScenarioResult, RunTerminationReason } from "../runner/types.js";
 import { ScenarioRunnerEngine } from "../runner/runner-engine.js";
 import { ScenarioLoader } from "../runner/scenario-loader.js";
 import { createSafeArtifactPathSegment } from "../shared/artifact-sanitization.js";
+import { ExecutionAbortedError, resolveAbortReason } from "../shared/cancellation.js";
+import type {
+  ProviderTurnOutcome,
+  ProviderTurnPermit,
+} from "../shared/provider-turn-permit.js";
 import type {
   ITokenBucketRateLimiter,
   MatrixCellDescriptor,
@@ -31,7 +37,7 @@ interface CellExecutionInput {
   readonly runnerEngine: ScenarioRunnerEngine;
   readonly telemetryDb: TelemetryDatabase;
   readonly limiter: ITokenBucketRateLimiter;
-  readonly aborted: () => boolean;
+  readonly signal: AbortSignal;
   readonly planFingerprint: string;
 }
 
@@ -43,7 +49,7 @@ export async function executeSweepCell(input: CellExecutionInput): Promise<Matri
     runnerEngine,
     telemetryDb,
     limiter,
-    aborted,
+    signal,
     planFingerprint,
   } = input;
   const startedAt = new Date().toISOString();
@@ -106,13 +112,17 @@ export async function executeSweepCell(input: CellExecutionInput): Promise<Matri
     const maxRetries = config.maxRetriesPerCell ?? 2;
 
     while (attemptCount <= maxRetries) {
-      if (aborted()) break;
+      if (signal.aborted) break;
       attemptCount += 1;
       let container: IContainerInstance | undefined;
+      let permit: ProviderTurnPermit | undefined;
       let attemptFailed = false;
+      let permitOutcome: ProviderTurnOutcome = "failed";
+      let actualTokens: number | undefined;
+      let retryAfterMs: number | undefined;
       try {
-        await limiter.acquire(2000);
-        if (aborted()) break;
+        permit = await limiter.acquire(2000, signal);
+        if (signal.aborted) throw resolveAbortReason(signal, "sweep");
         if (config.containerPool) {
           container = await config.containerPool.acquire({
             imageTag: "skill-benchmarks-sandbox:latest",
@@ -149,6 +159,7 @@ export async function executeSweepCell(input: CellExecutionInput): Promise<Matri
                 runId: cell.runId,
               }),
               prompt: scenarioDefinition.instructions,
+              signal,
               workspace,
               artifactOutputDir: artifactLayout.runDirectory,
               artifactLayout,
@@ -159,10 +170,29 @@ export async function executeSweepCell(input: CellExecutionInput): Promise<Matri
               thinkingBudget: cell.thinkingBudget,
               reasoningEffort: cell.modelEntry.reasoningEffort,
             });
-        limiter.recordConsumption(scenarioResult.totalTokens.totalTokens);
-      } catch {
+        actualTokens = scenarioResult.totalTokens.totalTokens;
+        permitOutcome =
+          scenarioResult.terminationReason === "aborted"
+            ? "aborted"
+            : scenarioResult.completed
+              ? "completed"
+              : "failed";
+      } catch (error) {
         attemptFailed = true;
+        if (error instanceof ProviderRateLimitError) {
+          permitOutcome = "rate_limited";
+          retryAfterMs = error.retryAfterMs;
+        } else if (error instanceof ExecutionAbortedError || signal.aborted) {
+          permitOutcome = "aborted";
+        }
       } finally {
+        if (permit !== undefined) {
+          try {
+            await permit.release(permitOutcome, actualTokens, retryAfterMs);
+          } catch {
+            infrastructureFailure = "error";
+          }
+        }
         if (container && config.containerPool) {
           try {
             await config.containerPool.release(container);
@@ -171,16 +201,14 @@ export async function executeSweepCell(input: CellExecutionInput): Promise<Matri
           }
         }
       }
-      if (infrastructureFailure || scenarioResult !== undefined || aborted()) break;
-      if (attemptFailed && attemptCount <= maxRetries) {
-        try {
-          await limiter.reportRateLimitViolation();
-        } catch {
-          infrastructureFailure = "error";
-        }
-      } else {
+      if (
+        infrastructureFailure ||
+        scenarioResult !== undefined ||
+        signal.aborted ||
+        !attemptFailed ||
+        attemptCount > maxRetries
+      )
         break;
-      }
     }
   } catch {
     infrastructureFailure = "error";
@@ -198,7 +226,7 @@ export async function executeSweepCell(input: CellExecutionInput): Promise<Matri
   const terminationReason = resolveTerminationReason(
     infrastructureFailure,
     scenarioResult,
-    aborted(),
+    signal.aborted,
   );
   return persistTerminalCell({
     cell,

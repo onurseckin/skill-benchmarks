@@ -97,7 +97,7 @@ export interface GenerateOptions {
 }
 
 export interface LLMProviderAdapter {
-  readonly providerId: "anthropic" | "openai" | "google" | "ollama" | "custom" | string;
+  readonly providerId: string;
   readonly modelId: string;
   readonly executionMode?: ExecutionMode;
   readonly simulated?: boolean;
@@ -186,6 +186,7 @@ export interface ExecutionLimits {
   readonly maxCostUSD: number;
   readonly maxConsecutiveToolFailures: number;
   readonly toolTimeoutMs: number;
+  readonly turnTimeoutMs?: number;
   readonly maxOutputSizeBytes: number;
   readonly stopOnToolFailures?: boolean;
 }
@@ -218,6 +219,7 @@ export interface ScenarioRunConfig {
   readonly skillIds: ReadonlyArray<string>;
   readonly modelId: string;
   readonly provider: LLMProviderAdapter;
+  readonly signal?: AbortSignal;
   readonly prompt: string;
   readonly systemPrompt?: string;
   readonly artifactOutputDir?: string;

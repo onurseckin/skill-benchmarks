@@ -7,6 +7,12 @@ import type {
   ToolDefinition,
   ToolExecutionRecord,
 } from "./types.js";
+import {
+  createCancellationScope,
+  ExecutionAbortedError,
+  ExecutionTimeoutError,
+  raceWithCancellation,
+} from "../shared/cancellation.js";
 import { STANDARD_TOOLS } from "./tool-definitions.js";
 import {
   handleEditFileContent,
@@ -60,25 +66,36 @@ export class StandardToolDispatcher {
     const startTime = performance.now();
     const maxBytes = limits?.maxOutputSizeBytes ?? 5242880;
     const timeoutMs = limits?.toolTimeoutMs ?? 60000;
+    const scope = createCancellationScope({
+      scope: "tool",
+      callerSignal: context.signal,
+      timeoutMs,
+    });
 
     let result: ToolHandlerResult;
     try {
-      const executePromise = this.executeCall(toolCall, context, limits);
-      const timerPromise = new Promise<never>((_, reject) => {
-        const timer = setTimeout(() => {
-          reject(new Error(`Tool execution timed out after ${timeoutMs}ms`));
-        }, timeoutMs);
-        if (typeof timer.unref === "function") timer.unref();
-      });
-
-      result = await Promise.race([executePromise, timerPromise]);
+      scope.throwIfAborted();
+      result = await raceWithCancellation(
+        this.executeCall(toolCall, { ...context, signal: scope.signal }, limits),
+        scope.signal,
+        "tool",
+      );
+      scope.throwIfAborted();
     } catch (error) {
+      if (
+        error instanceof ExecutionAbortedError ||
+        (error instanceof ExecutionTimeoutError && error.scope !== "tool")
+      ) {
+        throw error;
+      }
       const msg = error instanceof Error ? error.message : String(error);
       result = {
         output: `Error executing tool '${toolCall.name}': ${msg}`,
         isError: true,
         stderr: msg,
       };
+    } finally {
+      scope.dispose();
     }
 
     const durationMs = Math.round((performance.now() - startTime) * 100) / 100;
