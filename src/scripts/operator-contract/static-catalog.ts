@@ -45,8 +45,13 @@ function verifyStaticRejections(temporaryRoot: string): void {
     join(temporaryRoot, "src", "case-boundary.sh"),
     '#!/bin/sh\nprintf "%s\\n" "$(case x in\nx)# forbidden\nprintf x\n;;\nesac)"\n',
   );
+  writeFileSync(
+    join(temporaryRoot, "src", "case-esac-boundary.sh"),
+    '#!/bin/sh\nprintf "%s\\n" "$(case x in\nesac)# forbidden\nprintf x\n;;\nesac)"\n',
+  );
+  writeFileSync(join(temporaryRoot, "src", "case-empty.sh"), "#!/bin/sh\ncase x in\n) :;;\nesac\n");
   const audit = auditMaintainedSources(temporaryRoot);
-  requireCondition(audit.violations.length === 6, "static_rejection_count_invalid");
+  requireCondition(audit.violations.length === 8, "static_rejection_count_invalid");
   requireCondition(
     audit.violations.some(
       (violation) =>
@@ -68,12 +73,13 @@ function verifyStaticRejections(temporaryRoot: string): void {
     ).length === 2,
     "static_nested_shell_comment_admitted",
   );
-  requireCondition(
-    audit.violations.some(
-      (violation) =>
-        violation.type === "FORBIDDEN_COMMENT" &&
-        violation.file === join(temporaryRoot, "src", "case-boundary.sh"),
-    ),
-    "static_case_shell_comment_admitted",
-  );
+  for (const name of ["case-boundary.sh", "case-esac-boundary.sh", "case-empty.sh"]) {
+    requireCondition(
+      audit.violations.some(
+        (violation) =>
+          violation.type === "PARSER_ERROR" && violation.file === join(temporaryRoot, "src", name),
+      ),
+      `static_case_shell_admitted:${name}`,
+    );
+  }
 }
