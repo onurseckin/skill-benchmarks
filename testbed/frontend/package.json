@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "build": "tsc",
+    "build": "bun build index.html --production --outdir ../dist/frontend",
+    "start": "bun run ../dist/start.js --serve-frontend",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

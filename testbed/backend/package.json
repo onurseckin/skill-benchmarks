@@ -3,9 +3,9 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "build": "tsc",
+    "build": "bun build src/index.ts --target=bun --production --outfile ../dist/backend/index.js",
     "typecheck": "tsc --noEmit",
-    "start": "bun run src/index.ts"
+    "start": "bun run ../dist/backend/index.js"
   },
   "devDependencies": {
     "@types/node": "^26.3.0",

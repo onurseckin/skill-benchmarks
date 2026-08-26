@@ -2,16 +2,20 @@
   "name": "testbed-monorepo",
   "version": "1.0.0",
   "private": true,
-  "type": "module",
   "workspaces": [
     "frontend",
     "backend"
   ],
+  "type": "module",
   "scripts": {
-    "start": "bun run start:all",
-    "start:all": "concurrently \"bun run --cwd frontend start\" \"bun run --cwd backend start\"",
-    "build": "bun run --cwd frontend build && bun run --cwd backend build",
-    "typecheck": "bun run --cwd frontend typecheck && bun run --cwd backend typecheck"
+    "start": "bun run dist/start.js",
+    "clean": "rm -rf dist",
+    "build": "bun run clean && bun run build:frontend && bun run build:backend && bun run build:supervisor && bun run build:microservice",
+    "build:frontend": "bun run --cwd frontend build",
+    "build:backend": "bun run --cwd backend build",
+    "build:supervisor": "bun build scripts/start.ts --target=bun --production --outfile=dist/start.js",
+    "build:microservice": "go -C microservice build -o ../dist/microservice .",
+    "typecheck": "bun run --cwd frontend typecheck && bun run --cwd backend typecheck && tsc --noEmit"
   },
   "devDependencies": {
     "@types/node": "^26.3.0",

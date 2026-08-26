@@ -16,7 +16,10 @@ declare module "react" {
 
   export function useState<T>(initial: T | (() => T)): [T, (value: T | ((prev: T) => T)) => void];
   export function useEffect(effect: () => void | (() => void), deps?: readonly unknown[]): void;
-  export function useCallback<T extends (...args: readonly unknown[]) => unknown>(callback: T, deps: readonly unknown[]): T;
+  export function useCallback<T extends (...args: readonly unknown[]) => unknown>(
+    callback: T,
+    deps: readonly unknown[],
+  ): T;
   export function useMemo<T>(factory: () => T, deps: readonly unknown[]): T;
 
   export interface ChangeEvent<T = Element> {
@@ -49,3 +52,5 @@ declare namespace JSX {
   }
   type Element = import("react").ReactElement;
 }
+
+declare module "*.css" {}
