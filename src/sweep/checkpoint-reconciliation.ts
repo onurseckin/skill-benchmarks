@@ -47,7 +47,8 @@ export function validateCheckpointStateContract(
     [...abortedIds].some((cellId) => skippedIds.has(cellId)) ||
     resultIds.length !== trackedIds.size ||
     resultIds.some((cellId) => !trackedIds.has(cellId)) ||
-    checkpoint.status !== expectedCheckpointStatus(checkpoint, terminalIds, failedIds, abortedIds, skippedIds)
+    checkpoint.status !==
+      expectedCheckpointStatus(checkpoint, terminalIds, failedIds, abortedIds, skippedIds)
   )
     fail();
   const cellsById = new Map(cells.map((cell) => [cell.cellId, cell]));

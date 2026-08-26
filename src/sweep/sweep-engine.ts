@@ -1,6 +1,16 @@
 import { join } from "node:path";
 import { mkdir } from "node:fs/promises";
-import type { IMatrixSweepEngine, MatrixCellDescriptor, MatrixCellResult, MatrixSweepConfig, MatrixSweepSummary, SweepEvent, SweepEventListener, SweepExecutionStatus, SweepProgress } from "./types.js";
+import type {
+  IMatrixSweepEngine,
+  MatrixCellDescriptor,
+  MatrixCellResult,
+  MatrixSweepConfig,
+  MatrixSweepSummary,
+  SweepEvent,
+  SweepEventListener,
+  SweepExecutionStatus,
+  SweepProgress,
+} from "./types.js";
 import { MultiProviderRateLimiter } from "./token-bucket.js";
 import { ScenarioRunnerEngine } from "../runner/runner-engine.js";
 import { ScenarioLoader } from "../runner/scenario-loader.js";
@@ -16,16 +26,20 @@ import {
   validateSweepOutcomeEvidence,
 } from "./terminal-reconciliation.js";
 import { removeCheckpointTemporaryFiles } from "./checkpoint-storage.js";
-import {
-  createSweepOutcomePath,
-  writeDatabasePreflightFailureOutcome,
-  writeSweepOutcome,
-} from "./sweep-outcome.js";
+import { createSweepOutcomePath, writeDatabasePreflightFailureOutcome } from "./sweep-outcome.js";
 import { prepareSweepExecution } from "./sweep-preparation.js";
-import { createMatrixSweepSummary } from "./sweep-summary.js";
 import { runSweepWorkerPool } from "./sweep-worker-pool.js";
-import { createSweepProgress, createInitialSweepIdentity, dispatchSweepEvent, resolveSweepIdentity } from "./sweep-engine-state.js";
-import { createCheckpointPersistenceFailure, createSkippedSweepCellResult } from "./sweep-cell-results.js";
+import {
+  createSweepProgress,
+  createInitialSweepIdentity,
+  dispatchSweepEvent,
+  resolveSweepIdentity,
+} from "./sweep-engine-state.js";
+import {
+  createCheckpointPersistenceFailure,
+  createSkippedSweepCellResult,
+} from "./sweep-cell-results.js";
+import { finalizeSweepExecution } from "./sweep-finalization.js";
 export class MatrixSweepEngine implements IMatrixSweepEngine {
   public sweepId: string;
   private readonly constructorSweepId?: string;
@@ -313,67 +327,31 @@ export class MatrixSweepEngine implements IMatrixSweepEngine {
               await terminalizeAbortedSweepCell({ cell, config, telemetryDb, planFingerprint }),
             )),
         });
-        const completedAt =
-          checkpointPersistenceFailed || terminalIdentityConflict
-            ? new Date().toISOString()
-            : checkpointLedger.getState().metadata.updatedAt;
-        const totalDurationMs = Date.now() - this.startTimeMs;
-        this.status =
-          checkpointPersistenceFailed || terminalIdentityConflict
-            ? "failed"
-            : this.abortController.signal.aborted
-              ? "aborted"
-              : this.failedCount > 0
-                ? "failed"
-                : "completed";
-        const summary = createMatrixSweepSummary({
+        const finalization = finalizeSweepExecution({
+          outputRoot: config.runtimeConfig.outputRoot,
           sweepId: this.sweepId,
-          status: this.status,
+          planFingerprint,
+          startedAt,
+          startTimeMs: this.startTimeMs,
+          checkpointLoaded,
+          checkpointUpdatedAt: checkpointLedger.getState().metadata.updatedAt,
+          checkpointPersistenceFailed,
+          terminalIdentityConflict,
+          abortRequested: this.abortController.signal.aborted,
           totalCells: this.totalCells,
           completedCount: this.completedCount,
           failedCount: this.failedCount,
           abortedCount: this.abortedCount,
           skippedCount: this.skippedCount,
-          totalDurationMs,
           totalCostUSD: this.totalCostUSD,
           totalTokensConsumed: this.totalTokensConsumed,
+          cells: allPlannedCells,
           results,
-          startedAt,
-          completedAt,
+          durableRecords,
         });
-        if (!checkpointLoaded) {
-          writeSweepOutcome({
-            outputRoot: config.runtimeConfig.outputRoot,
-            sweepId: this.sweepId,
-            planFingerprint,
-            status: this.status,
-            startedAt,
-            completedAt,
-            cells: allPlannedCells,
-            results,
-            durableRecords,
-            ...(checkpointPersistenceFailed
-              ? { orchestrationFailure: "checkpoint_persistence_failed" as const }
-              : terminalIdentityConflict
-                ? { orchestrationFailure: "terminal_identity_conflict" as const }
-                : {}),
-          });
-        }
-        this.emitEvent({
-          type:
-            this.status === "completed"
-              ? "sweep:complete"
-              : this.status === "aborted"
-                ? "sweep:abort"
-                : "sweep:error",
-          message: `Sweep ${this.sweepId} ${this.status}: ${this.completedCount} executed, ${this.abortedCount} aborted, ${this.failedCount} failed in ${totalDurationMs}ms`,
-          payload: {
-            totalCostUSD: summary.totalCostUSD,
-            totalDurationMs,
-            terminalStatus: this.status,
-          },
-        });
-        return summary;
+        this.status = finalization.status;
+        this.emitEvent(finalization.event);
+        return finalization.summary;
       } finally {
         telemetryDb.close();
       }

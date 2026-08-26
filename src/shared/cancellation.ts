@@ -1,10 +1,4 @@
-export type ExecutionScope =
-  | "scenario"
-  | "turn"
-  | "provider"
-  | "tool"
-  | "rate_limit"
-  | "sweep";
+export type ExecutionScope = "scenario" | "turn" | "provider" | "tool" | "rate_limit" | "sweep";
 
 export class ExecutionAbortedError extends Error {
   public readonly scope: ExecutionScope;
@@ -142,8 +136,7 @@ export async function waitForRetry(delayMs: number, signal?: AbortSignal): Promi
       signal?.removeEventListener("abort", onAbort);
       action();
     };
-    const onAbort = (): void =>
-      settle(() => reject(resolveAbortReason(signal, "provider")));
+    const onAbort = (): void => settle(() => reject(resolveAbortReason(signal, "provider")));
     const timer = setTimeout(() => settle(resolve), Math.max(0, delayMs));
     signal?.addEventListener("abort", onAbort, { once: true });
   });

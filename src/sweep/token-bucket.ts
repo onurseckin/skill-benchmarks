@@ -251,11 +251,7 @@ export class TokenBucketRateLimiter implements ITokenBucketRateLimiter {
       this.availableRequests = 0;
       this.availableTokens = 0;
     } else {
-      const reconciledTokens = resolveReconciledTokens(
-        outcome,
-        actualTokens,
-        reservedTokens,
-      );
+      const reconciledTokens = resolveReconciledTokens(outcome, actualTokens, reservedTokens);
       this.availableTokens = Math.min(
         this.maxTpm,
         Math.max(0, this.availableTokens + reservedTokens - reconciledTokens),

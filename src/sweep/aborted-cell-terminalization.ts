@@ -43,11 +43,7 @@ export async function terminalizeAbortedSweepCell(
   } as const;
   let artifactLayout = createAbortedCellArtifactLayout(input.cell);
   try {
-    input.telemetryDb.claimRunIdentity(
-      input.cell.runId,
-      input.cell.sweepId,
-      input.cell.cellId,
-    );
+    input.telemetryDb.claimRunIdentity(input.cell.runId, input.cell.sweepId, input.cell.cellId);
   } catch (error) {
     if (!(error instanceof TerminalRunIdentityConflictError)) throw error;
     return createTerminalIdentityConflict(input.cell, startedAt, startedMs);

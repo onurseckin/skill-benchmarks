@@ -36,7 +36,10 @@ interface PermitReleaseRecord {
 interface PermitRecorder {
   readonly releases: PermitReleaseRecord[];
   readonly source: {
-    acquire(estimatedTokens: number, signal?: AbortSignal): Promise<{
+    acquire(
+      estimatedTokens: number,
+      signal?: AbortSignal,
+    ): Promise<{
       release(
         outcome: ProviderTurnOutcome,
         actualTokens?: number,
@@ -81,16 +84,18 @@ export async function verifyAttemptPermitsAndActualUsage(): Promise<void> {
   const recorder = createPermitRecorder();
   let attempts = 0;
   const adapter = createOpenAIAdapter({ maxRetries: 1, permitSource: recorder.source });
-  await withInterceptedFetch(async () => {
-    attempts += 1;
-    return attempts === 1 ? errorResponse(503) : openAISuccessResponse("permit-success");
-  }, async () => await adapter.generateTurn(messages, [], options));
+  await withInterceptedFetch(
+    async () => {
+      attempts += 1;
+      return attempts === 1 ? errorResponse(503) : openAISuccessResponse("permit-success");
+    },
+    async () => await adapter.generateTurn(messages, [], options),
+  );
   requireCondition(recorder.acquisitionCount() === 2, "provider_permit_per_attempt");
   requireCondition(recorder.releases.length === 2, "provider_permit_release_count");
   requireCondition(recorder.releases[0]?.outcome === "failed", "provider_permit_retry_outcome");
   requireCondition(
-    recorder.releases[1]?.outcome === "completed" &&
-      recorder.releases[1]?.actualTokens === 5,
+    recorder.releases[1]?.outcome === "completed" && recorder.releases[1]?.actualTokens === 5,
     "provider_permit_actual_usage",
   );
 }
@@ -123,8 +128,7 @@ export async function verifyStreamPermitActualUsage(): Promise<void> {
   );
   requireCondition(recorder.acquisitionCount() === 1, "provider_stream_permit_acquired");
   requireCondition(
-    recorder.releases[0]?.outcome === "completed" &&
-      recorder.releases[0]?.actualTokens === 5,
+    recorder.releases[0]?.outcome === "completed" && recorder.releases[0]?.actualTokens === 5,
     "provider_stream_permit_actual_usage",
   );
 }
@@ -136,10 +140,14 @@ export async function verifyNonfiniteRetryRejection(): Promise<void> {
     const abortTimer = setTimeout(() => controller.abort(new Error("fixture retry guard")), 20);
     const adapter = createOpenAIAdapter({ maxRetries });
     const failure = await settleFailureWithin(
-      withInterceptedFetch(async () => {
-        attempts += 1;
-        return errorResponse(503);
-      }, async () => await adapter.generateTurn(messages, [], { ...options, signal: controller.signal })),
+      withInterceptedFetch(
+        async () => {
+          attempts += 1;
+          return errorResponse(503);
+        },
+        async () =>
+          await adapter.generateTurn(messages, [], { ...options, signal: controller.signal }),
+      ),
       150,
     );
     clearTimeout(abortTimer);
@@ -151,10 +159,13 @@ export async function verifyNonfiniteRetryRejection(): Promise<void> {
 async function verifyRetryableThenSuccess(): Promise<void> {
   let attempts = 0;
   const adapter = createOpenAIAdapter({ maxRetries: 1 });
-  const result = await withInterceptedFetch(async () => {
-    attempts += 1;
-    return attempts === 1 ? errorResponse(503) : openAISuccessResponse("retried");
-  }, async () => await adapter.generateTurn(messages, [], options));
+  const result = await withInterceptedFetch(
+    async () => {
+      attempts += 1;
+      return attempts === 1 ? errorResponse(503) : openAISuccessResponse("retried");
+    },
+    async () => await adapter.generateTurn(messages, [], options),
+  );
   requireCondition(attempts === 2, "provider_retry_success_attempts");
   requireCondition(result.text === "retried", "provider_retry_success_payload");
 }
@@ -163,10 +174,13 @@ async function verifyAuthenticationDoesNotRetry(): Promise<void> {
   let attempts = 0;
   const adapter = createOpenAIAdapter({ maxRetries: 3 });
   const failure = await captureFailure(
-    withInterceptedFetch(async () => {
-      attempts += 1;
-      return errorResponse(401);
-    }, async () => await adapter.generateTurn(messages, [], options)),
+    withInterceptedFetch(
+      async () => {
+        attempts += 1;
+        return errorResponse(401);
+      },
+      async () => await adapter.generateTurn(messages, [], options),
+    ),
   );
   requireCondition(failure instanceof ProviderAuthenticationError, "provider_authentication_type");
   requireCondition(attempts === 1, "provider_authentication_attempts");
@@ -176,10 +190,13 @@ async function verifyRetryExhaustion(): Promise<void> {
   let attempts = 0;
   const adapter = createOpenAIAdapter({ maxRetries: 2 });
   const failure = await captureFailure(
-    withInterceptedFetch(async () => {
-      attempts += 1;
-      return errorResponse(503);
-    }, async () => await adapter.generateTurn(messages, [], options)),
+    withInterceptedFetch(
+      async () => {
+        attempts += 1;
+        return errorResponse(503);
+      },
+      async () => await adapter.generateTurn(messages, [], options),
+    ),
   );
   requireCondition(failure instanceof ProviderError, "provider_retry_exhaustion_type");
   requireCondition(attempts === 3, "provider_retry_exhaustion_attempts");
@@ -193,13 +210,20 @@ async function verifyBoundedRateLimitWait(): Promise<void> {
   const startedAt = Date.now();
   const abortTimer = setTimeout(() => controller.abort(new Error("fixture caller abort")), 20);
   const failure = await captureFailure(
-    withInterceptedFetch(async () => {
-      attempts += 1;
-      return errorResponse(429, { "retry-after": "3600" });
-    }, async () => await adapter.generateTurn(messages, [], { ...options, signal: controller.signal })),
+    withInterceptedFetch(
+      async () => {
+        attempts += 1;
+        return errorResponse(429, { "retry-after": "3600" });
+      },
+      async () =>
+        await adapter.generateTurn(messages, [], { ...options, signal: controller.signal }),
+    ),
   );
   clearTimeout(abortTimer);
-  requireCondition(failure instanceof Error && failure.name === "ExecutionAbortedError", "provider_rate_limit_abort_type");
+  requireCondition(
+    failure instanceof Error && failure.name === "ExecutionAbortedError",
+    "provider_rate_limit_abort_type",
+  );
   requireCondition(attempts === 1, "provider_rate_limit_abort_attempts");
   requireCondition(Date.now() - startedAt < 250, "provider_rate_limit_abort_bound");
   requireCondition(
@@ -235,21 +259,22 @@ async function verifyAllAdaptersUseInterceptedTransport(): Promise<void> {
   ];
   for (const providerCase of cases) {
     let attempts = 0;
-    await withInterceptedFetch(async () => {
-      attempts += 1;
-      return attempts === 1 ? errorResponse(503) : providerCase.success;
-    }, async () => await providerCase.adapter.generateTurn(messages, [], options));
+    await withInterceptedFetch(
+      async () => {
+        attempts += 1;
+        return attempts === 1 ? errorResponse(503) : providerCase.success;
+      },
+      async () => await providerCase.adapter.generateTurn(messages, [], options),
+    );
     requireCondition(attempts === 2, "provider_shared_transport_attempts");
   }
 }
 
-function createOpenAIAdapter(
-  overrides: {
-    readonly maxRetries: number;
-    readonly timeoutMs?: number;
-    readonly permitSource?: PermitRecorder["source"];
-  },
-): OpenAIProviderAdapter {
+function createOpenAIAdapter(overrides: {
+  readonly maxRetries: number;
+  readonly timeoutMs?: number;
+  readonly permitSource?: PermitRecorder["source"];
+}): OpenAIProviderAdapter {
   return new OpenAIProviderAdapter("fixture", {
     ...createProviderConfig("openai"),
     ...overrides,
@@ -315,7 +340,9 @@ async function settleFailureWithin(promise: Promise<unknown>, timeoutMs: number)
   const timeoutMarker = Symbol("timeout");
   const settled = await Promise.race([
     captureFailure(promise),
-    new Promise<typeof timeoutMarker>((resolve) => setTimeout(() => resolve(timeoutMarker), timeoutMs)),
+    new Promise<typeof timeoutMarker>((resolve) =>
+      setTimeout(() => resolve(timeoutMarker), timeoutMs),
+    ),
   ]);
   return settled === timeoutMarker ? undefined : settled;
 }

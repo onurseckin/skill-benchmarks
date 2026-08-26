@@ -140,7 +140,10 @@ async function verifyDispatcherRejectsLateSuccess(): Promise<void> {
   );
   setTimeout(() => controller.abort(new Error("fixture caller abort")), 10);
   const failure = await captureFailure(pending);
-  requireCondition(failure instanceof Error && failure.name === "ExecutionAbortedError", "dispatcher_abort_type");
+  requireCondition(
+    failure instanceof Error && failure.name === "ExecutionAbortedError",
+    "dispatcher_abort_type",
+  );
   requireCondition(observedSignal?.aborted === true, "dispatcher_abort_propagation");
 }
 
@@ -166,7 +169,10 @@ async function verifyPermitReconciliation(): Promise<void> {
     release(outcome: "completed", actualTokens: number): Promise<void>;
   };
   await expensivePermit.release("completed", 400);
-  requireCondition(expensiveLimiter.getStatus().availableTokens <= 601, "permit_actual_token_debit");
+  requireCondition(
+    expensiveLimiter.getStatus().availableTokens <= 601,
+    "permit_actual_token_debit",
+  );
 }
 
 async function verifyQueuedAndAcquiredAbort(): Promise<void> {

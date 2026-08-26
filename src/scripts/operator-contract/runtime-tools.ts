@@ -32,19 +32,11 @@ async function verifyCallerAbortStopsLocalProcess(temporaryRoot: string): Promis
   }
 }
 
-async function verifyRequestedTimeoutCannotExceedToolLimit(
-  temporaryRoot: string,
-): Promise<void> {
+async function verifyRequestedTimeoutCannotExceedToolLimit(temporaryRoot: string): Promise<void> {
   const pidPath = join(temporaryRoot, "tool-timeout.pid");
   const command = createDelayedNodeCommand(pidPath, 400);
   const startedAt = Date.now();
-  const record = await dispatchCommand(
-    temporaryRoot,
-    command,
-    createLimits(60),
-    undefined,
-    10,
-  );
+  const record = await dispatchCommand(temporaryRoot, command, createLimits(60), undefined, 10);
   const childPid = readProcessId(pidPath);
   try {
     requireCondition(record.isError, "tool_process_limit_error");
