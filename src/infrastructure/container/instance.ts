@@ -26,7 +26,7 @@ export class ContainerInstance implements IContainerInstance {
     containerId: string,
     config: ContainerLaunchConfig,
     dockerClient: IDockerClient,
-    stateMachine?: ContainerStateMachine
+    stateMachine?: ContainerStateMachine,
   ) {
     this.containerId = containerId;
     this.runId = config.runId;
@@ -39,7 +39,10 @@ export class ContainerInstance implements IContainerInstance {
     return this.stateMachine.state;
   }
 
-  private parseTrailer(rawStderr: string): { readonly cleanStderr: string; readonly trailer?: MetaTrailer } {
+  private parseTrailer(rawStderr: string): {
+    readonly cleanStderr: string;
+    readonly trailer?: MetaTrailer;
+  } {
     const match = META_TRAILER_REGEX.exec(rawStderr);
     if (!match || !match[1]) {
       return { cleanStderr: rawStderr, trailer: undefined };
@@ -57,15 +60,14 @@ export class ContainerInstance implements IContainerInstance {
           },
         };
       }
-    } catch {
-    }
+    } catch {}
 
     return { cleanStderr: rawStderr, trailer: undefined };
   }
 
   async executeCommand(
     command: string,
-    options?: ExecuteCommandOptions
+    options?: ExecuteCommandOptions,
   ): Promise<ContainerExecResult> {
     if (this.stateMachine.state !== "EXECUTING") {
       this.stateMachine.transition("EXECUTING");
@@ -122,8 +124,7 @@ exit \${EXIT_CODE}
       const inspectInfo = await this.dockerClient.inspectContainer(this.containerId);
       if (inspectInfo.state.oomKilled) {
       }
-    } catch {
-    }
+    } catch {}
 
     if (this.stateMachine.state === "EXECUTING") {
       this.stateMachine.transition("READY");
@@ -147,7 +148,7 @@ exit \${EXIT_CODE}
       {
         cwd: "/workspace",
         user: "root",
-      }
+      },
     );
 
     if (result.exitCode !== 0) {
@@ -187,18 +188,16 @@ mkdir -p "$DIRNAME"
 printf "%s" "${base64Content}" | base64 -d > "${path}"
 `.trim();
 
-    const result = await this.dockerClient.exec(
-      this.containerId,
-      ["/bin/bash", "-c", script],
-      {
-        cwd: "/workspace",
-        user: "root",
-      }
-    );
+    const result = await this.dockerClient.exec(this.containerId, ["/bin/bash", "-c", script], {
+      cwd: "/workspace",
+      user: "root",
+    });
 
     if (result.exitCode !== 0) {
       const errText = new TextDecoder().decode(result.stderr);
-      throw new Error(`Failed to write file '${path}' in container ${this.containerId}: ${errText}`);
+      throw new Error(
+        `Failed to write file '${path}' in container ${this.containerId}: ${errText}`,
+      );
     }
   }
 
@@ -213,14 +212,10 @@ git add --intent-to-add . 2>/dev/null || true
 git diff --binary --full-index baseline 2>/dev/null || git diff --binary --full-index HEAD 2>/dev/null || true
 `.trim();
 
-    const result = await this.dockerClient.exec(
-      this.containerId,
-      ["/bin/bash", "-c", script],
-      {
-        cwd: "/workspace",
-        user: "sandbox",
-      }
-    );
+    const result = await this.dockerClient.exec(this.containerId, ["/bin/bash", "-c", script], {
+      cwd: "/workspace",
+      user: "sandbox",
+    });
 
     const diffOutput = new TextDecoder().decode(result.stdout);
 
@@ -242,16 +237,14 @@ git diff --binary --full-index baseline 2>/dev/null || git diff --binary --full-
 
     try {
       await this.dockerClient.killContainer(this.containerId);
-    } catch {
-    }
+    } catch {}
 
     try {
       await this.dockerClient.removeContainer(this.containerId, {
         force: true,
         removeVolumes: true,
       });
-    } catch {
-    }
+    } catch {}
 
     try {
       if (this.config.workspaceVolumeName) {
@@ -259,8 +252,7 @@ git diff --binary --full-index baseline 2>/dev/null || git diff --binary --full-
           force: true,
         });
       }
-    } catch {
-    }
+    } catch {}
 
     if (this.stateMachine.canTransition("TERMINATED")) {
       this.stateMachine.transition("TERMINATED");

@@ -2,12 +2,7 @@ import { AnthropicProviderAdapter } from "./anthropic";
 import { GeminiProviderAdapter } from "./gemini";
 import { MockProviderAdapter } from "./mock-adapter";
 import { OpenAIProviderAdapter } from "./openai";
-import {
-  LLMProviderAdapter,
-  ProviderConfig,
-  ProviderError,
-  ProviderId,
-} from "./types";
+import { LLMProviderAdapter, ProviderConfig, ProviderError, ProviderId } from "./types";
 
 export function createProviderAdapter(config: ProviderConfig): LLMProviderAdapter {
   const normalizedConfig = normalizeProviderConfig(config);
@@ -45,10 +40,7 @@ export function createProviderAdapter(config: ProviderConfig): LLMProviderAdapte
   }
 
   const safeProviderId: ProviderId = "custom";
-  throw new ProviderError(
-    `Unsupported provider ID: ${String(providerId)}`,
-    safeProviderId
-  );
+  throw new ProviderError(`Unsupported provider ID: ${String(providerId)}`, safeProviderId);
 }
 
 function normalizeProviderConfig(config: ProviderConfig): ProviderConfig {
@@ -63,7 +55,10 @@ function hasCredential(value: string | undefined): value is string {
   return value !== undefined && value.trim().length > 0;
 }
 
-function requireCredential(config: ProviderConfig, ...environmentNames: ReadonlyArray<string>): void {
+function requireCredential(
+  config: ProviderConfig,
+  ...environmentNames: ReadonlyArray<string>
+): void {
   if (hasCredential(config.apiKey)) {
     return;
   }
@@ -74,13 +69,13 @@ function requireCredential(config: ProviderConfig, ...environmentNames: Readonly
   }
   throw new ProviderError(
     `Live ${config.providerId} provider requires ${environmentNames.join(" or ")}`,
-    config.providerId
+    config.providerId,
   );
 }
 
 export function createAnthropicAdapter(
   modelId?: string,
-  config?: Partial<ProviderConfig>
+  config?: Partial<ProviderConfig>,
 ): AnthropicProviderAdapter {
   const baseConfig: Partial<ProviderConfig> = {
     providerId: "anthropic",
@@ -93,7 +88,7 @@ export function createAnthropicAdapter(
 
 export function createGeminiAdapter(
   modelId?: string,
-  config?: Partial<ProviderConfig>
+  config?: Partial<ProviderConfig>,
 ): GeminiProviderAdapter {
   const baseConfig: Partial<ProviderConfig> = {
     providerId: "google",
@@ -106,7 +101,7 @@ export function createGeminiAdapter(
 
 export function createOpenAIAdapter(
   modelId?: string,
-  config?: Partial<ProviderConfig>
+  config?: Partial<ProviderConfig>,
 ): OpenAIProviderAdapter {
   const baseConfig: Partial<ProviderConfig> = {
     providerId: "openai",
@@ -119,13 +114,11 @@ export function createOpenAIAdapter(
 
 export function createOllamaAdapter(
   modelId?: string,
-  config?: Partial<ProviderConfig>
+  config?: Partial<ProviderConfig>,
 ): OpenAIProviderAdapter {
   const defaultBaseUrl = "http://localhost:11434/v1";
   const baseUrl =
-    config !== undefined && config.baseUrl !== undefined
-      ? config.baseUrl
-      : defaultBaseUrl;
+    config !== undefined && config.baseUrl !== undefined ? config.baseUrl : defaultBaseUrl;
   const baseConfig: Partial<ProviderConfig> = {
     providerId: "ollama",
     defaultModel: modelId,
@@ -138,7 +131,7 @@ export function createOllamaAdapter(
 
 export function createMockAdapter(
   modelId?: string,
-  config?: Partial<ProviderConfig>
+  config?: Partial<ProviderConfig>,
 ): MockProviderAdapter {
   const baseConfig: Partial<ProviderConfig> = {
     providerId: "custom",

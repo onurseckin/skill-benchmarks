@@ -15,7 +15,10 @@ export class SkillValidationError extends Error {
 
 const DANGEROUS_PAYLOAD_PATTERNS: readonly RegExp[] = [
   new RegExp(":\\(\\)\\s*\\{\\s*:(\\|):&\\s*\\};:"),
-  new RegExp("rm\\s+(-[a-zA-Z]*r[a-zA-Z]*f[a-zA-Z]*|-[a-zA-Z]*f[a-zA-Z]*r[a-zA-Z]*)\\s+([/~]|\\$HOME|\\$\\{HOME\\})", "i"),
+  new RegExp(
+    "rm\\s+(-[a-zA-Z]*r[a-zA-Z]*f[a-zA-Z]*|-[a-zA-Z]*f[a-zA-Z]*r[a-zA-Z]*)\\s+([/~]|\\$HOME|\\$\\{HOME\\})",
+    "i",
+  ),
   new RegExp("mkfs(\\.[a-z0-9]+)?\\s+", "i"),
   new RegExp("dd\\s+if=\\/dev\\/(zero|urandom|random)\\s+of=\\/dev\\/", "i"),
   new RegExp("(?:curl|wget)\\s+[^|;&\\n]+\\|\\s*(?:ba|z)?sh", "i"),
@@ -41,10 +44,7 @@ const ROOT_SYSTEM_PREFIXES: readonly string[] = [
   "\\\\",
 ];
 
-export function validatePathSafety(
-  targetPath: string,
-  basePath?: string
-): boolean {
+export function validatePathSafety(targetPath: string, basePath?: string): boolean {
   if (!targetPath || typeof targetPath !== "string") {
     return false;
   }
@@ -54,11 +54,7 @@ export function validatePathSafety(
   }
 
   const lower = targetPath.toLowerCase();
-  if (
-    lower.includes("%2e%2e") ||
-    lower.includes("%2f") ||
-    lower.includes("%5c")
-  ) {
+  if (lower.includes("%2e%2e") || lower.includes("%2f") || lower.includes("%5c")) {
     return false;
   }
 
@@ -72,13 +68,8 @@ export function validatePathSafety(
   if (basePath) {
     try {
       const normalizedBase = resolve(basePath);
-      const resolved = isAbsolute(targetPath)
-        ? resolve(targetPath)
-        : resolve(basePath, targetPath);
-      if (
-        resolved !== normalizedBase &&
-        !resolved.startsWith(normalizedBase + sep)
-      ) {
+      const resolved = isAbsolute(targetPath) ? resolve(targetPath) : resolve(basePath, targetPath);
+      if (resolved !== normalizedBase && !resolved.startsWith(normalizedBase + sep)) {
         return false;
       }
       return true;
@@ -116,7 +107,7 @@ export function validateSecurityInvariants(manifest: SkillManifest): {
       for (const pattern of DANGEROUS_PAYLOAD_PATTERNS) {
         if (pattern.test(script.content)) {
           issues.push(
-            `Script '${script.name}' contains potentially malicious payload pattern: ${pattern.source}`
+            `Script '${script.name}' contains potentially malicious payload pattern: ${pattern.source}`,
           );
         }
       }
@@ -132,7 +123,7 @@ export function validateSecurityInvariants(manifest: SkillManifest): {
       for (const pattern of DANGEROUS_PAYLOAD_PATTERNS) {
         if (pattern.test(tool.command)) {
           issues.push(
-            `Tool '${tool.name}' command contains potentially malicious payload pattern: ${pattern.source}`
+            `Tool '${tool.name}' command contains potentially malicious payload pattern: ${pattern.source}`,
           );
         }
       }
@@ -145,9 +136,7 @@ export function validateSecurityInvariants(manifest: SkillManifest): {
   };
 }
 
-export function validateSkillManifest(
-  manifest: SkillManifest
-): SkillValidationResult {
+export function validateSkillManifest(manifest: SkillManifest): SkillValidationResult {
   const errors: string[] = [];
   const warnings: string[] = [];
 
@@ -243,9 +232,6 @@ export function validateSkillManifest(
 export function assertValidSkill(manifest: SkillManifest): void {
   const result = validateSkillManifest(manifest);
   if (!result.valid || !result.securityPass) {
-    throw new SkillValidationError(
-      manifest.name || "unknown",
-      result.errors
-    );
+    throw new SkillValidationError(manifest.name || "unknown", result.errors);
   }
 }

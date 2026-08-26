@@ -60,7 +60,7 @@ export const DEFAULT_MODEL_PRICING: Readonly<Record<string, ModelPricingRate>> =
     standardOutputPerM: 0.6,
     reasoningOutputPerM: 0.6,
   },
-  "o1": {
+  o1: {
     uncachedInputPerM: 15.0,
     cacheWritePerM: 15.0,
     cacheReadPerM: 7.5,
@@ -112,7 +112,7 @@ export function clearRegisteredModelPricing(): void {
 
 export function getModelPricingRate(
   modelId: string,
-  overrides?: ProviderPricingConfig
+  overrides?: ProviderPricingConfig,
 ): ModelPricingRate {
   if (overrides !== undefined && overrides[modelId] !== undefined) {
     const overrideRate = overrides[modelId];
@@ -151,12 +151,12 @@ export function getModelPricingRate(
 export function calculateDetailedCostUSD(
   modelId: string,
   usage: TokenUsage,
-  overrides?: ProviderPricingConfig
+  overrides?: ProviderPricingConfig,
 ): DetailedCostBreakdown {
   const rate = getModelPricingRate(modelId, overrides);
   const uncachedTokens = Math.max(
     0,
-    usage.inputTokens - usage.cacheCreationInputTokens - usage.cacheReadInputTokens
+    usage.inputTokens - usage.cacheCreationInputTokens - usage.cacheReadInputTokens,
   );
   const uncachedInputCostUSD = (uncachedTokens / 1_000_000) * rate.uncachedInputPerM;
   const cacheWriteCostUSD = (usage.cacheCreationInputTokens / 1_000_000) * rate.cacheWritePerM;
@@ -188,7 +188,7 @@ export function calculateDetailedCostUSD(
 export function calculateTokenCostUSD(
   modelId: string,
   usage: TokenUsage,
-  overrides?: ProviderPricingConfig
+  overrides?: ProviderPricingConfig,
 ): number {
   return calculateDetailedCostUSD(modelId, usage, overrides).totalCostUSD;
 }

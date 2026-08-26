@@ -1,6 +1,9 @@
 import type { IContainerInstance } from "../infrastructure/container/types.js";
 import { createDisposableWorkspace } from "../infrastructure/workspace/disposable-workspace.js";
-import { createRunArtifactLayout, prepareRunArtifactLayout } from "../infrastructure/workspace/run-artifact-layout.js";
+import {
+  createRunArtifactLayout,
+  prepareRunArtifactLayout,
+} from "../infrastructure/workspace/run-artifact-layout.js";
 import type { DisposableWorkspace } from "../infrastructure/workspace/types.js";
 import { createProviderAdapter } from "../providers/factory.js";
 import { TelemetryDatabase, TerminalRunIdentityConflictError } from "../reporting/db.js";
@@ -8,9 +11,18 @@ import type { ScenarioResult, RunTerminationReason } from "../runner/types.js";
 import { ScenarioRunnerEngine } from "../runner/runner-engine.js";
 import { ScenarioLoader } from "../runner/scenario-loader.js";
 import { createSafeArtifactPathSegment } from "../shared/artifact-sanitization.js";
-import type { ITokenBucketRateLimiter, MatrixCellDescriptor, MatrixCellResult, MatrixSweepConfig } from "./types.js";
+import type {
+  ITokenBucketRateLimiter,
+  MatrixCellDescriptor,
+  MatrixCellResult,
+  MatrixSweepConfig,
+} from "./types.js";
 import { writeRunManifest } from "./run-evidence.js";
-import { createTerminalIdentityConflict, persistTerminalCell, persistTerminalFailure } from "./terminal-cell-persistence.js";
+import {
+  createTerminalIdentityConflict,
+  persistTerminalCell,
+  persistTerminalFailure,
+} from "./terminal-cell-persistence.js";
 
 interface CellExecutionInput {
   readonly cell: MatrixCellDescriptor;
@@ -24,7 +36,16 @@ interface CellExecutionInput {
 }
 
 export async function executeSweepCell(input: CellExecutionInput): Promise<MatrixCellResult> {
-  const { cell, config, scenarioLoader, runnerEngine, telemetryDb, limiter, aborted, planFingerprint } = input;
+  const {
+    cell,
+    config,
+    scenarioLoader,
+    runnerEngine,
+    telemetryDb,
+    limiter,
+    aborted,
+    planFingerprint,
+  } = input;
   const startedAt = new Date().toISOString();
   const startedMs = Date.now();
   const executionMode = config.dryRun ? "fake" : cell.executionMode;
@@ -66,7 +87,15 @@ export async function executeSweepCell(input: CellExecutionInput): Promise<Matri
     try {
       await writeRunManifest(artifactLayout, context);
     } catch {
-      return persistTerminalFailure(cell, telemetryDb, artifactLayout, context, scenarioResult, attemptCount, startedMs);
+      return persistTerminalFailure(
+        cell,
+        telemetryDb,
+        artifactLayout,
+        context,
+        scenarioResult,
+        attemptCount,
+        startedMs,
+      );
     }
     workspace = await createDisposableWorkspace({
       outputRoot: cell.outputRoot,
@@ -93,34 +122,43 @@ export async function executeSweepCell(input: CellExecutionInput): Promise<Matri
             networkMode: "sb-bridge-isolated",
             workspaceVolumeName: `sb-vol-${cell.runId}`,
             artifactHostPath: artifactLayout.runDirectory,
-            timeouts: { commandTimeoutMs: cell.limits.toolTimeoutMs, turnTimeoutMs: 60000, totalScenarioTimeoutMs: cell.limits.maxWallClockTimeMs },
+            timeouts: {
+              commandTimeoutMs: cell.limits.toolTimeoutMs,
+              turnTimeoutMs: 60000,
+              totalScenarioTimeoutMs: cell.limits.maxWallClockTimeMs,
+            },
             labels: { "io.skill-benchmarks.sweep-id": cell.runId },
           });
         }
         scenarioResult = config.dryRun
           ? createDryRunResult(cell, startedAt)
           : await runnerEngine.run({
-            runId: cell.runId,
-            scenarioId: cell.scenarioId,
-            skillIds: [cell.skillId],
-            modelId: cell.modelId,
-            provider: createProviderAdapter({
-              providerId: cell.providerId as "anthropic" | "google" | "openai" | "ollama" | "custom",
-              defaultModel: cell.modelId,
-              executionMode: cell.executionMode,
               runId: cell.runId,
-            }),
-            prompt: scenarioDefinition.instructions,
-            workspace,
-            artifactOutputDir: artifactLayout.runDirectory,
-            artifactLayout,
-            container,
-            limits: cell.limits,
-            temperature: cell.temperature,
-            thinkingLevel: cell.thinkingLevel,
-            thinkingBudget: cell.thinkingBudget,
-            reasoningEffort: cell.modelEntry.reasoningEffort,
-          });
+              scenarioId: cell.scenarioId,
+              skillIds: [cell.skillId],
+              modelId: cell.modelId,
+              provider: createProviderAdapter({
+                providerId: cell.providerId as
+                  | "anthropic"
+                  | "google"
+                  | "openai"
+                  | "ollama"
+                  | "custom",
+                defaultModel: cell.modelId,
+                executionMode: cell.executionMode,
+                runId: cell.runId,
+              }),
+              prompt: scenarioDefinition.instructions,
+              workspace,
+              artifactOutputDir: artifactLayout.runDirectory,
+              artifactLayout,
+              container,
+              limits: cell.limits,
+              temperature: cell.temperature,
+              thinkingLevel: cell.thinkingLevel,
+              thinkingBudget: cell.thinkingBudget,
+              reasoningEffort: cell.modelEntry.reasoningEffort,
+            });
         limiter.recordConsumption(scenarioResult.totalTokens.totalTokens);
       } catch {
         attemptFailed = true;
@@ -157,7 +195,11 @@ export async function executeSweepCell(input: CellExecutionInput): Promise<Matri
   }
 
   const context = { ...baseContext, category: evidenceCategory };
-  const terminationReason = resolveTerminationReason(infrastructureFailure, scenarioResult, aborted());
+  const terminationReason = resolveTerminationReason(
+    infrastructureFailure,
+    scenarioResult,
+    aborted(),
+  );
   return persistTerminalCell({
     cell,
     telemetryDb,
@@ -173,7 +215,7 @@ export async function executeSweepCell(input: CellExecutionInput): Promise<Matri
 function resolveTerminationReason(
   infrastructureFailure: RunTerminationReason | undefined,
   scenarioResult: ScenarioResult | undefined,
-  aborted: boolean
+  aborted: boolean,
 ): RunTerminationReason {
   if (infrastructureFailure !== undefined) return infrastructureFailure;
   if (scenarioResult?.terminationReason === "timeout") return "timeout";
@@ -199,7 +241,13 @@ function createDryRunResult(cell: MatrixCellDescriptor, startedAt: string): Scen
     messages: [],
     finalOutput: "Dry run completed",
     totalDurationMs: 50,
-    totalTokens: { inputTokens: 500, outputTokens: 200, cacheCreationInputTokens: 0, cacheReadInputTokens: 0, totalTokens: 700 },
+    totalTokens: {
+      inputTokens: 500,
+      outputTokens: 200,
+      cacheCreationInputTokens: 0,
+      cacheReadInputTokens: 0,
+      totalTokens: 700,
+    },
     totalCostUSD: 0,
     consecutiveToolErrors: 0,
     startedAt,
@@ -211,16 +259,25 @@ function createCellArtifactLayout(cell: MatrixCellDescriptor) {
   try {
     return createRunArtifactLayout(cell.outputRoot, cell.runId);
   } catch {
-    const fallbackRunId = createSafeArtifactPathSegment(`${cell.cellId}-${cell.runId}`, "failed-run");
+    const fallbackRunId = createSafeArtifactPathSegment(
+      `${cell.cellId}-${cell.runId}`,
+      "failed-run",
+    );
     return createRunArtifactLayout(cell.outputRoot, fallbackRunId);
   }
 }
 
-function assertEmbeddedAdapterMatchesMode(cell: MatrixCellDescriptor, executionMode: "fake" | "live"): void {
+function assertEmbeddedAdapterMatchesMode(
+  cell: MatrixCellDescriptor,
+  executionMode: "fake" | "live",
+): void {
   const embeddedAdapter = cell.modelEntry.provider;
   if (embeddedAdapter === undefined) return;
   const expectedSimulated = executionMode === "fake";
-  if (embeddedAdapter.executionMode !== executionMode || embeddedAdapter.simulated !== expectedSimulated) {
+  if (
+    embeddedAdapter.executionMode !== executionMode ||
+    embeddedAdapter.simulated !== expectedSimulated
+  ) {
     throw new TypeError("Embedded provider mode does not match resolved benchmark mode");
   }
 }

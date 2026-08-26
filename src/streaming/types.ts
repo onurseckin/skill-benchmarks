@@ -4,11 +4,31 @@ export type FrameCompressionFormat = "raw" | "ansi-delta" | "run-length" | "json
 
 export type StreamingProtocol = "websocket" | "sse" | "raw-tcp" | "http-chunked";
 
-export type StreamingConnectionStatus = "idle" | "connecting" | "connected" | "disconnected" | "reconnecting" | "error";
+export type StreamingConnectionStatus =
+  | "idle"
+  | "connecting"
+  | "connected"
+  | "disconnected"
+  | "reconnecting"
+  | "error";
 
-export type TelemetryChunkType = "metrics" | "log" | "state" | "chart" | "hud" | "alert" | "heartbeat" | "custom";
+export type TelemetryChunkType =
+  | "metrics"
+  | "log"
+  | "state"
+  | "chart"
+  | "hud"
+  | "alert"
+  | "heartbeat"
+  | "custom";
 
-export type HudPosition = "top-left" | "top-right" | "bottom-left" | "bottom-right" | "top-center" | "bottom-center";
+export type HudPosition =
+  | "top-left"
+  | "top-right"
+  | "bottom-left"
+  | "bottom-right"
+  | "top-center"
+  | "bottom-center";
 
 export type HudBadgeStyle = "pill" | "square" | "bordered";
 

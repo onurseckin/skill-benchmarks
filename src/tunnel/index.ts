@@ -99,7 +99,7 @@ export {
 
 export async function startStreamTunnel(
   options?: TunnelServerOptions,
-  multiplexer?: PtyMultiplexerInstance
+  multiplexer?: PtyMultiplexerInstance,
 ): Promise<StreamTunnelServer> {
   const tunnel = new StreamTunnelServer(options, multiplexer);
   await tunnel.start();

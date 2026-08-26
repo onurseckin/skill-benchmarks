@@ -16,7 +16,10 @@ export function openAuthorizedRunDirectory(layout: RunArtifactLayout): number {
 }
 
 export function openRetainedDirectory(path: string): number {
-  const descriptor = openSync(path, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW);
+  const descriptor = openSync(
+    path,
+    constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW,
+  );
   try {
     const stats = fstatSync(descriptor);
     if (!stats.isDirectory()) throw new TypeError("Benchmark artifact directory is unsafe");
@@ -33,7 +36,10 @@ export function inspectDirectoryDescriptor(descriptor: number): RunArtifactDirec
   return { device: stats.dev, inode: stats.ino };
 }
 
-export function requireRetainedDirectoryPath(path: string, expected: RunArtifactDirectoryIdentity): void {
+export function requireRetainedDirectoryPath(
+  path: string,
+  expected: RunArtifactDirectoryIdentity,
+): void {
   requireDirectoryIdentity(lstatSync(path), expected);
 }
 
@@ -45,15 +51,21 @@ export function requireRunArtifactAuthority(layout: RunArtifactLayout): void {
 }
 
 function requireAuthority(layout: RunArtifactLayout): NonNullable<RunArtifactLayout["authority"]> {
-  if (layout.authority === undefined) throw new TypeError("Benchmark artifact directory authority is missing");
+  if (layout.authority === undefined)
+    throw new TypeError("Benchmark artifact directory authority is missing");
   return layout.authority;
 }
 
 function requireDirectoryIdentity(
   stats: { isDirectory(): boolean; isSymbolicLink(): boolean; dev: number; ino: number },
-  expected: RunArtifactDirectoryIdentity
+  expected: RunArtifactDirectoryIdentity,
 ): void {
-  if (!stats.isDirectory() || stats.isSymbolicLink() || stats.dev !== expected.device || stats.ino !== expected.inode) {
+  if (
+    !stats.isDirectory() ||
+    stats.isSymbolicLink() ||
+    stats.dev !== expected.device ||
+    stats.ino !== expected.inode
+  ) {
     throw new TypeError("Benchmark artifact directory is unsafe");
   }
 }

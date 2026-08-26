@@ -18,15 +18,20 @@ import type { CliCommandResult, CliOutput, CliParsedArgs, ReplayCliOptions } fro
 
 export async function runReplayCommand(
   args: CliParsedArgs,
-  output: CliOutput
+  output: CliOutput,
 ): Promise<CliCommandResult> {
   const startedAt = Date.now();
   const options = requireOptions(args.replayOptions);
   const loaded = loadRequestedSession(options);
   const format = options.format ?? "tui";
-  if (format === "json") exportJson(loaded.session, options.outputPath, loaded.protectedPaths, output);
-  else if (format === "html") exportHtml(loaded.session, options.outputPath, loaded.protectedPaths, output);
-  else await new TuiReplayPlayer(loaded.session, { playbackSpeed: options.speed ?? 1 }).playInteractive();
+  if (format === "json")
+    exportJson(loaded.session, options.outputPath, loaded.protectedPaths, output);
+  else if (format === "html")
+    exportHtml(loaded.session, options.outputPath, loaded.protectedPaths, output);
+  else
+    await new TuiReplayPlayer(loaded.session, {
+      playbackSpeed: options.speed ?? 1,
+    }).playInteractive();
   return { success: true, exitCode: 0, durationMs: Date.now() - startedAt, data: loaded.session };
 }
 
@@ -41,7 +46,10 @@ function loadRequestedSession(options: ReplayCliOptions): LoadedReplayRequest {
       const extension = extname(options.target).toLowerCase();
       if (extension !== ".jsonl" && extension !== ".json") throw new CliInputError("invalid_value");
       requireDistinctReplayOutput(options.outputPath, [options.target]);
-      return { session: loadReplaySession({ eventsPath: options.target }), protectedPaths: [options.target] };
+      return {
+        session: loadReplaySession({ eventsPath: options.target }),
+        protectedPaths: [options.target],
+      };
     }
     const runId = requireValue(options.runId);
     const dbPath = requireValue(options.dbPath);
@@ -65,9 +73,12 @@ function loadRequestedSession(options: ReplayCliOptions): LoadedReplayRequest {
       database.close();
     }
   } catch (error) {
-    if (error instanceof CliInputError
-      || error instanceof ReplayEvidenceUnavailableError
-      || error instanceof ReplayEvidenceInvalidError) throw error;
+    if (
+      error instanceof CliInputError ||
+      error instanceof ReplayEvidenceUnavailableError ||
+      error instanceof ReplayEvidenceInvalidError
+    )
+      throw error;
     throw new ReplayEvidenceUnavailableError();
   }
 }
@@ -107,7 +118,7 @@ function exportJson(
   session: ReplaySession,
   outputPath: string | undefined,
   protectedPaths: readonly string[],
-  output: CliOutput
+  output: CliOutput,
 ): void {
   const content = `${JSON.stringify(session, null, 2)}\n`;
   if (outputPath === undefined) {
@@ -122,7 +133,7 @@ function exportHtml(
   session: ReplaySession,
   outputPath: string | undefined,
   protectedPaths: readonly string[],
-  output: CliOutput
+  output: CliOutput,
 ): void {
   if (outputPath === undefined) throw new CliInputError("invalid_configuration");
   writeReplayExportAtomic(outputPath, generateWebReplayHtml(session), protectedPaths);

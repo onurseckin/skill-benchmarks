@@ -1,10 +1,18 @@
-import { createHash, randomUUID } from "node:crypto";
-import { mkdir, readdir, readFile, rm, rename, stat, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { mkdir, readFile, rm, rename, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import type { SkillDownloadOptions, SkillManifest, SkillSourceType } from "./types";
 import { parseSkillContent } from "./parser";
 import { validateSkillManifest, SkillValidationError } from "./validator";
+import {
+  computeSha256,
+  findManifestFile,
+  isCacheFresh,
+  sanitizeSkillId,
+} from "./download-cache.js";
+
+export { computeSha256, isCacheFresh, sanitizeSkillId } from "./download-cache.js";
 
 export interface SkillDownloadResult {
   readonly manifest: SkillManifest;
@@ -13,91 +21,19 @@ export interface SkillDownloadResult {
   readonly hash: string;
 }
 
-export function sanitizeSkillId(source: string): string {
-  let cleaned = source;
-  if (cleaned.startsWith("https://")) cleaned = cleaned.slice(8);
-  else if (cleaned.startsWith("http://")) cleaned = cleaned.slice(7);
-  if (cleaned.startsWith("git@github.com:")) cleaned = cleaned.slice(15);
-  if (cleaned.endsWith(".git")) cleaned = cleaned.slice(0, -4);
-  return cleaned.replace(/[^a-zA-Z0-9_-]/g, "_");
-}
-
-export function computeSha256(data: string | Uint8Array): string {
-  const hasher = createHash("sha256");
-  hasher.update(data);
-  return hasher.digest("hex");
-}
-
-async function findManifestFile(directoryPath: string): Promise<string | null> {
-  try {
-    const fileStats = await stat(directoryPath);
-    if (fileStats.isFile()) return directoryPath;
-  } catch {
-    return null;
-  }
-
-  const primaryNames = ["SKILL.md", "skill.md", "README.md", "manifest.json", "skill.json"];
-  for (const name of primaryNames) {
-    const candidate = join(directoryPath, name);
-    try {
-      const s = await stat(candidate);
-      if (s.isFile()) return candidate;
-    } catch {
-      continue;
-    }
-  }
-
-  const ignoredDirs = new Set([".git", "node_modules", ".benchmarks", "dist"]);
-  try {
-    const entries = await readdir(directoryPath, { withFileTypes: true });
-    for (const entry of entries) {
-      if (entry.isDirectory()) {
-        if (ignoredDirs.has(entry.name)) continue;
-        const subPath = join(directoryPath, entry.name);
-        const nestedManifest = await findManifestFile(subPath);
-        if (nestedManifest !== null) return nestedManifest;
-      } else if (entry.isFile() && entry.name.endsWith(".md")) {
-        return join(directoryPath, entry.name);
-      }
-    }
-  } catch {
-    return null;
-  }
-
-  return null;
-}
-
-export async function isCacheFresh(
-  cachedPath: string,
-  ttlMs?: number,
-  expectedHash?: string
-): Promise<boolean> {
-  try {
-    const fileStats = await stat(cachedPath);
-    if (ttlMs !== undefined && ttlMs > 0) {
-      if (Date.now() - fileStats.mtimeMs > ttlMs) return false;
-    }
-    if (expectedHash !== undefined && expectedHash.length > 0) {
-      const manifestFile = await findManifestFile(cachedPath);
-      if (manifestFile === null) return false;
-      const content = await readFile(manifestFile, "utf-8");
-      if (computeSha256(content) !== expectedHash) return false;
-    }
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 export async function fetchWithRetry(
   url: string,
   init?: RequestInit,
-  options?: SkillDownloadOptions
+  options?: SkillDownloadOptions,
 ): Promise<Response> {
-  const maxRetries = options !== undefined && options.maxRetries !== undefined ? options.maxRetries : 3;
-  const initialDelayMs = options !== undefined && options.initialDelayMs !== undefined ? options.initialDelayMs : 500;
-  const backoffFactor = options !== undefined && options.backoffFactor !== undefined ? options.backoffFactor : 2;
-  const timeoutMs = options !== undefined && options.timeoutMs !== undefined ? options.timeoutMs : 30000;
+  const maxRetries =
+    options !== undefined && options.maxRetries !== undefined ? options.maxRetries : 3;
+  const initialDelayMs =
+    options !== undefined && options.initialDelayMs !== undefined ? options.initialDelayMs : 500;
+  const backoffFactor =
+    options !== undefined && options.backoffFactor !== undefined ? options.backoffFactor : 2;
+  const timeoutMs =
+    options !== undefined && options.timeoutMs !== undefined ? options.timeoutMs : 30000;
 
   const requestHeaders: Record<string, string> = {};
   if (init !== undefined && init.headers !== undefined) {
@@ -109,7 +45,9 @@ export async function fetchWithRetry(
   }
 
   if (options !== undefined && options.token !== undefined && options.token.length > 0) {
-    requestHeaders["Authorization"] = options.token.startsWith("Bearer ") ? options.token : `Bearer ${options.token}`;
+    requestHeaders["Authorization"] = options.token.startsWith("Bearer ")
+      ? options.token
+      : `Bearer ${options.token}`;
   }
 
   let lastError: Error | null = null;
@@ -119,7 +57,11 @@ export async function fetchWithRetry(
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-      const response = await fetch(url, { ...init, headers: requestHeaders, signal: controller.signal });
+      const response = await fetch(url, {
+        ...init,
+        headers: requestHeaders,
+        signal: controller.signal,
+      });
       clearTimeout(timeoutId);
 
       if (response.ok) return response;
@@ -131,7 +73,9 @@ export async function fetchWithRetry(
         continue;
       }
 
-      throw new Error(`HTTP fetch failed with status ${response.status} (${response.statusText}) for URL: ${url}`);
+      throw new Error(
+        `HTTP fetch failed with status ${response.status} (${response.statusText}) for URL: ${url}`,
+      );
     } catch (err) {
       lastError = err instanceof Error ? err : new Error(String(err));
       if (attempt < maxRetries) {
@@ -148,7 +92,7 @@ export async function fetchWithRetry(
 export async function downloadFromGit(
   gitUrl: string,
   targetDir: string,
-  options?: SkillDownloadOptions
+  options?: SkillDownloadOptions,
 ): Promise<string> {
   const args: string[] = ["clone"];
   const isShallow = options === undefined || options.shallow === undefined ? true : options.shallow;
@@ -170,10 +114,14 @@ export async function downloadFromGit(
 export async function downloadFromHttp(
   url: string,
   targetDir: string,
-  options?: SkillDownloadOptions
+  options?: SkillDownloadOptions,
 ): Promise<string> {
   await mkdir(targetDir, { recursive: true });
-  const isTarball = url.endsWith(".tar.gz") ? true : url.endsWith(".tgz") ? true : url.includes("/archive/");
+  const isTarball = url.endsWith(".tar.gz")
+    ? true
+    : url.endsWith(".tgz")
+      ? true
+      : url.includes("/archive/");
   if (isTarball) {
     const response = await fetchWithRetry(url, undefined, options);
     const arrayBuffer = await response.arrayBuffer();
@@ -220,7 +168,7 @@ export async function downloadFromHttp(
 export async function stageAndVerifySkill(
   stagingDir: string,
   targetDir: string,
-  options?: SkillDownloadOptions
+  options?: SkillDownloadOptions,
 ): Promise<SkillManifest> {
   const manifestFile = await findManifestFile(stagingDir);
   if (manifestFile === null) {
@@ -253,22 +201,27 @@ export async function stageAndVerifySkill(
 
 export async function downloadSkill(
   source: string,
-  options?: SkillDownloadOptions
+  options?: SkillDownloadOptions,
 ): Promise<SkillDownloadResult> {
-  const baseCacheDir = options !== undefined && options.targetDir !== undefined
-    ? options.targetDir
-    : join(process.cwd(), ".skills", sanitizeSkillId(source));
+  const baseCacheDir =
+    options !== undefined && options.targetDir !== undefined
+      ? options.targetDir
+      : join(process.cwd(), ".skills", sanitizeSkillId(source));
   const targetDir = resolve(baseCacheDir);
   const forceDownload = options !== undefined && options.force === true;
 
   if (!forceDownload) {
-    const fresh = await isCacheFresh(targetDir, options !== undefined ? options.timeoutMs : undefined);
+    const fresh = await isCacheFresh(
+      targetDir,
+      options !== undefined ? options.timeoutMs : undefined,
+    );
     if (fresh) {
       const manifestFile = await findManifestFile(targetDir);
       if (manifestFile !== null) {
         const rawContent = await readFile(manifestFile, "utf-8");
         const manifest = parseSkillContent(rawContent);
-        const manifestContent = manifest.rawContent !== undefined ? manifest.rawContent : rawContent;
+        const manifestContent =
+          manifest.rawContent !== undefined ? manifest.rawContent : rawContent;
         return {
           manifest,
           targetDir,
@@ -287,7 +240,11 @@ export async function downloadSkill(
     if (options !== undefined && options.sourceType !== undefined) {
       resolvedSourceType = options.sourceType;
     } else if (source.startsWith("http://") ? true : source.startsWith("https://")) {
-      const isDirectGit = source.endsWith(".git") ? true : source.includes("github.com") && !source.includes("raw.githubusercontent.com") && !source.endsWith(".md");
+      const isDirectGit = source.endsWith(".git")
+        ? true
+        : source.includes("github.com") &&
+          !source.includes("raw.githubusercontent.com") &&
+          !source.endsWith(".md");
       resolvedSourceType = isDirectGit ? "git" : "github-raw";
     } else if (source.startsWith("git@") ? true : source.startsWith("ssh://")) {
       resolvedSourceType = "git";
@@ -295,7 +252,13 @@ export async function downloadSkill(
 
     if (resolvedSourceType === "git") {
       let gitUrl = source;
-      const isHttpOrSsh = source.startsWith("http://") ? true : source.startsWith("https://") ? true : source.startsWith("git@") ? true : source.startsWith("ssh://");
+      const isHttpOrSsh = source.startsWith("http://")
+        ? true
+        : source.startsWith("https://")
+          ? true
+          : source.startsWith("git@")
+            ? true
+            : source.startsWith("ssh://");
       if (!isHttpOrSsh) {
         gitUrl = `https://github.com/${source}.git`;
       }
@@ -333,18 +296,27 @@ export class SkillDownloader {
     const mergedOptions: SkillDownloadOptions = {
       ...this.defaultOptions,
       ...options,
-      targetDir: options !== undefined && options.targetDir !== undefined
-        ? options.targetDir
-        : join(this.cacheDir, sanitizeSkillId(source)),
+      targetDir:
+        options !== undefined && options.targetDir !== undefined
+          ? options.targetDir
+          : join(this.cacheDir, sanitizeSkillId(source)),
     };
     return downloadSkill(source, mergedOptions);
   }
 
-  async downloadFromGit(gitUrl: string, targetDir: string, options?: SkillDownloadOptions): Promise<string> {
+  async downloadFromGit(
+    gitUrl: string,
+    targetDir: string,
+    options?: SkillDownloadOptions,
+  ): Promise<string> {
     return downloadFromGit(gitUrl, targetDir, { ...this.defaultOptions, ...options });
   }
 
-  async downloadFromHttp(url: string, targetDir: string, options?: SkillDownloadOptions): Promise<string> {
+  async downloadFromHttp(
+    url: string,
+    targetDir: string,
+    options?: SkillDownloadOptions,
+  ): Promise<string> {
     return downloadFromHttp(url, targetDir, { ...this.defaultOptions, ...options });
   }
 

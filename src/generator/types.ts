@@ -1,11 +1,5 @@
-import type {
-  ScenarioDefinition,
-  ExecutionLimits,
-} from "../runner/types.js";
-import type {
-  DeterministicCheck,
-  JudgeRubricDimension,
-} from "../eval/types.js";
+import type { ScenarioDefinition, ExecutionLimits } from "../runner/types.js";
+import type { DeterministicCheck, JudgeRubricDimension } from "../eval/types.js";
 
 export type GenerationTemplateId =
   | "bug_fix"

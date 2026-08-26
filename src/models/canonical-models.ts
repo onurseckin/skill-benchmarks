@@ -32,7 +32,8 @@ export const CANONICAL_MODELS: Record<string, NormalizedModelDefinition> = {
       temperatureConstraint: 1.0,
     },
     defaultThinkingLevel: "medium",
-    description: "Anthropic flagship hybrid frontier model supporting extended thinking and tool calling.",
+    description:
+      "Anthropic flagship hybrid frontier model supporting extended thinking and tool calling.",
   },
   "claude-3-5-sonnet-20241022": {
     id: "claude-3-5-sonnet-20241022",
@@ -80,7 +81,8 @@ export const CANONICAL_MODELS: Record<string, NormalizedModelDefinition> = {
       cacheReadPerM: 37.5,
       standardOutputPerM: 150.0,
     },
-    description: "OpenAI massive scale frontier model for deep reasoning and broad domain expertise.",
+    description:
+      "OpenAI massive scale frontier model for deep reasoning and broad domain expertise.",
   },
   "gpt-4o": {
     id: "gpt-4o",
@@ -106,7 +108,7 @@ export const CANONICAL_MODELS: Record<string, NormalizedModelDefinition> = {
     },
     description: "OpenAI high-speed multimodal flagship model.",
   },
-  "o1": {
+  o1: {
     id: "o1",
     name: "OpenAI o1 Reasoning Model",
     provider: "openai",
@@ -136,7 +138,8 @@ export const CANONICAL_MODELS: Record<string, NormalizedModelDefinition> = {
       defaultBudgetTokens: 25000,
     },
     defaultThinkingLevel: "medium",
-    description: "OpenAI deep chain-of-thought reasoning model for mathematics, science, and coding.",
+    description:
+      "OpenAI deep chain-of-thought reasoning model for mathematics, science, and coding.",
   },
   "o3-mini": {
     id: "o3-mini",
@@ -168,7 +171,8 @@ export const CANONICAL_MODELS: Record<string, NormalizedModelDefinition> = {
       defaultBudgetTokens: 10000,
     },
     defaultThinkingLevel: "medium",
-    description: "Fast, cost-efficient OpenAI reasoning model optimized for STEM and software tasks.",
+    description:
+      "Fast, cost-efficient OpenAI reasoning model optimized for STEM and software tasks.",
   },
   "gemini-2.0-flash-thinking-exp-01-21": {
     id: "gemini-2.0-flash-thinking-exp-01-21",
@@ -200,7 +204,8 @@ export const CANONICAL_MODELS: Record<string, NormalizedModelDefinition> = {
       defaultBudgetTokens: 8192,
     },
     defaultThinkingLevel: "medium",
-    description: "Google experimental model featuring live visible thinking process before token emission.",
+    description:
+      "Google experimental model featuring live visible thinking process before token emission.",
   },
   "gemini-1.5-pro": {
     id: "gemini-1.5-pro",
@@ -320,7 +325,8 @@ export const CANONICAL_MODELS: Record<string, NormalizedModelDefinition> = {
       cacheReadPerM: 0.01,
       standardOutputPerM: 0.15,
     },
-    description: "Google high-density small model engineered for high-volume subtasks and scraping.",
+    description:
+      "Google high-density small model engineered for high-volume subtasks and scraping.",
   },
   "meta-llama/llama-3.3-70b-instruct": {
     id: "meta-llama/llama-3.3-70b-instruct",

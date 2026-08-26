@@ -26,11 +26,22 @@ export class BenchmarkAdmissionError extends TypeError {
 }
 
 export function validateMatrixSweepConfig(config: MatrixSweepConfig): void {
-  if (config === null || typeof config !== "object" || config.runtimeConfig === null
-    || typeof config.runtimeConfig !== "object") invalid();
+  if (
+    config === null ||
+    typeof config !== "object" ||
+    config.runtimeConfig === null ||
+    typeof config.runtimeConfig !== "object"
+  )
+    invalid();
   requireString(config.runtimeConfig.outputRoot);
   requireEnum(config.runtimeConfig.executionMode, ["fake", "live"]);
-  optionalEnum(config.runtimeConfig.requestedProviderId, ["anthropic", "openai", "google", "ollama", "custom"]);
+  optionalEnum(config.runtimeConfig.requestedProviderId, [
+    "anthropic",
+    "openai",
+    "google",
+    "ollama",
+    "custom",
+  ]);
   optionalString(config.sweepId);
   requireStringArray(config.scenarioIds);
   requireStringArray(config.skillIds);
@@ -49,7 +60,8 @@ export function validateMatrixSweepConfig(config: MatrixSweepConfig): void {
     if (policy === null || typeof policy !== "object") invalid();
     requireString(policy.providerId);
     validateRateLimit(policy.defaultRateLimit);
-    const overrides: Readonly<Record<string, Partial<RateLimitConfig>>> = policy.modelOverrides ?? {};
+    const overrides: Readonly<Record<string, Partial<RateLimitConfig>>> =
+      policy.modelOverrides ?? {};
     for (const override of Object.values(overrides)) validatePartialRateLimit(override);
   }
   for (const model of config.models) {
@@ -66,11 +78,13 @@ export function validateMatrixSweepConfig(config: MatrixSweepConfig): void {
     optionalEnum(model.reasoningEffort, ["low", "medium", "high"]);
     if (model.rateLimit !== undefined) validateRateLimit(model.rateLimit);
     if (model.tags !== undefined) requireStringArray(model.tags);
-    if (model.metadata !== undefined) validateMetadataNumbers(model.metadata, new WeakSet<object>());
+    if (model.metadata !== undefined)
+      validateMetadataNumbers(model.metadata, new WeakSet<object>());
   }
   if (config.thinkingLevels !== undefined) {
     if (!Array.isArray(config.thinkingLevels)) invalid();
-    for (const level of config.thinkingLevels) requireEnum(level, ["none", "low", "medium", "high", "max"]);
+    for (const level of config.thinkingLevels)
+      requireEnum(level, ["none", "low", "medium", "high", "max"]);
   }
   validateAdmissionSelectors(config);
 }
@@ -85,9 +99,11 @@ function validateAdmissionSelectors(config: MatrixSweepConfig): void {
     modelIds.add(model.modelId);
     const definition = getModelDefinition(model.modelId);
     if (definition === undefined) admissionError("model_unresolved");
-    if (definition.provider !== model.providerId
-      || (config.runtimeConfig.requestedProviderId !== undefined
-        && config.runtimeConfig.requestedProviderId !== definition.provider)) {
+    if (
+      definition.provider !== model.providerId ||
+      (config.runtimeConfig.requestedProviderId !== undefined &&
+        config.runtimeConfig.requestedProviderId !== definition.provider)
+    ) {
       admissionError("provider_model_mismatch");
     }
   }
@@ -194,7 +210,8 @@ function validateMetadataNumbers(value: unknown, ancestors: WeakSet<object>): vo
 }
 
 function requireStringArray(value: readonly string[]): void {
-  if (!Array.isArray(value) || value.some((item) => typeof item !== "string" || item.length === 0)) invalid();
+  if (!Array.isArray(value) || value.some((item) => typeof item !== "string" || item.length === 0))
+    invalid();
 }
 
 function optionalString(value: string | undefined): void {
@@ -218,7 +235,12 @@ function optionalFiniteNumber(value: number | undefined, minimum?: number): void
 }
 
 function requireFiniteNumber(value: number, minimum?: number): void {
-  if (typeof value !== "number" || !Number.isFinite(value) || (minimum !== undefined && value < minimum)) invalid();
+  if (
+    typeof value !== "number" ||
+    !Number.isFinite(value) ||
+    (minimum !== undefined && value < minimum)
+  )
+    invalid();
 }
 
 function optionalEnum<T extends string>(value: T | undefined, allowed: readonly T[]): void {

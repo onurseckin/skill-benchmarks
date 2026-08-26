@@ -1,13 +1,9 @@
 import type { ProviderId } from "../providers/types.js";
 import { CANONICAL_MODELS } from "./canonical-models.js";
-import type {
-  ModelQueryFilter,
-  ModelTier,
-  NormalizedModelDefinition,
-} from "./types.js";
+import type { ModelQueryFilter, ModelTier, NormalizedModelDefinition } from "./types.js";
 
 const dynamicRegistry = new Map<string, NormalizedModelDefinition>(
-  Object.entries(CANONICAL_MODELS)
+  Object.entries(CANONICAL_MODELS),
 );
 
 export function getModelDefinition(modelId: string): NormalizedModelDefinition | undefined {
@@ -20,7 +16,7 @@ export function registerModel(model: NormalizedModelDefinition): void {
 
 export function getOrCreateModelDefinition(
   modelId: string,
-  provider?: ProviderId
+  provider?: ProviderId,
 ): NormalizedModelDefinition {
   const existing = dynamicRegistry.get(modelId);
   if (existing !== undefined) {
@@ -31,12 +27,12 @@ export function getOrCreateModelDefinition(
     provider !== undefined
       ? provider
       : modelId.startsWith("claude")
-      ? "anthropic"
-      : modelId.startsWith("gpt") || modelId.startsWith("o1") || modelId.startsWith("o3")
-      ? "openai"
-      : modelId.startsWith("gemini")
-      ? "google"
-      : "custom";
+        ? "anthropic"
+        : modelId.startsWith("gpt") || modelId.startsWith("o1") || modelId.startsWith("o3")
+          ? "openai"
+          : modelId.startsWith("gemini")
+            ? "google"
+            : "custom";
 
   const isThinking =
     modelId.includes("thinking") ||
@@ -102,11 +98,25 @@ export function filterModels(filter: ModelQueryFilter): readonly NormalizedModel
   return Array.from(dynamicRegistry.values()).filter((model) => {
     if (filter.provider !== undefined && model.provider !== filter.provider) return false;
     if (filter.tier !== undefined && model.tier !== filter.tier) return false;
-    if (filter.hasThinking !== undefined && model.capabilities.reasoning !== filter.hasThinking) return false;
-    if (filter.hasVision !== undefined && model.capabilities.vision !== filter.hasVision) return false;
-    if (filter.hasToolCalling !== undefined && model.capabilities.toolCalling !== filter.hasToolCalling) return false;
-    if (filter.hasPromptCaching !== undefined && model.capabilities.promptCaching !== filter.hasPromptCaching) return false;
-    if (filter.minContextTokens !== undefined && model.capabilities.contextWindowTokens < filter.minContextTokens) return false;
+    if (filter.hasThinking !== undefined && model.capabilities.reasoning !== filter.hasThinking)
+      return false;
+    if (filter.hasVision !== undefined && model.capabilities.vision !== filter.hasVision)
+      return false;
+    if (
+      filter.hasToolCalling !== undefined &&
+      model.capabilities.toolCalling !== filter.hasToolCalling
+    )
+      return false;
+    if (
+      filter.hasPromptCaching !== undefined &&
+      model.capabilities.promptCaching !== filter.hasPromptCaching
+    )
+      return false;
+    if (
+      filter.minContextTokens !== undefined &&
+      model.capabilities.contextWindowTokens < filter.minContextTokens
+    )
+      return false;
     return true;
   });
 }

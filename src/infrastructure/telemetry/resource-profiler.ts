@@ -21,8 +21,7 @@ export class ResourceProfiler {
 
   private readonly statsProvider?: () => Promise<DockerStatsRaw | null>;
   private readonly samples: ResourceProfileSample[] = [];
-  private readonly listeners: Set<(sample: ResourceProfileSample) => void> =
-    new Set();
+  private readonly listeners: Set<(sample: ResourceProfileSample) => void> = new Set();
 
   private timer: ReturnType<typeof setInterval> | null = null;
   private isRunning: boolean = false;
@@ -30,8 +29,7 @@ export class ResourceProfiler {
 
   constructor(options: ResourceProfilerOptions = {}) {
     this.containerId = options.containerId;
-    this.sampleIntervalMs =
-      options.sampleIntervalMs ?? DEFAULT_PROFILER_INTERVAL_MS;
+    this.sampleIntervalMs = options.sampleIntervalMs ?? DEFAULT_PROFILER_INTERVAL_MS;
     this.statsProvider = options.statsProvider;
 
     if (options.onSample) {
@@ -85,8 +83,7 @@ export class ResourceProfiler {
     for (const listener of this.listeners) {
       try {
         listener(sample);
-      } catch {
-      }
+      } catch {}
     }
 
     return sample;
@@ -98,8 +95,7 @@ export class ResourceProfiler {
     for (const listener of this.listeners) {
       try {
         listener(sample);
-      } catch {
-      }
+      } catch {}
     }
   }
 
@@ -120,9 +116,7 @@ export class ResourceProfiler {
     return computeMetricsSummary(this.samples);
   }
 
-  public subscribe(
-    listener: (sample: ResourceProfileSample) => void
-  ): () => void {
+  public subscribe(listener: (sample: ResourceProfileSample) => void): () => void {
     this.listeners.add(listener);
     return () => {
       this.listeners.delete(listener);
@@ -148,8 +142,7 @@ export class ResourceProfiler {
       const prevSystemUsage = precpu?.system_cpu_usage ?? 0;
       const systemDelta = systemUsage - prevSystemUsage;
 
-      const onlineCpus =
-        cpu.online_cpus ?? (cpu.cpu_usage.usage_in_usermode ? 1 : 1);
+      const onlineCpus = cpu.online_cpus ?? (cpu.cpu_usage.usage_in_usermode ? 1 : 1);
 
       if (systemDelta > 0 && cpuDelta >= 0) {
         cpuPercent = (cpuDelta / systemDelta) * onlineCpus * 100;
@@ -174,8 +167,7 @@ export class ResourceProfiler {
 
       const rawUsage = mem.usage ?? 0;
       if (mem.stats?.active_anon !== undefined) {
-        memoryRssBytes =
-          (mem.stats.active_anon ?? 0) + (mem.stats.inactive_anon ?? 0);
+        memoryRssBytes = (mem.stats.active_anon ?? 0) + (mem.stats.inactive_anon ?? 0);
       } else {
         memoryRssBytes = Math.max(0, rawUsage - memoryCacheBytes);
       }
@@ -237,7 +229,6 @@ export class ResourceProfiler {
       if (raw) {
         this.recordRawStats(raw);
       }
-    } catch {
-    }
+    } catch {}
   }
 }

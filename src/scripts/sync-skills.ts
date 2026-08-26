@@ -55,7 +55,7 @@ function filterEntries(
   entries: readonly CatalogEntry[],
   categoryFilter?: string,
   skillFilter?: string,
-  limit?: number
+  limit?: number,
 ): readonly CatalogEntry[] {
   let filtered = entries.filter(isValidCatalogEntry).filter((entry) => {
     if (categoryFilter !== undefined) {
@@ -63,7 +63,8 @@ function filterEntries(
     }
     if (skillFilter !== undefined) {
       const q = skillFilter.toLowerCase();
-      if (!entry.name.toLowerCase().includes(q) && !entry.id.toLowerCase().includes(q)) return false;
+      if (!entry.name.toLowerCase().includes(q) && !entry.id.toLowerCase().includes(q))
+        return false;
     }
     return true;
   });
@@ -138,12 +139,7 @@ async function run(): Promise<void> {
     process.exit(1);
   }
 
-  const targetEntries = filterEntries(
-    validEntries,
-    options.category,
-    options.skill,
-    options.limit
-  );
+  const targetEntries = filterEntries(validEntries, options.category, options.skill, options.limit);
 
   if (targetEntries.length === 0) {
     process.stdout.write("No skills matched the specified filters.\n");
@@ -159,8 +155,11 @@ async function run(): Promise<void> {
 
     process.stdout.write("Matched Skills to Sync:\n");
     for (const entry of targetEntries) {
-      const installsStr = entry.installsDisplay !== undefined ? entry.installsDisplay : String(entry.installs);
-      process.stdout.write(`- [${entry.category}] ${entry.name} (${entry.source}) - Installs: ${installsStr}\n`);
+      const installsStr =
+        entry.installsDisplay !== undefined ? entry.installsDisplay : String(entry.installs);
+      process.stdout.write(
+        `- [${entry.category}] ${entry.name} (${entry.source}) - Installs: ${installsStr}\n`,
+      );
     }
     process.stdout.write("\nDry run completed. No files were downloaded or modified.\n\n");
     process.exit(0);

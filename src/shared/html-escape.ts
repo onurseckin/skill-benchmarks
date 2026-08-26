@@ -18,11 +18,17 @@ export function serializeEmbeddedJson(value: unknown): string {
     .replace(/>/g, "\\u003e")
     .replace(/\u2028/g, "\\u2028")
     .replace(/\u2029/g, "\\u2029")
-    .replace(bidirectionalControls, (character) => `\\\\u${character.codePointAt(0)?.toString(16).padStart(4, "0")}`);
+    .replace(
+      bidirectionalControls,
+      (character) => `\\\\u${character.codePointAt(0)?.toString(16).padStart(4, "0")}`,
+    );
 }
 
 const bidirectionalControls = /[\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/g;
 
 function exposeBidirectionalControls(value: string): string {
-  return value.replace(bidirectionalControls, (character) => `\\u${character.codePointAt(0)?.toString(16).padStart(4, "0")}`);
+  return value.replace(
+    bidirectionalControls,
+    (character) => `\\u${character.codePointAt(0)?.toString(16).padStart(4, "0")}`,
+  );
 }

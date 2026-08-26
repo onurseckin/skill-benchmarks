@@ -153,7 +153,11 @@ export class SkillRegistry {
     const content = await readFile(catalogPath, "utf-8");
     if (catalogPath.endsWith(".json")) {
       const parsed = JSON.parse(content);
-      const items: CatalogEntry[] = Array.isArray(parsed) ? parsed : Array.isArray(parsed.entries) ? parsed.entries : [];
+      const items: CatalogEntry[] = Array.isArray(parsed)
+        ? parsed
+        : Array.isArray(parsed.entries)
+          ? parsed.entries
+          : [];
       for (const item of items) this.registerCatalogEntry(item);
     } else {
       const parsedEntries = parseCatalogMarkdown(content);
@@ -187,7 +191,8 @@ export class SkillRegistry {
     const directSkill = this.skills.get(normalized);
     if (directSkill !== undefined) return directSkill;
     const catalogItem = this.catalog.get(normalized);
-    if (catalogItem !== undefined && catalogItem.manifest !== undefined) return catalogItem.manifest;
+    if (catalogItem !== undefined && catalogItem.manifest !== undefined)
+      return catalogItem.manifest;
     for (const manifest of this.skills.values()) {
       if (manifest.name.toLowerCase() === id.toLowerCase()) return manifest;
     }
@@ -218,7 +223,11 @@ export class SkillRegistry {
     if (options === undefined) return all;
     return all.filter((m) => {
       const id = normalizeSkillId(m.name);
-      if (options.category !== undefined && m.category.toLowerCase() !== options.category.toLowerCase()) return false;
+      if (
+        options.category !== undefined &&
+        m.category.toLowerCase() !== options.category.toLowerCase()
+      )
+        return false;
       if (options.tags !== undefined && options.tags.length > 0) {
         const lower = m.tags.map((t) => t.toLowerCase());
         if (!options.tags.every((t) => lower.includes(t.toLowerCase()))) return false;
@@ -234,7 +243,12 @@ export class SkillRegistry {
       }
       if (options.searchQuery !== undefined && options.searchQuery.length > 0) {
         const q = options.searchQuery.toLowerCase();
-        if (!m.name.toLowerCase().includes(q) && !m.description.toLowerCase().includes(q) && !m.category.toLowerCase().includes(q)) return false;
+        if (
+          !m.name.toLowerCase().includes(q) &&
+          !m.description.toLowerCase().includes(q) &&
+          !m.category.toLowerCase().includes(q)
+        )
+          return false;
       }
       return true;
     });
@@ -243,7 +257,10 @@ export class SkillRegistry {
   searchSkills(query: string, options?: SkillFilterOptions): readonly SkillManifest[] {
     const q = query.trim();
     if (q.length === 0) return this.listSkills(options);
-    const tokens = q.toLowerCase().split(/\s+/).filter((t) => t.length > 0);
+    const tokens = q
+      .toLowerCase()
+      .split(/\s+/)
+      .filter((t) => t.length > 0);
     return this.listSkills(options)
       .map((m) => ({ m, score: calculateSkillScore(m, tokens) }))
       .filter((x) => x.score > 0)
@@ -256,16 +273,23 @@ export class SkillRegistry {
     if (q.length === 0) return this.getCanonicalSkills();
     const tokens = q.split(/\s+/).filter((t) => t.length > 0);
     return this.getCanonicalSkills().filter((skill) => {
-      const target = `${skill.id} ${skill.name} ${skill.domain} ${skill.category} ${skill.description} ${skill.tags.join(" ")}`.toLowerCase();
+      const target =
+        `${skill.id} ${skill.name} ${skill.domain} ${skill.category} ${skill.description} ${skill.tags.join(" ")}`.toLowerCase();
       return tokens.every((tok) => target.includes(tok));
     });
   }
 
-  formatSkillPrompt(manifestOrId: SkillManifest | string, options?: SkillPromptFormatOptions): string {
+  formatSkillPrompt(
+    manifestOrId: SkillManifest | string,
+    options?: SkillPromptFormatOptions,
+  ): string {
     return formatSkillPrompt(manifestOrId, options, this);
   }
 
-  formatSkillsForAgentContext(manifestsOrIds: ReadonlyArray<SkillManifest | string>, options?: SkillPromptFormatOptions): string {
+  formatSkillsForAgentContext(
+    manifestsOrIds: ReadonlyArray<SkillManifest | string>,
+    options?: SkillPromptFormatOptions,
+  ): string {
     return formatSkillsForAgentContext(manifestsOrIds, options, this);
   }
 
@@ -278,22 +302,37 @@ export class SkillRegistry {
     this.tagIndex.clear();
   }
 
-  size(): number { return this.skills.size; }
+  size(): number {
+    return this.skills.size;
+  }
 }
 
 export const defaultSkillRegistry = new SkillRegistry();
-export const getCanonicalSkill = (id: string): CanonicalSkill | undefined => defaultSkillRegistry.getCanonicalSkill(id);
-export const getCanonicalSkills = (): readonly CanonicalSkill[] => defaultSkillRegistry.getCanonicalSkills();
-export const getSkillsByDomain = (d: CanonicalSkillDomain): readonly CanonicalSkill[] => defaultSkillRegistry.getSkillsByDomain(d);
-export const searchCanonicalSkills = (q: string): readonly CanonicalSkill[] => defaultSkillRegistry.searchCanonicalSkills(q);
-export const registerSkill = (m: SkillManifest, d?: Partial<CatalogEntry>): CatalogEntry => defaultSkillRegistry.registerSkill(m, d);
-export const registerCatalogEntry = (e: CatalogEntry): void => defaultSkillRegistry.registerCatalogEntry(e);
-export const loadSkillsFromDirectory = (p: string): Promise<readonly SkillManifest[]> => defaultSkillRegistry.loadFromDirectory(p);
-export const loadSkillCatalog = (p: string): Promise<readonly CatalogEntry[]> => defaultSkillRegistry.loadCatalog(p);
+export const getCanonicalSkill = (id: string): CanonicalSkill | undefined =>
+  defaultSkillRegistry.getCanonicalSkill(id);
+export const getCanonicalSkills = (): readonly CanonicalSkill[] =>
+  defaultSkillRegistry.getCanonicalSkills();
+export const getSkillsByDomain = (d: CanonicalSkillDomain): readonly CanonicalSkill[] =>
+  defaultSkillRegistry.getSkillsByDomain(d);
+export const searchCanonicalSkills = (q: string): readonly CanonicalSkill[] =>
+  defaultSkillRegistry.searchCanonicalSkills(q);
+export const registerSkill = (m: SkillManifest, d?: Partial<CatalogEntry>): CatalogEntry =>
+  defaultSkillRegistry.registerSkill(m, d);
+export const registerCatalogEntry = (e: CatalogEntry): void =>
+  defaultSkillRegistry.registerCatalogEntry(e);
+export const loadSkillsFromDirectory = (p: string): Promise<readonly SkillManifest[]> =>
+  defaultSkillRegistry.loadFromDirectory(p);
+export const loadSkillCatalog = (p: string): Promise<readonly CatalogEntry[]> =>
+  defaultSkillRegistry.loadCatalog(p);
 export const saveSkillCatalog = (p: string): Promise<void> => defaultSkillRegistry.saveCatalog(p);
-export const getCatalogEntries = (): readonly CatalogEntry[] => defaultSkillRegistry.getCatalogEntries();
-export const getSkill = (id: string): SkillManifest | undefined => defaultSkillRegistry.getSkill(id);
+export const getCatalogEntries = (): readonly CatalogEntry[] =>
+  defaultSkillRegistry.getCatalogEntries();
+export const getSkill = (id: string): SkillManifest | undefined =>
+  defaultSkillRegistry.getSkill(id);
 export const hasSkill = (id: string): boolean => defaultSkillRegistry.hasSkill(id);
-export const listSkills = (o?: SkillFilterOptions): readonly SkillManifest[] => defaultSkillRegistry.listSkills(o);
-export const searchSkills = (q: string, o?: SkillFilterOptions): readonly SkillManifest[] => defaultSkillRegistry.searchSkills(q, o);
-export const getSkillsByCategory = (c: SkillCategory): readonly SkillManifest[] => defaultSkillRegistry.getSkillsByCategory(c);
+export const listSkills = (o?: SkillFilterOptions): readonly SkillManifest[] =>
+  defaultSkillRegistry.listSkills(o);
+export const searchSkills = (q: string, o?: SkillFilterOptions): readonly SkillManifest[] =>
+  defaultSkillRegistry.searchSkills(q, o);
+export const getSkillsByCategory = (c: SkillCategory): readonly SkillManifest[] =>
+  defaultSkillRegistry.getSkillsByCategory(c);

@@ -26,13 +26,7 @@ export type ChaosTriggerType =
   | "turn_end"
   | "metric_threshold";
 
-export type ProcessSignal =
-  | "SIGTERM"
-  | "SIGKILL"
-  | "SIGSTOP"
-  | "SIGCONT"
-  | "SIGHUP"
-  | "SIGINT";
+export type ProcessSignal = "SIGTERM" | "SIGKILL" | "SIGSTOP" | "SIGCONT" | "SIGHUP" | "SIGINT";
 
 export type DiskFillStrategy = "zero_fill" | "random_fill" | "file_flood";
 
@@ -157,12 +151,7 @@ export interface ChaosPerturbationMatrix {
 export interface ChaosExperimentTimelineEvent {
   readonly timestamp: string;
   readonly elapsedMs: number;
-  readonly phase:
-    | "baseline"
-    | "injection"
-    | "active_fault"
-    | "recovery"
-    | "post_check";
+  readonly phase: "baseline" | "injection" | "active_fault" | "recovery" | "post_check";
   readonly eventType: string;
   readonly details: Readonly<Record<string, unknown>>;
 }
@@ -224,14 +213,14 @@ export interface IChaosEngine {
   executeExperiment<T>(
     scenarioId: string,
     schedule: ChaosSchedule,
-    scenarioRunner: (context: ChaosExecutionContext) => Promise<T>
+    scenarioRunner: (context: ChaosExecutionContext) => Promise<T>,
   ): Promise<{ readonly result: T; readonly report: ChaosExperimentReport }>;
   executeMatrix<T>(
     matrix: ChaosPerturbationMatrix,
     scenarioRunner: (
       scenarioId: string,
       schedule: ChaosSchedule,
-      context: ChaosExecutionContext
-    ) => Promise<T>
+      context: ChaosExecutionContext,
+    ) => Promise<T>,
   ): Promise<readonly ChaosExperimentReport[]>;
 }

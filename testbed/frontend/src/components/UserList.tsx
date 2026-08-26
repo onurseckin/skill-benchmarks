@@ -14,7 +14,7 @@ export function UserList({ users, onSelectUser }: UserListProps): ReactElement {
   };
 
   const filteredUsers = users.filter((u) =>
-    u.username.toLowerCase().includes(filterText.toLowerCase())
+    u.username.toLowerCase().includes(filterText.toLowerCase()),
   );
 
   return (
@@ -29,11 +29,7 @@ export function UserList({ users, onSelectUser }: UserListProps): ReactElement {
       />
       <div>
         {filteredUsers.map((user) => (
-          <div
-            key={user.id}
-            className="broken-nav-item"
-            onClick={() => onSelectUser(user)}
-          >
+          <div key={user.id} className="broken-nav-item" onClick={() => onSelectUser(user)}>
             <span>{user.username}</span>
             <span> ({user.role})</span>
           </div>

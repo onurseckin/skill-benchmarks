@@ -29,12 +29,7 @@ function isAstNode(value: unknown): value is Node {
   return typeof type === "string" && Object.hasOwn(visitorKeys, type);
 }
 
-function visitNode(
-  node: Node,
-  depth: number,
-  maximumDepth: number,
-  visit: AstNodeVisitor
-): void {
+function visitNode(node: Node, depth: number, maximumDepth: number, visit: AstNodeVisitor): void {
   visit(node, depth);
   if (depth >= maximumDepth) return;
   const nodeRecord = node as unknown as Readonly<Record<string, unknown>>;
@@ -54,11 +49,7 @@ export function walkAst(root: Node, visit: (node: Node) => void): void {
   visitNode(root, 0, Number.POSITIVE_INFINITY, visit);
 }
 
-export function walkAstWithinDepth(
-  root: Node,
-  maximumDepth: number,
-  visit: AstNodeVisitor
-): void {
+export function walkAstWithinDepth(root: Node, maximumDepth: number, visit: AstNodeVisitor): void {
   visitNode(root, 0, maximumDepth, visit);
 }
 

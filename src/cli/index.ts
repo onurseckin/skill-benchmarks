@@ -53,7 +53,8 @@ export async function runCli(argv: readonly string[] = process.argv.slice(2)): P
   try {
     const parsed = parseCliArgs(argv, { stdoutIsTTY: process.stdout.isTTY === true });
     if (parsed.helpRequested || parsed.command === "help") {
-      const requested = parsed.command === "help" ? readHelpTarget(parsed.positionals[0]) : parsed.command;
+      const requested =
+        parsed.command === "help" ? readHelpTarget(parsed.positionals[0]) : parsed.command;
       process.stdout.write(`${getHelpText(requested)}\n`);
       return 0;
     }
@@ -81,22 +82,31 @@ function readHelpTarget(value: string | undefined): CliCommandName | undefined {
   return value as CliCommandName;
 }
 
-function classifyError(error: unknown): { readonly code: CliDiagnosticCode; readonly exitCode: 1 | 2 } {
+function classifyError(error: unknown): {
+  readonly code: CliDiagnosticCode;
+  readonly exitCode: 1 | 2;
+} {
   if (error instanceof CliInputError) {
     return { code: error.code, exitCode: error.code === "command_failed" ? 1 : 2 };
   }
   if (error instanceof BenchmarkAdmissionError) return { code: error.code, exitCode: 2 };
   if (error instanceof ScenarioCatalogError) {
     return {
-      code: error.code === "scenario_unresolved" ? "scenario_unresolved" : "scenario_catalog_invalid",
+      code:
+        error.code === "scenario_unresolved" ? "scenario_unresolved" : "scenario_catalog_invalid",
       exitCode: 2,
     };
   }
-  if (error instanceof ExecutionModeConfigurationError
-    || error instanceof BenchmarkRuntimeConfigurationError) {
+  if (
+    error instanceof ExecutionModeConfigurationError ||
+    error instanceof BenchmarkRuntimeConfigurationError
+  ) {
     return { code: "invalid_configuration", exitCode: 2 };
   }
-  if (error instanceof ReplayEvidenceUnavailableError || error instanceof ReplayEvidenceInvalidError) {
+  if (
+    error instanceof ReplayEvidenceUnavailableError ||
+    error instanceof ReplayEvidenceInvalidError
+  ) {
     return { code: "replay_unavailable", exitCode: 2 };
   }
   return { code: "command_failed", exitCode: 1 };

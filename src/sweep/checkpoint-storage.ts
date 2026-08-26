@@ -15,7 +15,11 @@ import {
 } from "node:fs";
 import { basename, dirname, join } from "node:path";
 
-export function writeCheckpointSnapshot(filePath: string, serialized: string, maxBackups: number): void {
+export function writeCheckpointSnapshot(
+  filePath: string,
+  serialized: string,
+  maxBackups: number,
+): void {
   const parentDirectory = dirname(filePath);
   mkdirSync(parentDirectory, { recursive: true });
   removeCheckpointTemporaryFiles(filePath);
@@ -54,7 +58,8 @@ function inspectCheckpointTemporaryFiles(filePath: string, remove: boolean): voi
     if (!currentPattern.test(entry) && !legacyPattern.test(entry)) continue;
     const path = join(parentDirectory, entry);
     const stats = lstatSync(path);
-    if (!stats.isFile() || stats.isSymbolicLink()) throw new TypeError("Checkpoint temporary artifact is unsafe");
+    if (!stats.isFile() || stats.isSymbolicLink())
+      throw new TypeError("Checkpoint temporary artifact is unsafe");
     if (remove) {
       unlinkSync(path);
       removed = true;
@@ -67,7 +72,8 @@ function preserveCheckpointBackup(filePath: string): void {
   const backupPath = `${filePath}.bak.1`;
   if (existsSync(backupPath)) {
     const stats = lstatSync(backupPath);
-    if (!stats.isFile() || stats.isSymbolicLink()) throw new TypeError("Checkpoint backup target is unsafe");
+    if (!stats.isFile() || stats.isSymbolicLink())
+      throw new TypeError("Checkpoint backup target is unsafe");
     return;
   }
   const temporaryPath = `${backupPath}.${randomUUID()}.tmp`;

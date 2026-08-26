@@ -55,7 +55,7 @@ export class StandardToolDispatcher {
   async dispatch(
     toolCall: ToolCallRequest,
     context: AgentToolContext,
-    limits?: ExecutionLimits
+    limits?: ExecutionLimits,
   ): Promise<ToolExecutionRecord> {
     const startTime = performance.now();
     const maxBytes = limits?.maxOutputSizeBytes ?? 5242880;
@@ -74,7 +74,11 @@ export class StandardToolDispatcher {
       result = await Promise.race([executePromise, timerPromise]);
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
-      result = { output: `Error executing tool '${toolCall.name}': ${msg}`, isError: true, stderr: msg };
+      result = {
+        output: `Error executing tool '${toolCall.name}': ${msg}`,
+        isError: true,
+        stderr: msg,
+      };
     }
 
     const durationMs = Math.round((performance.now() - startTime) * 100) / 100;
@@ -96,7 +100,7 @@ export class StandardToolDispatcher {
   private async executeCall(
     toolCall: ToolCallRequest,
     context: AgentToolContext,
-    limits?: ExecutionLimits
+    limits?: ExecutionLimits,
   ): Promise<ToolHandlerResult> {
     const custom = this.customTools.get(toolCall.name);
     if (custom !== undefined) {

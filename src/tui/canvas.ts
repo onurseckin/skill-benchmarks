@@ -46,7 +46,7 @@ export class AnsiCanvas {
     x: number,
     y: number,
     text: string,
-    style: { fg?: string; bg?: string; bold?: boolean; dim?: boolean } = {}
+    style: { fg?: string; bg?: string; bold?: boolean; dim?: boolean } = {},
   ): void {
     if (y < 0 || y >= this.height) return;
     let currX = x;
@@ -62,7 +62,7 @@ export class AnsiCanvas {
   public drawBox(
     bounds: BoxDimensions,
     title?: string,
-    style: { fg?: string; bold?: boolean; double?: boolean } = {}
+    style: { fg?: string; bold?: boolean; double?: boolean } = {},
   ): void {
     const { x, y, width, height } = bounds;
     const tl = style.double ? "╔" : "┌";
@@ -96,7 +96,7 @@ export class AnsiCanvas {
     bounds: BoxDimensions,
     leftTitle: string,
     rightTitle: string,
-    splitRatio = 0.5
+    splitRatio = 0.5,
   ): void {
     this.drawBox(bounds, undefined, { double: true });
     const splitX = Math.round(bounds.x + bounds.width * splitRatio);
@@ -116,7 +116,7 @@ export class AnsiCanvas {
     y: number,
     width: number,
     progress: number,
-    label?: string
+    label?: string,
   ): void {
     const clamped = Math.max(0, Math.min(1, progress));
     const innerWidth = width - 2;
@@ -156,7 +156,7 @@ export class AnsiCanvas {
 
   private createEmptyBuffer(): AnsiCell[][] {
     return Array.from({ length: this.height }, () =>
-      Array.from({ length: this.width }, () => ({ char: " " }))
+      Array.from({ length: this.width }, () => ({ char: " " })),
     );
   }
 }

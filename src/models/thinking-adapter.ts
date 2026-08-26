@@ -18,13 +18,13 @@ const DEFAULT_BUDGET_MAP: Record<ThinkingEffortLevel, number> = {
 export function resolveBudgetFromEffort(
   level: ThinkingEffortLevel,
   model?: NormalizedModelDefinition,
-  explicitBudget?: number
+  explicitBudget?: number,
 ): number {
   if (explicitBudget !== undefined && explicitBudget > 0) {
     if (model?.thinkingConfig !== undefined) {
       return Math.max(
         model.thinkingConfig.minBudgetTokens,
-        Math.min(model.thinkingConfig.maxBudgetTokens, explicitBudget)
+        Math.min(model.thinkingConfig.maxBudgetTokens, explicitBudget),
       );
     }
     return explicitBudget;
@@ -44,9 +44,7 @@ export function resolveBudgetFromEffort(
   return DEFAULT_BUDGET_MAP[level];
 }
 
-export function mapEffortLevelToOpenAI(
-  level: ThinkingEffortLevel
-): "low" | "medium" | "high" {
+export function mapEffortLevelToOpenAI(level: ThinkingEffortLevel): "low" | "medium" | "high" {
   if (level === "none" || level === "low") return "low";
   if (level === "high" || level === "max") return "high";
   return "medium";
@@ -55,7 +53,7 @@ export function mapEffortLevelToOpenAI(
 export function validateThinkingOptions(
   modelId: string,
   level: ThinkingEffortLevel,
-  explicitBudget?: number
+  explicitBudget?: number,
 ): ThinkingValidationResult {
   const model = getModelDefinition(modelId);
 
@@ -100,7 +98,7 @@ export function buildProviderThinkingPayload(
   provider: ProviderId,
   modelId: string,
   level: ThinkingEffortLevel,
-  explicitBudget?: number
+  explicitBudget?: number,
 ): ProviderThinkingPayload {
   const model = getOrCreateModelDefinition(modelId, provider);
   const budget = resolveBudgetFromEffort(level, model, explicitBudget);
@@ -152,27 +150,39 @@ export function applyThinkingToGenerateOptions(
   provider: ProviderId,
   modelId: string,
   level?: ThinkingEffortLevel,
-  explicitBudget?: number
+  explicitBudget?: number,
 ): GenerateOptions {
-  if (level === undefined && explicitBudget === undefined && options.thinkingBudgetTokens === undefined) {
+  if (
+    level === undefined &&
+    explicitBudget === undefined &&
+    options.thinkingBudgetTokens === undefined
+  ) {
     return options;
   }
 
   const effectiveLevel: ThinkingEffortLevel =
-    level !== undefined ? level : options.thinkingBudgetTokens !== undefined && options.thinkingBudgetTokens > 0 ? "medium" : "none";
+    level !== undefined
+      ? level
+      : options.thinkingBudgetTokens !== undefined && options.thinkingBudgetTokens > 0
+        ? "medium"
+        : "none";
 
   const payload = buildProviderThinkingPayload(
     provider,
     modelId,
     effectiveLevel,
-    explicitBudget !== undefined ? explicitBudget : options.thinkingBudgetTokens
+    explicitBudget !== undefined ? explicitBudget : options.thinkingBudgetTokens,
   );
 
   const model = getOrCreateModelDefinition(modelId, provider);
   let temperature = options.temperature;
   let maxTokens = options.maxTokens;
 
-  if (model.thinkingConfig?.temperatureConstraint !== undefined && payload.budgetTokens !== undefined && payload.budgetTokens > 0) {
+  if (
+    model.thinkingConfig?.temperatureConstraint !== undefined &&
+    payload.budgetTokens !== undefined &&
+    payload.budgetTokens > 0
+  ) {
     temperature = model.thinkingConfig.temperatureConstraint;
   }
 

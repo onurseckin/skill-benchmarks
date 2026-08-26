@@ -16,7 +16,7 @@ export function renderAsciiSparkline(numbers: readonly number[]): string {
     .map((n) => {
       const idx = Math.min(
         SPARKLINE_CHARS.length - 1,
-        Math.max(0, Math.floor(((n - min) / range) * (SPARKLINE_CHARS.length - 1)))
+        Math.max(0, Math.floor(((n - min) / range) * (SPARKLINE_CHARS.length - 1))),
       );
       return SPARKLINE_CHARS[idx];
     })
@@ -25,7 +25,7 @@ export function renderAsciiSparkline(numbers: readonly number[]): string {
 
 export function renderAsciiBarChart(
   items: readonly { label: string; value: number; max?: number }[],
-  maxWidth = 30
+  maxWidth = 30,
 ): string {
   const maxVal = Math.max(1, ...items.map((i) => i.max ?? i.value));
   return items
@@ -42,7 +42,7 @@ export function renderAsciiBarChart(
 export function renderAsciiParetoChart(
   points: readonly AsciiDataPoint[],
   width = 50,
-  height = 12
+  height = 12,
 ): string {
   if (points.length === 0) return "  No data points for Pareto frontier.";
 
@@ -50,7 +50,7 @@ export function renderAsciiParetoChart(
   const maxY = Math.max(1, ...points.map((p) => p.y));
 
   const grid: string[][] = Array.from({ length: height }, () =>
-    Array.from({ length: width }, () => " ")
+    Array.from({ length: width }, () => " "),
   );
 
   for (const pt of points) {
@@ -74,7 +74,7 @@ export function renderAsciiLatencyDistribution(
   p50: number,
   p90: number,
   p99: number,
-  maxWidth = 30
+  maxWidth = 30,
 ): string {
   const maxVal = Math.max(100, p99 * 1.2);
   const scale = (v: number): string => {

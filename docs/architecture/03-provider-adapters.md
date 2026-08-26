@@ -42,13 +42,13 @@ Frontier LLM providers (Anthropic, Google Gemini, OpenAI) exhibit substantial di
 
 ### 2.1 Message Roles & Format Normalization
 
-| Canonical Model | Anthropic (`/v1/messages`) | Google Gemini (`:generateContent`) | OpenAI (`/v1/chat/completions`) |
-| :--- | :--- | :--- | :--- |
-| `system` | Top-level `system` prompt parameter | Top-level `systemInstruction.parts` | Message with `role: "system"` |
-| `user` | `{ role: "user", content: [...] }` | `{ role: "user", parts: [...] }` | `{ role: "user", content: [...] }` |
-| `assistant` | `{ role: "assistant", content: [...] }`| `{ role: "model", parts: [...] }` | `{ role: "assistant", content: [...] }`|
-| `tool_call` | `type: "tool_use"` block in content | `functionCall: { name, args }` part | `tool_calls: [{ id, function }]` |
-| `tool_result` | `{ role: "user", content: [{ type: "tool_result", tool_use_id, content }] }` | `{ role: "user", parts: [{ functionResponse: { name, response } }] }` | `{ role: "tool", tool_call_id, content }` |
+| Canonical Model | Anthropic (`/v1/messages`)                                                   | Google Gemini (`:generateContent`)                                    | OpenAI (`/v1/chat/completions`)           |
+| :-------------- | :--------------------------------------------------------------------------- | :-------------------------------------------------------------------- | :---------------------------------------- |
+| `system`        | Top-level `system` prompt parameter                                          | Top-level `systemInstruction.parts`                                   | Message with `role: "system"`             |
+| `user`          | `{ role: "user", content: [...] }`                                           | `{ role: "user", parts: [...] }`                                      | `{ role: "user", content: [...] }`        |
+| `assistant`     | `{ role: "assistant", content: [...] }`                                      | `{ role: "model", parts: [...] }`                                     | `{ role: "assistant", content: [...] }`   |
+| `tool_call`     | `type: "tool_use"` block in content                                          | `functionCall: { name, args }` part                                   | `tool_calls: [{ id, function }]`          |
+| `tool_result`   | `{ role: "user", content: [{ type: "tool_result", tool_use_id, content }] }` | `{ role: "user", parts: [{ functionResponse: { name, response } }] }` | `{ role: "tool", tool_call_id, content }` |
 
 ### 2.2 Streaming Delta Handling
 
@@ -93,7 +93,7 @@ $$t_{\text{sleep}} = \min\left(t_{\max},\; t_{\text{base}} \times 2^{\text{attem
 
 ```
      RETRY STATE MACHINE (src/providers/anthropic.ts, gemini.ts, openai.ts)
-     
+
         [Dispatch Request]
                 │
                 ├───► HTTP 200 OK ───────────► [Return Normalized Response]

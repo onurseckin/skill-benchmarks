@@ -5,7 +5,9 @@ export class DockerError extends Error {
 
   constructor(command: ReadonlyArray<string>, exitCode: number, stderr: string, message?: string) {
     const formattedCmd = command.join(" ");
-    super(message ?? `Docker command '${formattedCmd}' failed with exit code ${exitCode}: ${stderr}`);
+    super(
+      message ?? `Docker command '${formattedCmd}' failed with exit code ${exitCode}: ${stderr}`,
+    );
     this.name = "DockerError";
     this.command = command;
     this.exitCode = exitCode;
@@ -17,7 +19,12 @@ export class DockerTimeoutError extends DockerError {
   readonly timeoutMs: number;
 
   constructor(command: ReadonlyArray<string>, timeoutMs: number, stderr: string = "") {
-    super(command, 124, stderr, `Docker command '${command.join(" ")}' timed out after ${timeoutMs}ms`);
+    super(
+      command,
+      124,
+      stderr,
+      `Docker command '${command.join(" ")}' timed out after ${timeoutMs}ms`,
+    );
     this.name = "DockerTimeoutError";
     this.timeoutMs = timeoutMs;
   }

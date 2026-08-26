@@ -5,15 +5,18 @@ import type { RunArtifactDirectoryIdentity, RunArtifactLayout } from "./types.js
 const outputRootDirectories = ["db", "runs", "sweeps", "exports"] as const;
 
 function requirePathSegment(value: string, label: string): void {
-  if (value.trim().length === 0 || value === "." || value === ".." || value.includes("/") || value.includes("\\")) {
+  if (
+    value.trim().length === 0 ||
+    value === "." ||
+    value === ".." ||
+    value.includes("/") ||
+    value.includes("\\")
+  ) {
     throw new TypeError(`${label} must be a non-empty path segment`);
   }
 }
 
-export function createRunArtifactLayout(
-  outputRoot: string,
-  runId: string
-): RunArtifactLayout {
+export function createRunArtifactLayout(outputRoot: string, runId: string): RunArtifactLayout {
   requirePathSegment(runId, "Run ID");
   const resolvedOutputRoot = resolve(outputRoot);
   const runDirectory = join(resolvedOutputRoot, "runs", runId);
@@ -35,7 +38,7 @@ export function createRunArtifactLayout(
 }
 
 export async function prepareRunArtifactLayout(
-  layout: RunArtifactLayout
+  layout: RunArtifactLayout,
 ): Promise<RunArtifactLayout> {
   await ensureArtifactDirectory(layout.outputRoot, true);
   await assertNoSymlinkComponents(layout.outputRoot, layout.runDirectory);
@@ -58,27 +61,32 @@ export async function prepareRunArtifactLayout(
 async function ensureArtifactDirectory(path: string, recursive: boolean = true): Promise<void> {
   await mkdir(path, { recursive });
   const stats = await lstat(path);
-  if (!stats.isDirectory() || stats.isSymbolicLink()) throw new TypeError("Benchmark artifact directory is unsafe");
+  if (!stats.isDirectory() || stats.isSymbolicLink())
+    throw new TypeError("Benchmark artifact directory is unsafe");
 }
 
 async function inspectArtifactDirectory(path: string): Promise<RunArtifactDirectoryIdentity> {
   const stats = await lstat(path);
-  if (!stats.isDirectory() || stats.isSymbolicLink()) throw new TypeError("Benchmark artifact directory is unsafe");
+  if (!stats.isDirectory() || stats.isSymbolicLink())
+    throw new TypeError("Benchmark artifact directory is unsafe");
   return { device: stats.dev, inode: stats.ino };
 }
 
 async function assertNoSymlinkComponents(rootPath: string, targetPath: string): Promise<void> {
   const resolvedRoot = resolve(rootPath);
   const relativeTarget = relative(resolvedRoot, resolve(targetPath));
-  if (relativeTarget === ".." || relativeTarget.startsWith("../")) throw new TypeError("Benchmark artifact path is unsafe");
+  if (relativeTarget === ".." || relativeTarget.startsWith("../"))
+    throw new TypeError("Benchmark artifact path is unsafe");
   const segments = relativeTarget.split(/[\\/]+/).filter(Boolean);
   let currentPath = resolvedRoot;
   const rootStats = await lstat(currentPath);
-  if (!rootStats.isDirectory() || rootStats.isSymbolicLink()) throw new TypeError("Benchmark artifact path is unsafe");
+  if (!rootStats.isDirectory() || rootStats.isSymbolicLink())
+    throw new TypeError("Benchmark artifact path is unsafe");
   for (const segment of segments) {
     currentPath = join(currentPath, segment);
     try {
-      if ((await lstat(currentPath)).isSymbolicLink()) throw new TypeError("Benchmark artifact path is unsafe");
+      if ((await lstat(currentPath)).isSymbolicLink())
+        throw new TypeError("Benchmark artifact path is unsafe");
     } catch (error) {
       if (isMissingPathError(error)) return;
       throw error;

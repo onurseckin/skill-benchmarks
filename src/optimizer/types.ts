@@ -188,7 +188,6 @@ export interface ThrottleEvent {
   readonly context: Readonly<Record<string, unknown>>;
 }
 
-
 export interface MitigationTelemetry {
   readonly totalThrottleEvents: number;
   readonly eventsByReason: Readonly<Record<ThrottleReason, number>>;

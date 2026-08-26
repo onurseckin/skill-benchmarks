@@ -8,7 +8,7 @@ export interface GCOptions {
 
 export async function garbageCollectStaleResources(
   dockerClient: IDockerClient = new DockerClient(),
-  options?: GCOptions
+  options?: GCOptions,
 ): Promise<GCReport> {
   const startTime = Date.now();
   const maxAgeMs = options?.maxAgeMs ?? 3600000;

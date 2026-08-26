@@ -1,12 +1,22 @@
-import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { constants } from "node:fs";
 import type { FileHandle } from "node:fs/promises";
-import { link, lstat, open, readdir } from "node:fs/promises";
+import { link, open, readdir } from "node:fs/promises";
 import { hostname } from "node:os";
 import { basename, join } from "node:path";
 import { openSweepLeaseNamespace, type SweepLeaseNamespace } from "./sweep-lease-namespace.js";
 import { bindSweepPlan } from "./sweep-plan.js";
+import {
+  handleIdentity,
+  isExistingPathError,
+  isStaleOwner,
+  leaseConflict,
+  pathExists,
+  requireProcessStartIdentity,
+  type FileIdentity,
+  type LeaseOwner,
+  type OwnerRole,
+} from "./sweep-lease-process.js";
 
 export const sweepLeaseFileName = ".owner.lock";
 export const sweepLeaseConflictMessage = "Sweep identity is already running in this output root";
@@ -14,25 +24,6 @@ export const sweepLeaseConflictMessage = "Sweep identity is already running in t
 const recoveryFileName = ".owner.recovery";
 const candidatePrefix = ".owner.stage.";
 const maximumLockBytes = 4096;
-
-type OwnerRole = "owner" | "recovery";
-
-interface LeaseOwner {
-  readonly version: "2";
-  readonly role: OwnerRole;
-  readonly token: string;
-  readonly candidateName: string;
-  readonly pid: number;
-  readonly hostname: string;
-  readonly processStartIdentity: string;
-  readonly createdAtMs: number;
-}
-
-interface FileIdentity {
-  readonly device: number;
-  readonly inode: number;
-  readonly linkCount: number;
-}
 
 interface OwnedFile {
   readonly owner: LeaseOwner;
@@ -51,7 +42,9 @@ export interface SweepLease {
 }
 
 export async function acquireSweepLease(
-  outputRoot: string, sweepId: string, probeHooks: SweepLeaseProbeHooks = {}
+  outputRoot: string,
+  sweepId: string,
+  probeHooks: SweepLeaseProbeHooks = {},
 ): Promise<SweepLease> {
   const leaseNamespace = await openSweepLeaseNamespace(outputRoot, sweepId, conflict);
   const namespaceDirectory = leaseNamespace.path;
@@ -63,7 +56,8 @@ export async function acquireSweepLease(
     await clearStaleRecovery(leaseNamespace, recoveryPath);
     candidate = await prepareCandidate(leaseNamespace, "owner");
     recoveryCandidate = await prepareCandidate(leaseNamespace, "recovery");
-    if (!await publishCandidate(recoveryCandidate, recoveryPath, leaseNamespace)) throw conflict();
+    if (!(await publishCandidate(recoveryCandidate, recoveryPath, leaseNamespace)))
+      throw conflict();
     let replacementPublished = false;
     let recoveryPublished = true;
     try {
@@ -73,7 +67,7 @@ export async function acquireSweepLease(
         if (existingOwner === undefined || !isStaleOwner(existingOwner.owner)) throw conflict();
         await reclaimPublishedPath(lockPath, existingOwner, leaseNamespace);
       }
-      if (!await publishCandidate(candidate, lockPath, leaseNamespace)) throw conflict();
+      if (!(await publishCandidate(candidate, lockPath, leaseNamespace))) throw conflict();
       replacementPublished = true;
       await probeHooks.beforeRecoveryFinalize?.();
       await reclaimPublishedPath(recoveryPath, recoveryCandidate, leaseNamespace);
@@ -89,14 +83,18 @@ export async function acquireSweepLease(
     }
   } catch (error) {
     if (candidate !== undefined) await reclaimCandidate(candidate, leaseNamespace).catch(() => {});
-    if (recoveryCandidate !== undefined) await reclaimCandidate(recoveryCandidate, leaseNamespace).catch(() => {});
+    if (recoveryCandidate !== undefined)
+      await reclaimCandidate(recoveryCandidate, leaseNamespace).catch(() => {});
     await leaseNamespace.close();
     throw error;
   }
 }
 
 function createLease(
-  lockPath: string, leaseNamespace: SweepLeaseNamespace, ownedFile: OwnedFile, probeHooks: SweepLeaseProbeHooks
+  lockPath: string,
+  leaseNamespace: SweepLeaseNamespace,
+  ownedFile: OwnedFile,
+  probeHooks: SweepLeaseProbeHooks,
 ): SweepLease {
   const namespaceDirectory = leaseNamespace.path;
   let released = false;
@@ -116,7 +114,13 @@ function createLease(
       if (releaseRecovery === undefined) {
         await clearStaleRecovery(leaseNamespace, join(namespaceDirectory, recoveryFileName));
         const recoveryCandidate = await prepareCandidate(leaseNamespace, "recovery");
-        if (!await publishCandidate(recoveryCandidate, join(namespaceDirectory, recoveryFileName), leaseNamespace)) {
+        if (
+          !(await publishCandidate(
+            recoveryCandidate,
+            join(namespaceDirectory, recoveryFileName),
+            leaseNamespace,
+          ))
+        ) {
           throw conflict();
         }
         releaseRecovery = recoveryCandidate;
@@ -130,7 +134,11 @@ function createLease(
         ownerReclaimed = true;
       }
       if (!recoveryReclaimed) {
-        await reclaimPublishedPath(join(namespaceDirectory, recoveryFileName), releaseRecovery, leaseNamespace);
+        await reclaimPublishedPath(
+          join(namespaceDirectory, recoveryFileName),
+          releaseRecovery,
+          leaseNamespace,
+        );
         recoveryReclaimed = true;
       }
       await leaseNamespace.close();
@@ -139,7 +147,10 @@ function createLease(
   };
 }
 
-async function prepareCandidate(leaseNamespace: SweepLeaseNamespace, role: OwnerRole): Promise<OwnedFile> {
+async function prepareCandidate(
+  leaseNamespace: SweepLeaseNamespace,
+  role: OwnerRole,
+): Promise<OwnedFile> {
   const namespaceDirectory = leaseNamespace.path;
   const token = randomUUID();
   const candidateName = `${candidatePrefix}${role}.${token}`;
@@ -180,7 +191,9 @@ async function prepareCandidate(leaseNamespace: SweepLeaseNamespace, role: Owner
 }
 
 async function publishCandidate(
-  candidate: OwnedFile, publishedPath: string, leaseNamespace: SweepLeaseNamespace
+  candidate: OwnedFile,
+  publishedPath: string,
+  leaseNamespace: SweepLeaseNamespace,
 ): Promise<boolean> {
   await leaseNamespace.sync();
   let published = false;
@@ -200,7 +213,9 @@ async function publishCandidate(
 }
 
 async function reclaimPublishedPath(
-  publishedPath: string, expected: OwnedFile, leaseNamespace: SweepLeaseNamespace
+  publishedPath: string,
+  expected: OwnedFile,
+  leaseNamespace: SweepLeaseNamespace,
 ): Promise<void> {
   await leaseNamespace.sync();
   await assertPublishedPath(publishedPath, expected, leaseNamespace.path);
@@ -208,13 +223,19 @@ async function reclaimPublishedPath(
   await reclaimCandidate(expected, leaseNamespace);
 }
 
-async function reclaimCandidate(candidate: OwnedFile, leaseNamespace: SweepLeaseNamespace): Promise<void> {
+async function reclaimCandidate(
+  candidate: OwnedFile,
+  leaseNamespace: SweepLeaseNamespace,
+): Promise<void> {
   await leaseNamespace.removeEntry(candidate.owner.candidateName, candidate.identity, 1);
 }
 
-async function clearStaleRecovery(leaseNamespace: SweepLeaseNamespace, recoveryPath: string): Promise<void> {
+async function clearStaleRecovery(
+  leaseNamespace: SweepLeaseNamespace,
+  recoveryPath: string,
+): Promise<void> {
   const namespaceDirectory = leaseNamespace.path;
-  if (!await pathExists(recoveryPath)) return;
+  if (!(await pathExists(recoveryPath))) return;
   const recoveryOwner = await readPublishedOwner(recoveryPath, namespaceDirectory);
   if (recoveryOwner === undefined || !isStaleOwner(recoveryOwner.owner)) throw conflict();
   await reclaimPublishedPath(recoveryPath, recoveryOwner, leaseNamespace);
@@ -224,7 +245,7 @@ async function reclaimStaleLeaseDebris(
   leaseNamespace: SweepLeaseNamespace,
   lockPath: string,
   recoveryPath: string,
-  pendingOwner: OwnedFile
+  pendingOwner: OwnedFile,
 ): Promise<void> {
   const protectedCandidates = new Set([pendingOwner.owner.candidateName]);
   for (const publishedPath of [lockPath, recoveryPath]) {
@@ -250,19 +271,26 @@ async function assertCandidatePath(candidate: OwnedFile): Promise<void> {
 async function assertPublishedPath(
   publishedPath: string,
   expected: OwnedFile,
-  namespaceDirectory: string
+  namespaceDirectory: string,
 ): Promise<void> {
   const inspected = await readPublishedOwner(publishedPath, namespaceDirectory);
   if (!sameOwnedFile(inspected, expected)) throw conflict();
 }
 
-async function readPublishedOwner(path: string, namespaceDirectory: string): Promise<OwnedFile | undefined> {
+async function readPublishedOwner(
+  path: string,
+  namespaceDirectory: string,
+): Promise<OwnedFile | undefined> {
   const inspected = await readOwnerFile(path);
   if (inspected === undefined) return undefined;
   const candidatePath = join(namespaceDirectory, inspected.owner.candidateName);
   const candidate = await readOwnerFile(candidatePath);
-  if (!sameOwnedFile(inspected, candidate) || inspected.identity.linkCount !== 2
-    || candidate?.identity.linkCount !== 2) return undefined;
+  if (
+    !sameOwnedFile(inspected, candidate) ||
+    inspected.identity.linkCount !== 2 ||
+    candidate?.identity.linkCount !== 2
+  )
+    return undefined;
   return { ...inspected, candidatePath };
 }
 
@@ -277,7 +305,10 @@ async function readOwnerFile(path: string): Promise<Omit<OwnedFile, "candidatePa
     if (confirmed.dev !== initial.dev || confirmed.ino !== initial.ino) return undefined;
     const owner = JSON.parse(raw) as Partial<LeaseOwner>;
     if (!isLeaseOwner(owner)) return undefined;
-    return { owner, identity: { device: initial.dev, inode: initial.ino, linkCount: initial.nlink } };
+    return {
+      owner,
+      identity: { device: initial.dev, inode: initial.ino, linkCount: initial.nlink },
+    };
   } catch {
     return undefined;
   } finally {
@@ -286,89 +317,55 @@ async function readOwnerFile(path: string): Promise<Omit<OwnedFile, "candidatePa
 }
 
 function isLeaseOwner(value: Partial<LeaseOwner>): value is LeaseOwner {
-  return value.version === "2" && (value.role === "owner" || value.role === "recovery")
-    && typeof value.token === "string" && value.token.length > 0 && value.token.length <= 128
-    && typeof value.candidateName === "string"
-    && value.candidateName === `${candidatePrefix}${value.role}.${value.token}`
-    && !value.candidateName.includes("/") && !value.candidateName.includes("\\")
-    && Number.isSafeInteger(value.pid) && (value.pid ?? 0) > 0
-    && typeof value.hostname === "string" && value.hostname.length > 0 && value.hostname.length <= 255
-    && typeof value.processStartIdentity === "string"
-    && value.processStartIdentity.length > 0 && value.processStartIdentity.length <= 128
-    && Number.isSafeInteger(value.createdAtMs) && (value.createdAtMs ?? 0) > 0;
+  return (
+    value.version === "2" &&
+    (value.role === "owner" || value.role === "recovery") &&
+    typeof value.token === "string" &&
+    value.token.length > 0 &&
+    value.token.length <= 128 &&
+    typeof value.candidateName === "string" &&
+    value.candidateName === `${candidatePrefix}${value.role}.${value.token}` &&
+    !value.candidateName.includes("/") &&
+    !value.candidateName.includes("\\") &&
+    Number.isSafeInteger(value.pid) &&
+    (value.pid ?? 0) > 0 &&
+    typeof value.hostname === "string" &&
+    value.hostname.length > 0 &&
+    value.hostname.length <= 255 &&
+    typeof value.processStartIdentity === "string" &&
+    value.processStartIdentity.length > 0 &&
+    value.processStartIdentity.length <= 128 &&
+    Number.isSafeInteger(value.createdAtMs) &&
+    (value.createdAtMs ?? 0) > 0
+  );
 }
 
 function sameOwnedFile(
   left: { readonly owner: LeaseOwner; readonly identity: FileIdentity } | undefined,
-  right: { readonly owner: LeaseOwner; readonly identity: FileIdentity } | undefined
+  right: { readonly owner: LeaseOwner; readonly identity: FileIdentity } | undefined,
 ): boolean {
-  return left !== undefined && right !== undefined && sameOwner(left.owner, right.owner)
-    && left.identity.device === right.identity.device && left.identity.inode === right.identity.inode;
+  return (
+    left !== undefined &&
+    right !== undefined &&
+    sameOwner(left.owner, right.owner) &&
+    left.identity.device === right.identity.device &&
+    left.identity.inode === right.identity.inode
+  );
 }
 
 function sameOwner(left: LeaseOwner, right: LeaseOwner): boolean {
-  return left.version === right.version && left.role === right.role && left.token === right.token
-    && left.candidateName === right.candidateName && left.pid === right.pid && left.hostname === right.hostname
-    && left.processStartIdentity === right.processStartIdentity && left.createdAtMs === right.createdAtMs;
-}
-
-function isStaleOwner(owner: LeaseOwner): boolean {
-  if (owner.hostname !== hostname()) return false;
-  try {
-    process.kill(owner.pid, 0);
-  } catch (error) {
-    return isMissingProcessError(error);
-  }
-  const currentIdentity = getProcessStartIdentity(owner.pid);
-  return currentIdentity !== undefined && currentIdentity !== owner.processStartIdentity;
-}
-
-async function handleIdentity(handle: FileHandle): Promise<FileIdentity> {
-  const value = await handle.stat();
-  return { device: value.dev, inode: value.ino, linkCount: value.nlink };
-}
-
-async function pathExists(path: string): Promise<boolean> {
-  try {
-    await lstat(path);
-    return true;
-  } catch (error) {
-    if (isMissingPathError(error)) return false;
-    throw error;
-  }
-}
-
-function requireProcessStartIdentity(pid: number): string {
-  const identity = getProcessStartIdentity(pid);
-  if (identity === undefined) throw new TypeError("Unable to establish sweep owner process identity");
-  return identity;
-}
-
-function getProcessStartIdentity(pid: number): string | undefined {
-  try {
-    const output = execFileSync("/bin/ps", ["-o", "lstart=", "-p", String(pid)], {
-      encoding: "utf8",
-      env: { PATH: "/usr/bin:/bin", LC_ALL: "C" },
-      timeout: 2000,
-    }).trim();
-    return output.length > 0 ? output : undefined;
-  } catch {
-    return undefined;
-  }
+  return (
+    left.version === right.version &&
+    left.role === right.role &&
+    left.token === right.token &&
+    left.candidateName === right.candidateName &&
+    left.pid === right.pid &&
+    left.hostname === right.hostname &&
+    left.processStartIdentity === right.processStartIdentity &&
+    left.createdAtMs === right.createdAtMs
+  );
 }
 
 function conflict(): TypeError {
-  return new TypeError(sweepLeaseConflictMessage);
-}
-
-function isExistingPathError(error: unknown): boolean {
-  return typeof error === "object" && error !== null && "code" in error && error.code === "EEXIST";
-}
-
-function isMissingPathError(error: unknown): boolean {
-  return typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT";
-}
-
-function isMissingProcessError(error: unknown): boolean {
-  return typeof error === "object" && error !== null && "code" in error && error.code === "ESRCH";
+  return leaseConflict(sweepLeaseConflictMessage);
 }

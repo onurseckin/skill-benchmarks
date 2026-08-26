@@ -28,26 +28,26 @@ For high-throughput, low-latency live streaming of agent terminal outputs and ex
 
 ### 1.2 Binary Header Field Definitions
 
-| Byte Offset | Field Name | Type | Description |
-| :--- | :--- | :--- | :--- |
-| `0x00 - 0x02` | `MAGIC_BYTES` | 3 Bytes | Fixed signature `0x53 0x4B 0x4D` (`SKM` = Skill Benchmark). |
-| `0x03` | `PROTOCOL_VER` | `uint8` | Protocol version (`0x01`). |
-| `0x04` | `FRAME_TYPE` | `uint8` | Frame classification (see table below). |
-| `0x05 - 0x06` | `CHANNEL_ID` | `uint16` (Big-Endian) | Stream channel / terminal session identifier. |
-| `0x07 - 0x0A` | `PAYLOAD_LEN` | `uint32` (Big-Endian) | Length of following payload in bytes ($N \le 65{,}536$). |
-| `0x0B - 0x0F` | `TIMESTAMP` | `uint64` (Big-Endian) | Milliseconds since Unix epoch. |
-| `0x10 - ...` | `PAYLOAD` | $N$ Bytes | Raw UTF-8 string or binary telemetry payload. |
+| Byte Offset   | Field Name     | Type                  | Description                                                 |
+| :------------ | :------------- | :-------------------- | :---------------------------------------------------------- |
+| `0x00 - 0x02` | `MAGIC_BYTES`  | 3 Bytes               | Fixed signature `0x53 0x4B 0x4D` (`SKM` = Skill Benchmark). |
+| `0x03`        | `PROTOCOL_VER` | `uint8`               | Protocol version (`0x01`).                                  |
+| `0x04`        | `FRAME_TYPE`   | `uint8`               | Frame classification (see table below).                     |
+| `0x05 - 0x06` | `CHANNEL_ID`   | `uint16` (Big-Endian) | Stream channel / terminal session identifier.               |
+| `0x07 - 0x0A` | `PAYLOAD_LEN`  | `uint32` (Big-Endian) | Length of following payload in bytes ($N \le 65{,}536$).    |
+| `0x0B - 0x0F` | `TIMESTAMP`    | `uint64` (Big-Endian) | Milliseconds since Unix epoch.                              |
+| `0x10 - ...`  | `PAYLOAD`      | $N$ Bytes             | Raw UTF-8 string or binary telemetry payload.               |
 
 ### 1.3 Frame Type Taxonomy
 
-| Frame Type ID | Name | Description |
-| :--- | :--- | :--- |
-| `0x01` | `STDOUT_STREAM` | Raw PTY terminal standard output chunk. |
-| `0x02` | `STDERR_STREAM` | Standard error diagnostic output chunk. |
-| `0x03` | `PTY_RESIZE` | PTY window dimensions change (`cols: u16, rows: u16`). |
-| `0x04` | `TELEMETRY_STEP` | Serialized JSON `StepTelemetry` event. |
-| `0x05` | `HEARTBEAT` | Keep-alive ping/pong frame (zero payload). |
-| `0x06` | `SESSION_CLOSE` | Termination status code and exit summary. |
+| Frame Type ID | Name             | Description                                            |
+| :------------ | :--------------- | :----------------------------------------------------- |
+| `0x01`        | `STDOUT_STREAM`  | Raw PTY terminal standard output chunk.                |
+| `0x02`        | `STDERR_STREAM`  | Standard error diagnostic output chunk.                |
+| `0x03`        | `PTY_RESIZE`     | PTY window dimensions change (`cols: u16, rows: u16`). |
+| `0x04`        | `TELEMETRY_STEP` | Serialized JSON `StepTelemetry` event.                 |
+| `0x05`        | `HEARTBEAT`      | Keep-alive ping/pong frame (zero payload).             |
+| `0x06`        | `SESSION_CLOSE`  | Termination status code and exit summary.              |
 
 ---
 

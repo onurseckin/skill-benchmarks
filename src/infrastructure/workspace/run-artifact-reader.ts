@@ -30,18 +30,19 @@ export function readCanonicalRunArtifacts(
   eventsPath: string,
   manifestPath: string,
   resultPath: string,
-  expectedRunId: string
+  expectedRunId: string,
 ): CanonicalRunArtifactContents {
   const runDirectory = resolve(dirname(eventsPath));
   const runsDirectory = dirname(runDirectory);
   const outputRoot = dirname(runsDirectory);
   if (
-    basename(runDirectory) !== expectedRunId
-    || basename(runsDirectory) !== "runs"
-    || resolve(eventsPath) !== join(runDirectory, "events.jsonl")
-    || resolve(manifestPath) !== join(runDirectory, "manifest.json")
-    || resolve(resultPath) !== join(runDirectory, "result.json")
-  ) throw new RunArtifactReadError("invalid");
+    basename(runDirectory) !== expectedRunId ||
+    basename(runsDirectory) !== "runs" ||
+    resolve(eventsPath) !== join(runDirectory, "events.jsonl") ||
+    resolve(manifestPath) !== join(runDirectory, "manifest.json") ||
+    resolve(resultPath) !== join(runDirectory, "result.json")
+  )
+    throw new RunArtifactReadError("invalid");
   const rootDescriptor = openVerifiedDirectory(outputRoot);
   let runsDescriptor: number | undefined;
   let runDescriptor: number | undefined;
@@ -64,13 +65,19 @@ export function readCanonicalRunArtifacts(
   }
 }
 
-export function readBoundedReplayFile(path: string, maximumBytes: number = 128 * 1024 * 1024): string {
+export function readBoundedReplayFile(
+  path: string,
+  maximumBytes: number = 128 * 1024 * 1024,
+): string {
   const resolvedPath = resolve(path);
   const initial = inspectPath(resolvedPath);
   if (!initial.isFile() || initial.isSymbolicLink()) throw new RunArtifactReadError("invalid");
   let descriptor: number;
   try {
-    descriptor = openSync(resolvedPath, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+    descriptor = openSync(
+      resolvedPath,
+      constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+    );
   } catch (error) {
     throw mapReadError(error);
   }
@@ -107,7 +114,7 @@ function openVerifiedChildDirectory(parentDescriptor: number, name: string, path
     descriptor = openDirectoryEntry(
       parentDescriptor,
       name,
-      constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW | constants.O_NONBLOCK
+      constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
     );
   } catch {
     throw new RunArtifactReadError("invalid");
@@ -125,7 +132,7 @@ function readVerifiedEntry(
   directoryDescriptor: number,
   name: string,
   path: string,
-  maximumBytes: number
+  maximumBytes: number,
 ): string {
   const initial = inspectPath(path);
   if (!initial.isFile() || initial.isSymbolicLink()) throw new RunArtifactReadError("invalid");
@@ -134,7 +141,7 @@ function readVerifiedEntry(
     descriptor = openDirectoryEntry(
       directoryDescriptor,
       name,
-      constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK
+      constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
     );
   } catch {
     throw new RunArtifactReadError("invalid");
@@ -150,24 +157,31 @@ function readVerifiedDescriptor(
   descriptor: number,
   initial: Stats,
   maximumBytes: number,
-  requirePrivate: boolean
+  requirePrivate: boolean,
 ): string {
   const before = fstatSync(descriptor);
   requireSameIdentity(initial, before);
-  if (!before.isFile() || before.nlink !== 1 || before.size > maximumBytes) throw new RunArtifactReadError("invalid");
+  if (!before.isFile() || before.nlink !== 1 || before.size > maximumBytes)
+    throw new RunArtifactReadError("invalid");
   const processUserId = process.getuid?.();
-  if (requirePrivate && (processUserId === undefined || before.uid !== processUserId || (before.mode & 0o7777) !== 0o600)) {
+  if (
+    requirePrivate &&
+    (processUserId === undefined ||
+      before.uid !== processUserId ||
+      (before.mode & 0o7777) !== 0o600)
+  ) {
     throw new RunArtifactReadError("invalid");
   }
   const content = readFileSync(descriptor);
   const after = fstatSync(descriptor);
   requireSameIdentity(before, after);
   if (
-    before.size !== after.size
-    || before.mtimeMs !== after.mtimeMs
-    || before.ctimeMs !== after.ctimeMs
-    || content.byteLength !== after.size
-  ) throw new RunArtifactReadError("invalid");
+    before.size !== after.size ||
+    before.mtimeMs !== after.mtimeMs ||
+    before.ctimeMs !== after.ctimeMs ||
+    content.byteLength !== after.size
+  )
+    throw new RunArtifactReadError("invalid");
   return content.toString("utf8");
 }
 
@@ -179,7 +193,7 @@ function requireDirectoryIdentity(path: string, expected: Stats): void {
 
 function requireSameIdentity(
   left: { readonly dev: number; readonly ino: number },
-  right: { readonly dev: number; readonly ino: number }
+  right: { readonly dev: number; readonly ino: number },
 ): void {
   if (left.dev !== right.dev || left.ino !== right.ino) throw new RunArtifactReadError("invalid");
 }
@@ -193,6 +207,7 @@ function inspectPath(path: string): Stats {
 }
 
 function mapReadError(error: unknown): RunArtifactReadError {
-  const code = typeof error === "object" && error !== null && "code" in error ? error.code : undefined;
+  const code =
+    typeof error === "object" && error !== null && "code" in error ? error.code : undefined;
   return new RunArtifactReadError(code === "ENOENT" ? "unavailable" : "invalid");
 }

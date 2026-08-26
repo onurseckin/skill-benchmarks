@@ -1,0 +1,98 @@
+import type { DifficultyScoringWeights, GenerationTemplateDefinition } from "./types.js";
+
+export const DEFAULT_SYNTHESIS_WEIGHTS: DifficultyScoringWeights = {
+  complexityWeight: 0.3,
+  cognitiveLoadWeight: 0.25,
+  edgeCaseWeight: 0.25,
+  interfaceDepthWeight: 0.1,
+  rubricCountWeight: 0.1,
+};
+
+export const DEFAULT_GENERATION_TEMPLATES: readonly GenerationTemplateDefinition[] = [
+  {
+    id: "bug_fix",
+    name: "Defect Identification and Remediation",
+    description: "Diagnose and repair subtle logic bugs, boundary errors, or null dereferences",
+    defaultCategory: "debugging",
+    defaultDifficulty: "medium",
+    strategy: "counterfactual_bug",
+    promptPattern: "Identify and resolve the defect in {targetPath}.",
+    defaultLimits: {
+      maxTurns: 15,
+      maxWallClockTimeMs: 300000,
+      maxCostUSD: 1,
+      maxConsecutiveToolFailures: 3,
+      toolTimeoutMs: 30000,
+      maxOutputSizeBytes: 1048576,
+    },
+  },
+  {
+    id: "feature_implementation",
+    name: "Greenfield Contract Implementation",
+    description:
+      "Implement missing interface methods and class implementations adhering to strict types",
+    defaultCategory: "coding",
+    defaultDifficulty: "medium",
+    strategy: "interface_implementation",
+    promptPattern: "Implement the required interfaces and class methods in {targetPath}.",
+    defaultLimits: {
+      maxTurns: 20,
+      maxWallClockTimeMs: 360000,
+      maxCostUSD: 1.5,
+      maxConsecutiveToolFailures: 3,
+      toolTimeoutMs: 30000,
+      maxOutputSizeBytes: 1048576,
+    },
+  },
+  {
+    id: "refactoring",
+    name: "Architectural Refactoring and Decoupling",
+    description: "Refactor monolithic functions into modular abstractions",
+    defaultCategory: "system",
+    defaultDifficulty: "hard",
+    strategy: "boundary_expansion",
+    promptPattern: "Refactor the implementation in {targetPath} to improve modularity.",
+    defaultLimits: {
+      maxTurns: 20,
+      maxWallClockTimeMs: 360000,
+      maxCostUSD: 1.5,
+      maxConsecutiveToolFailures: 3,
+      toolTimeoutMs: 30000,
+      maxOutputSizeBytes: 1048576,
+    },
+  },
+  {
+    id: "security_hardening",
+    name: "Security Vulnerability Hardening",
+    description: "Harden input validation and sanitize command executions",
+    defaultCategory: "security",
+    defaultDifficulty: "hard",
+    strategy: "contract_verification",
+    promptPattern: "Harden against vulnerabilities in {targetPath}.",
+    defaultLimits: {
+      maxTurns: 20,
+      maxWallClockTimeMs: 360000,
+      maxCostUSD: 1.5,
+      maxConsecutiveToolFailures: 3,
+      toolTimeoutMs: 30000,
+      maxOutputSizeBytes: 1048576,
+    },
+  },
+  {
+    id: "performance_optimization",
+    name: "High-Throughput Performance Optimization",
+    description: "Eliminate algorithmic bottlenecks and reduce memory pressure",
+    defaultCategory: "optimization",
+    defaultDifficulty: "hard",
+    strategy: "boundary_expansion",
+    promptPattern: "Optimize performance of {targetPath}.",
+    defaultLimits: {
+      maxTurns: 25,
+      maxWallClockTimeMs: 420000,
+      maxCostUSD: 2,
+      maxConsecutiveToolFailures: 3,
+      toolTimeoutMs: 30000,
+      maxOutputSizeBytes: 1048576,
+    },
+  },
+];

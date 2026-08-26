@@ -18,7 +18,10 @@ function parseYamlValue(raw: string): unknown {
   if (!Number.isNaN(Number(trimmed)) && !trimmed.startsWith("0x") && trimmed !== "") {
     return Number(trimmed);
   }
-  if ((trimmed.startsWith('"') && trimmed.endsWith('"')) || (trimmed.startsWith("'") && trimmed.endsWith("'"))) {
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
     return trimmed.slice(1, -1);
   }
   if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
@@ -77,7 +80,10 @@ function parseYamlBlock(yamlText: string): Record<string, unknown> {
   return result;
 }
 
-export function parseFrontmatter(content: string): { frontmatter: Record<string, unknown>; content: string } {
+export function parseFrontmatter(content: string): {
+  frontmatter: Record<string, unknown>;
+  content: string;
+} {
   const normalized = content.replace(/\r\n/g, "\n");
   if (!normalized.startsWith("---")) return { frontmatter: {}, content };
   const match = normalized.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
@@ -96,7 +102,11 @@ export function parseMarkdownSections(content: string): MarkdownSection[] {
     const headingMatch = line.match(/^(#{1,6})\s+(.+)$/);
     if (headingMatch && headingMatch[1] && headingMatch[2]) {
       if (currentHeading || currentLines.length > 0) {
-        sections.push({ heading: currentHeading, level: currentLevel, content: currentLines.join("\n").trim() });
+        sections.push({
+          heading: currentHeading,
+          level: currentLevel,
+          content: currentLines.join("\n").trim(),
+        });
         currentLines.length = 0;
       }
       currentLevel = headingMatch[1].length;
@@ -107,7 +117,11 @@ export function parseMarkdownSections(content: string): MarkdownSection[] {
   }
 
   if (currentHeading || currentLines.length > 0) {
-    sections.push({ heading: currentHeading, level: currentLevel, content: currentLines.join("\n").trim() });
+    sections.push({
+      heading: currentHeading,
+      level: currentLevel,
+      content: currentLines.join("\n").trim(),
+    });
   }
 
   return sections;
@@ -115,7 +129,12 @@ export function parseMarkdownSections(content: string): MarkdownSection[] {
 
 function inferSeverity(text: string): RuleSeverity {
   const upper = text.toUpperCase();
-  if (upper.includes("CRITICAL") || upper.includes("MUST") || upper.includes("NEVER") || upper.includes("FORBIDDEN")) {
+  if (
+    upper.includes("CRITICAL") ||
+    upper.includes("MUST") ||
+    upper.includes("NEVER") ||
+    upper.includes("FORBIDDEN")
+  ) {
     return "critical";
   }
   if (upper.includes("WARNING") || upper.includes("SHOULD NOT") || upper.includes("AVOID")) {
@@ -131,7 +150,15 @@ export function extractRulesFromMarkdown(content: string): SkillRule[] {
   const sections = parseMarkdownSections(content);
   const rules: SkillRule[] = [];
   let ruleCounter = 1;
-  const ruleKeywords = ["rule", "guideline", "invariant", "constraint", "best practice", "requirement", "policy"];
+  const ruleKeywords = [
+    "rule",
+    "guideline",
+    "invariant",
+    "constraint",
+    "best practice",
+    "requirement",
+    "policy",
+  ];
 
   for (const section of sections) {
     const isRuleSection = ruleKeywords.some((kw) => section.heading.toLowerCase().includes(kw));
@@ -145,9 +172,19 @@ export function extractRulesFromMarkdown(content: string): SkillRule[] {
       if (bulletMatch && bulletMatch[1]) {
         const itemText = bulletMatch[1].trim();
         const boldTitleMatch = itemText.match(/^\*\*([^*]+)\*\*[:\s-]*(.*)$/);
-        const title = boldTitleMatch && boldTitleMatch[1] ? boldTitleMatch[1].trim() : `Rule ${ruleCounter}`;
-        const description = boldTitleMatch && boldTitleMatch[2] && boldTitleMatch[2].trim() ? boldTitleMatch[2].trim() : itemText;
-        rules.push({ id: `rule-${ruleCounter}`, title, description, severity: inferSeverity(itemText), category: section.heading || undefined });
+        const title =
+          boldTitleMatch && boldTitleMatch[1] ? boldTitleMatch[1].trim() : `Rule ${ruleCounter}`;
+        const description =
+          boldTitleMatch && boldTitleMatch[2] && boldTitleMatch[2].trim()
+            ? boldTitleMatch[2].trim()
+            : itemText;
+        rules.push({
+          id: `rule-${ruleCounter}`,
+          title,
+          description,
+          severity: inferSeverity(itemText),
+          category: section.heading || undefined,
+        });
         ruleCounter++;
       }
     }
@@ -167,7 +204,10 @@ export function extractToolsFromMarkdown(content: string): SkillTool[] {
       const subHeadingMatches = section.content.match(/^#{3,4}\s+(.+)$/gm);
       if (subHeadingMatches && subHeadingMatches.length > 0) {
         for (const rawSub of subHeadingMatches) {
-          tools.push({ name: rawSub.replace(/^#{3,4}\s+/, "").trim(), description: `Tool defined in ${section.heading}` });
+          tools.push({
+            name: rawSub.replace(/^#{3,4}\s+/, "").trim(),
+            description: `Tool defined in ${section.heading}`,
+          });
         }
       } else if (tools.length === 0 && section.content) {
         const commandMatch = section.content.match(/`([^`]+)`/);
@@ -209,9 +249,17 @@ export function extractScriptsFromMarkdown(content: string): SkillScript[] {
     }
 
     if (scriptPath || lang === "bash" || lang === "sh" || lang === "python" || lang === "py") {
-      const name = scriptPath ? scriptPath.split("/").pop() || "script" : `script-${scripts.length + 1}`;
+      const name = scriptPath
+        ? scriptPath.split("/").pop() || "script"
+        : `script-${scripts.length + 1}`;
       const finalPath = scriptPath || `scripts/${name}.${lang || "sh"}`;
-      scripts.push({ name, path: finalPath, runtime: detectRuntime(finalPath), content: body.trim(), isExecutable: true });
+      scripts.push({
+        name,
+        path: finalPath,
+        runtime: detectRuntime(finalPath),
+        content: body.trim(),
+        isExecutable: true,
+      });
     }
 
     match = codeBlockRegex.exec(content);
@@ -226,21 +274,25 @@ export function parseSkillContent(rawContent: string, options?: SkillParseOption
   const firstSection = sections[0];
 
   const rawName = typeof frontmatter.name === "string" ? frontmatter.name : "";
-  const headerName = firstSection && firstSection.heading ? firstSection.heading.replace(/^#+\s*/, "").trim() : "";
+  const headerName =
+    firstSection && firstSection.heading ? firstSection.heading.replace(/^#+\s*/, "").trim() : "";
   const name = rawName || headerName || "unnamed-skill";
 
-  const rawVersion = typeof frontmatter.version === "string" || typeof frontmatter.version === "number"
-    ? String(frontmatter.version)
-    : "0.1.0";
+  const rawVersion =
+    typeof frontmatter.version === "string" || typeof frontmatter.version === "number"
+      ? String(frontmatter.version)
+      : "0.1.0";
 
   const rawDescription = typeof frontmatter.description === "string" ? frontmatter.description : "";
-  const firstParagraphRaw = firstSection && firstSection.content ? firstSection.content.split(/\n\n/)[0] : "";
+  const firstParagraphRaw =
+    firstSection && firstSection.content ? firstSection.content.split(/\n\n/)[0] : "";
   const firstParagraph = firstParagraphRaw ? firstParagraphRaw.replace(/\n/g, " ").trim() : "";
   const description = rawDescription || firstParagraph || "No description provided";
 
-  const rawCategory: SkillCategory = typeof frontmatter.category === "string"
-    ? (frontmatter.category as SkillCategory)
-    : options?.defaultCategory || "general";
+  const rawCategory: SkillCategory =
+    typeof frontmatter.category === "string"
+      ? (frontmatter.category as SkillCategory)
+      : options?.defaultCategory || "general";
 
   const rawTags: string[] = [];
   if (Array.isArray(frontmatter.tags)) {
@@ -254,14 +306,22 @@ export function parseSkillContent(rawContent: string, options?: SkillParseOption
     for (let idx = 0; idx < frontmatter.rules.length; idx++) {
       const item = frontmatter.rules[idx];
       if (typeof item === "string") {
-        rawRules.push({ id: `rule-${idx + 1}`, title: `Rule ${idx + 1}`, description: item, severity: inferSeverity(item) });
+        rawRules.push({
+          id: `rule-${idx + 1}`,
+          title: `Rule ${idx + 1}`,
+          description: item,
+          severity: inferSeverity(item),
+        });
       } else if (typeof item === "object" && item !== null) {
         const obj = item as Record<string, unknown>;
         rawRules.push({
           id: typeof obj.id === "string" ? obj.id : `rule-${idx + 1}`,
           title: typeof obj.title === "string" ? obj.title : `Rule ${idx + 1}`,
           description: typeof obj.description === "string" ? obj.description : JSON.stringify(obj),
-          severity: typeof obj.severity === "string" ? (obj.severity as RuleSeverity) : inferSeverity(String(obj.description || "")),
+          severity:
+            typeof obj.severity === "string"
+              ? (obj.severity as RuleSeverity)
+              : inferSeverity(String(obj.description || "")),
           category: typeof obj.category === "string" ? obj.category : undefined,
         });
       }
@@ -310,17 +370,24 @@ export function parseSkillContent(rawContent: string, options?: SkillParseOption
     tools: combinedTools,
     scripts: markdownScripts,
     guidelines,
-    promptTemplate: typeof frontmatter.promptTemplate === "string" ? frontmatter.promptTemplate : undefined,
-    dependencies: Array.isArray(frontmatter.dependencies) ? frontmatter.dependencies.filter((d): d is string => typeof d === "string") : [],
+    promptTemplate:
+      typeof frontmatter.promptTemplate === "string" ? frontmatter.promptTemplate : undefined,
+    dependencies: Array.isArray(frontmatter.dependencies)
+      ? frontmatter.dependencies.filter((d): d is string => typeof d === "string")
+      : [],
     rawContent,
     frontmatter,
-    metadata: typeof frontmatter.metadata === "object" && frontmatter.metadata !== null
-      ? (frontmatter.metadata as Record<string, unknown>)
-      : undefined,
+    metadata:
+      typeof frontmatter.metadata === "object" && frontmatter.metadata !== null
+        ? (frontmatter.metadata as Record<string, unknown>)
+        : undefined,
   };
 }
 
-export async function parseSkillFile(filePath: string, options?: SkillParseOptions): Promise<SkillManifest> {
+export async function parseSkillFile(
+  filePath: string,
+  options?: SkillParseOptions,
+): Promise<SkillManifest> {
   const content = await readFile(filePath, "utf-8");
   return parseSkillContent(content, {
     ...options,

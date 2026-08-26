@@ -1,15 +1,8 @@
-export {
-  resolveExecutionMode,
-} from "./execution-mode.js";
+export { resolveExecutionMode } from "./execution-mode.js";
 
-export type {
-  ExecutionMode,
-  ExecutionModeInput,
-} from "./execution-mode.js";
+export type { ExecutionMode, ExecutionModeInput } from "./execution-mode.js";
 
-export {
-  resolveBenchmarkRuntimeConfig,
-} from "./benchmark-runtime-config.js";
+export { resolveBenchmarkRuntimeConfig } from "./benchmark-runtime-config.js";
 
 export type {
   BenchmarkRuntimeConfig,

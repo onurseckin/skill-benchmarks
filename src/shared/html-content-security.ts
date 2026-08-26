@@ -1,7 +1,9 @@
 import { createHash } from "node:crypto";
 
 export function createContentSecurityPolicy(html: string): string {
-  const hashes = extractExecutableScripts(html).map((script) => `'sha256-${createHash("sha256").update(script).digest("base64")}'`);
+  const hashes = extractExecutableScripts(html).map(
+    (script) => `'sha256-${createHash("sha256").update(script).digest("base64")}'`,
+  );
   const scriptSource = hashes.length === 0 ? "'none'" : hashes.join(" ");
   return [
     "default-src 'none'",
@@ -33,5 +35,9 @@ function extractExecutableScripts(html: string): readonly string[] {
 }
 
 function escapeAttribute(value: string): string {
-  return value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
 }

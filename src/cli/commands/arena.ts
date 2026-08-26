@@ -6,7 +6,7 @@ import { admitCompetition, toCompetitionSweepConfig } from "./competition-admiss
 
 export async function runArenaCommand(
   args: CliParsedArgs,
-  output: CliOutput
+  output: CliOutput,
 ): Promise<CliCommandResult> {
   const startedAt = Date.now();
   const options = requireOptions(args.arenaOptions);
@@ -23,7 +23,8 @@ export async function runArenaCommand(
   });
   const modelA = admission.models[0] as { readonly modelId: string; readonly providerId: string };
   const modelB = admission.models[1] as { readonly modelId: string; readonly providerId: string };
-  if (options.outputPath !== undefined) preflightReportOutputPaths([options.outputPath], [admission.telemetryDbPath]);
+  if (options.outputPath !== undefined)
+    preflightReportOutputPaths([options.outputPath], [admission.telemetryDbPath]);
   const pairing: ArenaPairing = Object.freeze({
     scenarioId: admission.scenarioIds[0] as string,
     skillId: admission.skillId,
@@ -38,18 +39,29 @@ export async function runArenaCommand(
     executionMode: admission.runtimeConfig.executionMode,
     ...(admission.dryRun || admission.runtimeConfig.executionMode === "live"
       ? {}
-      : { sweepConfig: toCompetitionSweepConfig(admission, [pairing.scenarioId], admission.models) }),
+      : {
+          sweepConfig: toCompetitionSweepConfig(admission, [pairing.scenarioId], admission.models),
+        }),
   });
-  output.stdout(`${formatSectionHeader(`Arena Candidate Comparison: ${pairing.modelA} and ${pairing.modelB}`)}\n`);
+  output.stdout(
+    `${formatSectionHeader(`Arena Candidate Comparison: ${pairing.modelA} and ${pairing.modelB}`)}\n`,
+  );
   if (result.status === "planned") {
-    output.stdout(`  ${formatBadge("info", "PLANNED PAIRING")} ${pairing.scenarioId} / ${pairing.skillId}\n`);
+    output.stdout(
+      `  ${formatBadge("info", "PLANNED PAIRING")} ${pairing.scenarioId} / ${pairing.skillId}\n`,
+    );
     output.stdout("  NO BENCHMARK EXECUTED\n");
   } else {
-    output.stdout(`  ${formatBadge(result.status === "failed" ? "error" : "info", result.displayStatus)} ${result.reason}\n`);
+    output.stdout(
+      `  ${formatBadge(result.status === "failed" ? "error" : "info", result.displayStatus)} ${result.reason}\n`,
+    );
   }
   const success = result.status !== "failed" && result.status !== "not_evaluated";
   if (success && options.outputPath !== undefined) {
-    publishReportOutputs([{ path: options.outputPath, content: `${JSON.stringify(result, null, 2)}\n` }], [admission.telemetryDbPath]);
+    publishReportOutputs(
+      [{ path: options.outputPath, content: `${JSON.stringify(result, null, 2)}\n` }],
+      [admission.telemetryDbPath],
+    );
     output.stderr("Arena diagnostic written.\n");
   }
   return { success, exitCode: success ? 0 : 1, durationMs: Date.now() - startedAt, data: result };

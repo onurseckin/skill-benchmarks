@@ -2,9 +2,7 @@ import { spawn } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { IDockerClient } from "../container/types.js";
-import {
-  generateWorkspaceFingerprint,
-} from "./fingerprint.js";
+import { generateWorkspaceFingerprint } from "./fingerprint.js";
 import type {
   DiffExtractionResult,
   DiffManifest,
@@ -35,7 +33,7 @@ export function parseGitDiff(
     readonly generatedAt?: string;
     readonly beforeFingerprint?: PreRunFingerprintManifest;
     readonly afterFingerprint?: PreRunFingerprintManifest;
-  }
+  },
 ): DiffManifest {
   const lines = rawDiff.split(/\r?\n/);
   const fileModifications: FileModification[] = [];
@@ -141,10 +139,7 @@ export function parseGitDiff(
     } else if (line.startsWith("rename to ")) {
       currentFile.changeType = "renamed";
       currentFile.path = line.slice("rename to ".length).trim();
-    } else if (
-      line.startsWith("Binary files ") ||
-      line.startsWith("GIT binary patch")
-    ) {
+    } else if (line.startsWith("Binary files ") || line.startsWith("GIT binary patch")) {
       currentFile.isBinary = true;
     } else if (line.startsWith("@@ ")) {
       currentFile.hunkCount++;
@@ -152,10 +147,7 @@ export function parseGitDiff(
       if (currentFile.changeType === "permission_change") {
         currentFile.changeType = "modified";
       }
-    } else if (
-      currentFile.hunkCount > 0 &&
-      !currentFile.isBinary
-    ) {
+    } else if (currentFile.hunkCount > 0 && !currentFile.isBinary) {
       if (line.startsWith("+") && !line.startsWith("+++")) {
         currentFile.insertions++;
       } else if (line.startsWith("-") && !line.startsWith("---")) {
@@ -199,7 +191,7 @@ export function parseGitDiff(
 
 function runGitCommand(
   args: ReadonlyArray<string>,
-  cwd: string
+  cwd: string,
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
   return new Promise((resolvePromise, rejectPromise) => {
     const proc = spawn("git", [...args], {
@@ -234,7 +226,7 @@ function runGitCommand(
 
 export async function extractDiffFromLocal(
   workspaceDir: string,
-  options: ExtractDiffOptions
+  options: ExtractDiffOptions,
 ): Promise<DiffExtractionResult> {
   const startTime = Date.now();
   const absoluteDir = resolve(workspaceDir);
@@ -244,17 +236,13 @@ export async function extractDiffFromLocal(
 
   const diffResult = await runGitCommand(
     ["diff", "--binary", "--full-index", baselineTag],
-    absoluteDir
+    absoluteDir,
   );
 
   const rawDiff = diffResult.stdout;
 
-  const shaResult = await runGitCommand(
-    ["rev-parse", baselineTag],
-    absoluteDir
-  );
-  const baseCommitSha =
-    shaResult.exitCode === 0 ? shaResult.stdout.trim() : "unknown";
+  const shaResult = await runGitCommand(["rev-parse", baselineTag], absoluteDir);
+  const baseCommitSha = shaResult.exitCode === 0 ? shaResult.stdout.trim() : "unknown";
 
   const afterFingerprint = await generateWorkspaceFingerprint(absoluteDir, {
     runId: options.runId,
@@ -272,15 +260,11 @@ export async function extractDiffFromLocal(
   if (options.saveArtifacts && options.artifactHostPath) {
     const artifactDir = resolve(options.artifactHostPath);
     await mkdir(artifactDir, { recursive: true });
-    await writeFile(
-      resolve(artifactDir, "git.diff"),
-      rawDiff,
-      "utf-8"
-    );
+    await writeFile(resolve(artifactDir, "git.diff"), rawDiff, "utf-8");
     await writeFile(
       resolve(artifactDir, "diff-manifest.json"),
       JSON.stringify(manifest, null, 2),
-      "utf-8"
+      "utf-8",
     );
   }
 
@@ -297,7 +281,7 @@ export async function extractDiffFromContainer(
   dockerClient: IDockerClient,
   containerId: string,
   options: ExtractDiffOptions,
-  containerWorkspacePath = "/workspace"
+  containerWorkspacePath = "/workspace",
 ): Promise<DiffExtractionResult> {
   const startTime = Date.now();
   const baselineTag = options.baselineTag ?? "baseline";
@@ -308,32 +292,24 @@ git add --intent-to-add . && \
 git diff --binary --full-index ${baselineTag}
 `;
 
-  const diffExec = await dockerClient.exec(
-    containerId,
-    ["bash", "-c", diffScript],
-    { cwd: containerWorkspacePath }
-  );
+  const diffExec = await dockerClient.exec(containerId, ["bash", "-c", diffScript], {
+    cwd: containerWorkspacePath,
+  });
 
   if (diffExec.exitCode !== 0) {
     const errorText = new TextDecoder().decode(diffExec.stderr);
-    throw new Error(
-      `Failed to extract git diff from container ${containerId}: ${errorText}`
-    );
+    throw new Error(`Failed to extract git diff from container ${containerId}: ${errorText}`);
   }
 
   const rawDiff = new TextDecoder().decode(diffExec.stdout);
 
   const shaScript = `cd ${containerWorkspacePath} && git rev-parse ${baselineTag}`;
-  const shaExec = await dockerClient.exec(
-    containerId,
-    ["bash", "-c", shaScript],
-    { cwd: containerWorkspacePath }
-  );
+  const shaExec = await dockerClient.exec(containerId, ["bash", "-c", shaScript], {
+    cwd: containerWorkspacePath,
+  });
 
   const baseCommitSha =
-    shaExec.exitCode === 0
-      ? new TextDecoder().decode(shaExec.stdout).trim()
-      : "unknown";
+    shaExec.exitCode === 0 ? new TextDecoder().decode(shaExec.stdout).trim() : "unknown";
 
   const manifest = parseGitDiff(rawDiff, {
     runId: options.runId,
@@ -345,15 +321,11 @@ git diff --binary --full-index ${baselineTag}
   if (options.saveArtifacts && options.artifactHostPath) {
     const artifactDir = resolve(options.artifactHostPath);
     await mkdir(artifactDir, { recursive: true });
-    await writeFile(
-      resolve(artifactDir, "git.diff"),
-      rawDiff,
-      "utf-8"
-    );
+    await writeFile(resolve(artifactDir, "git.diff"), rawDiff, "utf-8");
     await writeFile(
       resolve(artifactDir, "diff-manifest.json"),
       JSON.stringify(manifest, null, 2),
-      "utf-8"
+      "utf-8",
     );
   }
 

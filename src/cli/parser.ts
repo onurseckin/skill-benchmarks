@@ -20,7 +20,10 @@ import type {
   TournamentOptions,
 } from "./types.js";
 
-export function parseCliArgs(argv: readonly string[], context?: CliValidationContext): CliParsedArgs {
+export function parseCliArgs(
+  argv: readonly string[],
+  context?: CliValidationContext,
+): CliParsedArgs {
   const validated = validateCliInput(argv, context);
   const shared = {
     command: validated.command,
@@ -30,13 +33,19 @@ export function parseCliArgs(argv: readonly string[], context?: CliValidationCon
     positionals: validated.positionals,
   };
   if (validated.command === "run") {
-    return Object.freeze({ ...shared, benchmarkOptions: buildRunOptions(validated.options, validated.positionals) });
+    return Object.freeze({
+      ...shared,
+      benchmarkOptions: buildRunOptions(validated.options, validated.positionals),
+    });
   }
   if (validated.command === "arena") {
     return Object.freeze({ ...shared, arenaOptions: buildArenaOptions(validated.options) });
   }
   if (validated.command === "tournament") {
-    return Object.freeze({ ...shared, tournamentOptions: buildTournamentOptions(validated.options) });
+    return Object.freeze({
+      ...shared,
+      tournamentOptions: buildTournamentOptions(validated.options),
+    });
   }
   if (validated.command === "report") {
     return Object.freeze({ ...shared, reportOptions: buildReportOptions(validated.options) });
@@ -45,14 +54,17 @@ export function parseCliArgs(argv: readonly string[], context?: CliValidationCon
     return Object.freeze({ ...shared, listOptions: buildListOptions(validated.positionals) });
   }
   if (validated.command === "replay") {
-    return Object.freeze({ ...shared, replayOptions: buildReplayOptions(validated.options, validated.positionals) });
+    return Object.freeze({
+      ...shared,
+      replayOptions: buildReplayOptions(validated.options, validated.positionals),
+    });
   }
   return Object.freeze(shared);
 }
 
 function buildRunOptions(
   options: Readonly<Record<string, CliNormalizedValue>>,
-  positionals: readonly string[]
+  positionals: readonly string[],
 ): BenchmarkRunOptions {
   const scenarios = Object.freeze([...readArray(options.scenarioIds), ...positionals]);
   return Object.freeze({
@@ -69,7 +81,13 @@ function buildRunOptions(
     ...optionalNumber(options.thinkingBudget, "thinkingBudget"),
     ...(options.matrixThinking === undefined
       ? {}
-      : { matrixThinking: Object.freeze(readArray(options.matrixThinking).map((value) => requireChoice(value, thinkingLevelChoices))) }),
+      : {
+          matrixThinking: Object.freeze(
+            readArray(options.matrixThinking).map((value) =>
+              requireChoice(value, thinkingLevelChoices),
+            ),
+          ),
+        }),
     ...optionalBoolean(options.dryRun, "dryRun"),
     ...optionalBoolean(options.live, "live"),
     ...optionalBoolean(options.mock, "mock"),
@@ -95,7 +113,9 @@ function buildArenaOptions(options: Readonly<Record<string, CliNormalizedValue>>
   });
 }
 
-function buildTournamentOptions(options: Readonly<Record<string, CliNormalizedValue>>): TournamentOptions {
+function buildTournamentOptions(
+  options: Readonly<Record<string, CliNormalizedValue>>,
+): TournamentOptions {
   return Object.freeze({
     scenarioIds: freezeArray(options.scenarioIds),
     skillIds: freezeArray(options.skillIds),
@@ -152,7 +172,7 @@ function buildListOptions(positionals: readonly string[]): ListOptions {
 
 function buildReplayOptions(
   options: Readonly<Record<string, CliNormalizedValue>>,
-  positionals: readonly string[]
+  positionals: readonly string[],
 ): ReplayCliOptions {
   return Object.freeze({
     ...(positionals[0] === undefined
@@ -179,23 +199,35 @@ function freezeArray(value: CliNormalizedValue | undefined): readonly string[] {
   return Object.freeze([...readArray(value)]);
 }
 
-function optionalArray(value: CliNormalizedValue | undefined, key: string): Record<string, readonly string[]> {
+function optionalArray(
+  value: CliNormalizedValue | undefined,
+  key: string,
+): Record<string, readonly string[]> {
   return value === undefined ? {} : { [key]: freezeArray(value) };
 }
 
-function optionalString(value: CliNormalizedValue | undefined, key: string): Record<string, string> {
+function optionalString(
+  value: CliNormalizedValue | undefined,
+  key: string,
+): Record<string, string> {
   if (value === undefined) return {};
   if (typeof value !== "string") throw new CliInputError("invalid_value");
   return { [key]: value };
 }
 
-function optionalNumber(value: CliNormalizedValue | undefined, key: string): Record<string, number> {
+function optionalNumber(
+  value: CliNormalizedValue | undefined,
+  key: string,
+): Record<string, number> {
   if (value === undefined) return {};
   if (typeof value !== "number") throw new CliInputError("invalid_value");
   return { [key]: value };
 }
 
-function optionalBoolean(value: CliNormalizedValue | undefined, key: string): Record<string, boolean> {
+function optionalBoolean(
+  value: CliNormalizedValue | undefined,
+  key: string,
+): Record<string, boolean> {
   if (value === undefined) return {};
   if (typeof value !== "boolean") throw new CliInputError("invalid_value");
   return { [key]: value };
@@ -204,7 +236,7 @@ function optionalBoolean(value: CliNormalizedValue | undefined, key: string): Re
 function optionalChoice<T extends string>(
   value: CliNormalizedValue | undefined,
   key: string,
-  choices: readonly T[]
+  choices: readonly T[],
 ): Record<string, T> {
   if (value === undefined) return {};
   if (typeof value !== "string") throw new CliInputError("invalid_value");

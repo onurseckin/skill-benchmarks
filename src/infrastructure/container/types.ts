@@ -67,10 +67,7 @@ export interface IContainerInstance {
   readonly state: ContainerState;
   readonly config: ContainerLaunchConfig;
 
-  executeCommand(
-    command: string,
-    options?: ExecuteCommandOptions
-  ): Promise<ContainerExecResult>;
+  executeCommand(command: string, options?: ExecuteCommandOptions): Promise<ContainerExecResult>;
 
   readFile(path: string): Promise<Uint8Array>;
 
@@ -183,22 +180,16 @@ export interface IDockerClient {
   exec(
     containerId: string,
     command: ReadonlyArray<string>,
-    options?: DockerExecOptions
+    options?: DockerExecOptions,
   ): Promise<DockerExecProcessResult>;
   inspectContainer(containerId: string): Promise<ContainerInspectInfo>;
   killContainer(containerId: string, signal?: string): Promise<void>;
   removeContainer(
     containerId: string,
-    options?: { readonly force?: boolean; readonly removeVolumes?: boolean }
+    options?: { readonly force?: boolean; readonly removeVolumes?: boolean },
   ): Promise<void>;
-  createVolume(
-    name: string,
-    options?: { readonly labels?: Record<string, string> }
-  ): Promise<void>;
-  removeVolume(
-    name: string,
-    options?: { readonly force?: boolean }
-  ): Promise<void>;
+  createVolume(name: string, options?: { readonly labels?: Record<string, string> }): Promise<void>;
+  removeVolume(name: string, options?: { readonly force?: boolean }): Promise<void>;
   listContainers(options?: {
     readonly all?: boolean;
     readonly filters?: Record<string, string | ReadonlyArray<string>>;

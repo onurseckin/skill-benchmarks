@@ -38,13 +38,25 @@ function readEntries(path: string): readonly string[] {
 
 function requireExactEntries(path: string, expected: readonly string[], code: string): void {
   const actual = readEntries(path);
-  requireCondition(actual.length === expected.length && actual.every((entry, index) => entry === expected[index]), code);
+  requireCondition(
+    actual.length === expected.length && actual.every((entry, index) => entry === expected[index]),
+    code,
+  );
 }
 
-function requireAllowedEntries(path: string, required: readonly string[], allowed: readonly string[], code: string): readonly string[] {
+function requireAllowedEntries(
+  path: string,
+  required: readonly string[],
+  allowed: readonly string[],
+  code: string,
+): readonly string[] {
   const actual = readEntries(path);
   const allowedSet = new Set(allowed);
-  requireCondition(required.every((entry) => actual.includes(entry)) && actual.every((entry) => allowedSet.has(entry)), code);
+  requireCondition(
+    required.every((entry) => actual.includes(entry)) &&
+      actual.every((entry) => allowedSet.has(entry)),
+    code,
+  );
   return actual;
 }
 
@@ -82,8 +94,14 @@ function scanTree(path: string, bundle: string): void {
     const child = join(path, entry);
     const stats = lstatSync(child);
     requireCondition(!stats.isSymbolicLink(), "filesystem_symlink_rejected");
-    requireCondition(stats.isDirectory() || (stats.isFile() && stats.nlink === 1), "filesystem_node_rejected");
-    requireCondition(!unsafeFilePatterns.some((pattern) => pattern.test(entry)), "filesystem_temporary_rejected");
+    requireCondition(
+      stats.isDirectory() || (stats.isFile() && stats.nlink === 1),
+      "filesystem_node_rejected",
+    );
+    requireCondition(
+      !unsafeFilePatterns.some((pattern) => pattern.test(entry)),
+      "filesystem_temporary_rejected",
+    );
     requireContainedRealPath(child, bundle, "filesystem_escape_rejected");
     if (stats.isDirectory()) scanTree(child, bundle);
   }
@@ -121,19 +139,43 @@ export function validateDiagnosticBundleFilesystem(argument: string): Diagnostic
   requireDirectory(runsDirectory, bundle, "filesystem_runs_rejected");
   requireDirectory(sweepsDirectory, bundle, "filesystem_sweeps_rejected");
   requireExactEntries(bundle, ["logs", "runtime"], "filesystem_bundle_shape_invalid");
-  requireExactEntries(runtime, ["db", "exports", "runs", "sweeps"], "filesystem_runtime_shape_invalid");
+  requireExactEntries(
+    runtime,
+    ["db", "exports", "runs", "sweeps"],
+    "filesystem_runtime_shape_invalid",
+  );
   requireExactEntries(logs, ["run.log"], "filesystem_logs_shape_invalid");
-  requireExactEntries(databaseDirectory, ["benchmarks.sqlite"], "filesystem_database_shape_invalid");
-  requireExactEntries(exportsDirectory, ["diagnostic-report.json"], "filesystem_exports_shape_invalid");
-  const runDirectory = requireSingleDirectory(runsDirectory, bundle, "filesystem_run_count_invalid");
-  const sweepDirectory = requireSingleDirectory(sweepsDirectory, bundle, "filesystem_sweep_count_invalid");
+  requireExactEntries(
+    databaseDirectory,
+    ["benchmarks.sqlite"],
+    "filesystem_database_shape_invalid",
+  );
+  requireExactEntries(
+    exportsDirectory,
+    ["diagnostic-report.json"],
+    "filesystem_exports_shape_invalid",
+  );
+  const runDirectory = requireSingleDirectory(
+    runsDirectory,
+    bundle,
+    "filesystem_run_count_invalid",
+  );
+  const sweepDirectory = requireSingleDirectory(
+    sweepsDirectory,
+    bundle,
+    "filesystem_sweep_count_invalid",
+  );
   const runEntries = requireAllowedEntries(
     runDirectory,
     ["events.jsonl", "manifest.json", "result.json"],
     ["events.jsonl", "manifest.json", "raw.log", "result.json"],
-    "filesystem_run_shape_invalid"
+    "filesystem_run_shape_invalid",
   );
-  requireExactEntries(sweepDirectory, ["checkpoint.json", "outcome.json", "plan.json"], "filesystem_sweep_shape_invalid");
+  requireExactEntries(
+    sweepDirectory,
+    ["checkpoint.json", "outcome.json", "plan.json"],
+    "filesystem_sweep_shape_invalid",
+  );
   const paths: DiagnosticBundlePaths = {
     bundle,
     log: join(logs, "run.log"),

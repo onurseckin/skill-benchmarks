@@ -1,113 +1,26 @@
 import { calculateTokenCostUSD } from "./pricing";
 import {
+  convertPartsToOpenAIContent,
+  mapOpenAIFinishReason,
+  parseOpenAIError,
+  type OpenAIChatMessage,
+  type OpenAIResponsePayload,
+} from "./openai-protocol.js";
+import {
   AgentMessage,
-  AgentMessageContentPart,
   CompletionChunk,
   FinishReason,
   GenerateOptions,
   LLMProviderAdapter,
   ModelTurnResponse,
-  ProviderAuthenticationError,
   ProviderConfig,
-  ProviderContextLengthExceededError,
   ProviderError,
   ProviderId,
-  ProviderRateLimitError,
-  ProviderTimeoutError,
   TokenUsage,
   ToolCallDelta,
   ToolCallRequest,
   ToolDefinition,
 } from "./types";
-
-interface OpenAIChatMessage {
-  readonly role: "system" | "user" | "assistant" | "tool";
-  readonly content: string | readonly unknown[] | null;
-  readonly tool_calls?: readonly {
-    readonly id: string;
-    readonly type: "function";
-    readonly function: { readonly name: string; readonly arguments: string };
-  }[];
-  readonly tool_call_id?: string;
-  readonly name?: string;
-}
-
-interface OpenAIToolCallPayload {
-  readonly id: string;
-  readonly type: "function";
-  readonly function: { readonly name: string; readonly arguments: string };
-}
-
-interface OpenAIChoice {
-  readonly index: number;
-  readonly message?: {
-    readonly role: string;
-    readonly content: string | null;
-    readonly tool_calls?: readonly OpenAIToolCallPayload[];
-  };
-  readonly delta?: {
-    readonly role?: string;
-    readonly content?: string | null;
-    readonly reasoning_content?: string | null;
-    readonly tool_calls?: readonly {
-      readonly index: number;
-      readonly id?: string;
-      readonly function?: { readonly name?: string; readonly arguments?: string };
-    }[];
-  };
-  readonly finish_reason: string | null;
-}
-
-interface OpenAIUsageResponse {
-  readonly prompt_tokens?: number;
-  readonly completion_tokens?: number;
-  readonly total_tokens?: number;
-  readonly prompt_tokens_details?: { readonly cached_tokens?: number };
-  readonly completion_tokens_details?: { readonly reasoning_tokens?: number };
-}
-
-interface OpenAIResponsePayload {
-  readonly id?: string;
-  readonly choices?: readonly OpenAIChoice[];
-  readonly usage?: OpenAIUsageResponse;
-  readonly error?: { readonly message?: string; readonly type?: string; readonly code?: string };
-}
-
-function mapOpenAIFinishReason(reason: string | null | undefined): FinishReason {
-  if (reason === "stop") return "stop";
-  if (reason === "tool_calls") return "tool_calls";
-  if (reason === "length") return "length";
-  if (reason === "content_filter") return "content_filter";
-  return "stop";
-}
-
-function parseOpenAIError(status: number, message: string, raw: unknown, providerId: ProviderId): ProviderError {
-  if (status === 401 || status === 403) {
-    return new ProviderAuthenticationError(message, providerId, { statusCode: status, rawError: raw });
-  }
-  if (status === 429) {
-    return new ProviderRateLimitError(message, providerId, { statusCode: status, rawError: raw });
-  }
-  if (status === 400 && (message.includes("maximum context length") || message.includes("tokens"))) {
-    return new ProviderContextLengthExceededError(message, providerId, { statusCode: status, rawError: raw });
-  }
-  if (status === 408 || status === 504) {
-    return new ProviderTimeoutError(message, providerId, { statusCode: status, rawError: raw });
-  }
-  return new ProviderError(message, providerId, { statusCode: status, isRetryable: status >= 500, rawError: raw });
-}
-
-function convertPartsToOpenAIContent(parts: readonly AgentMessageContentPart[]): readonly unknown[] {
-  const openAIParts: unknown[] = [];
-  for (const part of parts) {
-    if (part.type === "text") {
-      openAIParts.push({ type: "text", text: part.text });
-    } else if (part.type === "image") {
-      openAIParts.push({ type: "image_url", image_url: { url: `data:${part.mimeType};base64,${part.data}` } });
-    }
-  }
-  return openAIParts;
-}
 
 export class OpenAIProviderAdapter implements LLMProviderAdapter {
   public readonly providerId: ProviderId;
@@ -115,13 +28,21 @@ export class OpenAIProviderAdapter implements LLMProviderAdapter {
   private readonly config: ProviderConfig;
 
   constructor(modelId?: string, config?: Partial<ProviderConfig>) {
-    this.providerId = config !== undefined && config.providerId !== undefined ? config.providerId : "openai";
+    this.providerId =
+      config !== undefined && config.providerId !== undefined ? config.providerId : "openai";
     this.modelId = modelId !== undefined && modelId.length > 0 ? modelId : "gpt-4o";
-    const defaultBaseUrl = this.providerId === "ollama" ? "http://localhost:11434/v1" : "https://api.openai.com/v1";
+    const defaultBaseUrl =
+      this.providerId === "ollama" ? "http://localhost:11434/v1" : "https://api.openai.com/v1";
     this.config = {
       providerId: this.providerId,
-      apiKey: config !== undefined && config.apiKey !== undefined ? config.apiKey : this.providerId === "openai" ? process.env.OPENAI_API_KEY : "dummy-key",
-      baseUrl: config !== undefined && config.baseUrl !== undefined ? config.baseUrl : defaultBaseUrl,
+      apiKey:
+        config !== undefined && config.apiKey !== undefined
+          ? config.apiKey
+          : this.providerId === "openai"
+            ? process.env.OPENAI_API_KEY
+            : "dummy-key",
+      baseUrl:
+        config !== undefined && config.baseUrl !== undefined ? config.baseUrl : defaultBaseUrl,
       timeoutMs: config !== undefined && config.timeoutMs !== undefined ? config.timeoutMs : 60000,
       maxRetries: config !== undefined && config.maxRetries !== undefined ? config.maxRetries : 2,
       customHeaders: config !== undefined ? config.customHeaders : undefined,
@@ -137,16 +58,18 @@ export class OpenAIProviderAdapter implements LLMProviderAdapter {
     messages: ReadonlyArray<AgentMessage>,
     tools: ReadonlyArray<ToolDefinition>,
     options: GenerateOptions,
-    stream: boolean
+    stream: boolean,
   ): { readonly url: string; readonly headers: Record<string, string>; readonly body: string } {
-    const rawBase = this.config.baseUrl !== undefined ? this.config.baseUrl : "https://api.openai.com/v1";
+    const rawBase =
+      this.config.baseUrl !== undefined ? this.config.baseUrl : "https://api.openai.com/v1";
     const cleanBase = rawBase.endsWith("/") ? rawBase.slice(0, -1) : rawBase;
     const url = `${cleanBase}/chat/completions`;
     const headers: Record<string, string> = {
       "content-type": "application/json",
       authorization: `Bearer ${this.config.apiKey !== undefined ? this.config.apiKey : ""}`,
     };
-    if (this.config.organization !== undefined) headers["openai-organization"] = this.config.organization;
+    if (this.config.organization !== undefined)
+      headers["openai-organization"] = this.config.organization;
     if (this.config.customHeaders !== undefined) {
       for (const [k, v] of Object.entries(this.config.customHeaders)) headers[k] = v;
     }
@@ -160,7 +83,8 @@ export class OpenAIProviderAdapter implements LLMProviderAdapter {
         const content = typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content);
         openAIMessages.push({ role: "system", content });
       } else if (msg.role === "user") {
-        const content = typeof msg.content === "string" ? msg.content : convertPartsToOpenAIContent(msg.content);
+        const content =
+          typeof msg.content === "string" ? msg.content : convertPartsToOpenAIContent(msg.content);
         openAIMessages.push({ role: "user", content });
       } else if (msg.role === "assistant") {
         if (msg.toolCalls !== undefined && msg.toolCalls.length > 0) {
@@ -169,14 +93,23 @@ export class OpenAIProviderAdapter implements LLMProviderAdapter {
             type: "function" as const,
             function: { name: tc.name, arguments: tc.rawArguments },
           }));
-          openAIMessages.push({ role: "assistant", content: typeof msg.content === "string" ? msg.content : null, tool_calls });
+          openAIMessages.push({
+            role: "assistant",
+            content: typeof msg.content === "string" ? msg.content : null,
+            tool_calls,
+          });
         } else {
-          const content = typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content);
+          const content =
+            typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content);
           openAIMessages.push({ role: "assistant", content });
         }
       } else if (msg.role === "tool") {
         const content = typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content);
-        openAIMessages.push({ role: "tool", content, tool_call_id: msg.toolCallId !== undefined ? msg.toolCallId : "call_default" });
+        openAIMessages.push({
+          role: "tool",
+          content,
+          tool_call_id: msg.toolCallId !== undefined ? msg.toolCallId : "call_default",
+        });
       }
     }
 
@@ -204,11 +137,20 @@ export class OpenAIProviderAdapter implements LLMProviderAdapter {
     }
     if (options.reasoningEffort !== undefined) {
       bodyObj.reasoning_effort = options.reasoningEffort;
-    } else if (options.thinkingEffortLevel !== undefined && options.thinkingEffortLevel !== "none") {
-      bodyObj.reasoning_effort = options.thinkingEffortLevel === "high" || options.thinkingEffortLevel === "max" ? "high" : options.thinkingEffortLevel === "low" ? "low" : "medium";
+    } else if (
+      options.thinkingEffortLevel !== undefined &&
+      options.thinkingEffortLevel !== "none"
+    ) {
+      bodyObj.reasoning_effort =
+        options.thinkingEffortLevel === "high" || options.thinkingEffortLevel === "max"
+          ? "high"
+          : options.thinkingEffortLevel === "low"
+            ? "low"
+            : "medium";
     }
     if (options.topP !== undefined && !isReasoningModel) bodyObj.top_p = options.topP;
-    if (options.stopSequences !== undefined && options.stopSequences.length > 0) bodyObj.stop = options.stopSequences;
+    if (options.stopSequences !== undefined && options.stopSequences.length > 0)
+      bodyObj.stop = options.stopSequences;
     if (openAITools.length > 0) bodyObj.tools = openAITools;
     if (options.responseFormat !== undefined) bodyObj.response_format = options.responseFormat;
 
@@ -218,7 +160,7 @@ export class OpenAIProviderAdapter implements LLMProviderAdapter {
   public async *generateStream(
     messages: ReadonlyArray<AgentMessage>,
     tools: ReadonlyArray<ToolDefinition>,
-    options: GenerateOptions
+    options: GenerateOptions,
   ): AsyncIterable<CompletionChunk> {
     const { url, headers, body } = this.buildPayload(messages, tools, options, true);
     let response: Response;
@@ -228,7 +170,7 @@ export class OpenAIProviderAdapter implements LLMProviderAdapter {
       throw new ProviderError(
         `OpenAI network failure: ${err instanceof Error ? err.message : String(err)}`,
         this.providerId,
-        { cause: err, isRetryable: true }
+        { cause: err, isRetryable: true },
       );
     }
 
@@ -237,7 +179,8 @@ export class OpenAIProviderAdapter implements LLMProviderAdapter {
       let errMsg = `OpenAI API error ${response.status}`;
       try {
         const parsed = JSON.parse(rawText) as { readonly error?: { readonly message?: string } };
-        if (parsed.error !== undefined && parsed.error.message !== undefined) errMsg = parsed.error.message;
+        if (parsed.error !== undefined && parsed.error.message !== undefined)
+          errMsg = parsed.error.message;
       } catch {
         if (rawText.length > 0) errMsg = rawText;
       }
@@ -270,7 +213,8 @@ export class OpenAIProviderAdapter implements LLMProviderAdapter {
               if (choice !== undefined) {
                 const delta = choice.delta;
                 if (delta !== undefined) {
-                  if (delta.content !== null && delta.content !== undefined) yield { textDelta: delta.content };
+                  if (delta.content !== null && delta.content !== undefined)
+                    yield { textDelta: delta.content };
                   if (delta.reasoning_content !== null && delta.reasoning_content !== undefined) {
                     yield { reasoningDelta: delta.reasoning_content };
                   }
@@ -302,7 +246,7 @@ export class OpenAIProviderAdapter implements LLMProviderAdapter {
   public async generateTurn(
     messages: ReadonlyArray<AgentMessage>,
     tools: ReadonlyArray<ToolDefinition>,
-    options: GenerateOptions
+    options: GenerateOptions,
   ): Promise<ModelTurnResponse> {
     const startTime = Date.now();
     const { url, headers, body } = this.buildPayload(messages, tools, options, false);
@@ -313,7 +257,7 @@ export class OpenAIProviderAdapter implements LLMProviderAdapter {
       throw new ProviderError(
         `OpenAI network failure: ${err instanceof Error ? err.message : String(err)}`,
         this.providerId,
-        { cause: err, isRetryable: true }
+        { cause: err, isRetryable: true },
       );
     }
 
@@ -323,7 +267,8 @@ export class OpenAIProviderAdapter implements LLMProviderAdapter {
       let errMsg = `OpenAI API error ${response.status}`;
       try {
         const parsed = JSON.parse(rawText) as { readonly error?: { readonly message?: string } };
-        if (parsed.error !== undefined && parsed.error.message !== undefined) errMsg = parsed.error.message;
+        if (parsed.error !== undefined && parsed.error.message !== undefined)
+          errMsg = parsed.error.message;
       } catch {
         if (rawText.length > 0) errMsg = rawText;
       }
@@ -340,7 +285,8 @@ export class OpenAIProviderAdapter implements LLMProviderAdapter {
       if (choice !== undefined) {
         finishReason = mapOpenAIFinishReason(choice.finish_reason);
         if (choice.message !== undefined) {
-          if (choice.message.content !== null && choice.message.content !== undefined) fullText = choice.message.content;
+          if (choice.message.content !== null && choice.message.content !== undefined)
+            fullText = choice.message.content;
           if (choice.message.tool_calls !== undefined) {
             for (const tc of choice.message.tool_calls) {
               let parsedArgs: Record<string, unknown> = {};
@@ -349,7 +295,12 @@ export class OpenAIProviderAdapter implements LLMProviderAdapter {
               } catch {
                 parsedArgs = {};
               }
-              toolCalls.push({ id: tc.id, name: tc.function.name, arguments: parsedArgs, rawArguments: tc.function.arguments });
+              toolCalls.push({
+                id: tc.id,
+                name: tc.function.name,
+                arguments: parsedArgs,
+                rawArguments: tc.function.arguments,
+              });
             }
           }
         }
@@ -357,14 +308,24 @@ export class OpenAIProviderAdapter implements LLMProviderAdapter {
     }
 
     const usageResp = payload.usage;
-    const inputTokens = usageResp !== undefined && usageResp.prompt_tokens !== undefined ? usageResp.prompt_tokens : 0;
-    const outputTokens = usageResp !== undefined && usageResp.completion_tokens !== undefined ? usageResp.completion_tokens : 0;
+    const inputTokens =
+      usageResp !== undefined && usageResp.prompt_tokens !== undefined
+        ? usageResp.prompt_tokens
+        : 0;
+    const outputTokens =
+      usageResp !== undefined && usageResp.completion_tokens !== undefined
+        ? usageResp.completion_tokens
+        : 0;
     const cacheReadInputTokens =
-      usageResp !== undefined && usageResp.prompt_tokens_details !== undefined && usageResp.prompt_tokens_details.cached_tokens !== undefined
+      usageResp !== undefined &&
+      usageResp.prompt_tokens_details !== undefined &&
+      usageResp.prompt_tokens_details.cached_tokens !== undefined
         ? usageResp.prompt_tokens_details.cached_tokens
         : 0;
     const reasoningOutputTokens =
-      usageResp !== undefined && usageResp.completion_tokens_details !== undefined && usageResp.completion_tokens_details.reasoning_tokens !== undefined
+      usageResp !== undefined &&
+      usageResp.completion_tokens_details !== undefined &&
+      usageResp.completion_tokens_details.reasoning_tokens !== undefined
         ? usageResp.completion_tokens_details.reasoning_tokens
         : 0;
 

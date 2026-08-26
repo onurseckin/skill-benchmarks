@@ -35,7 +35,7 @@ export class CheckpointLedger implements ICheckpointLedger {
       readonly planFingerprint: string;
       readonly sweepStartedAt: string;
     },
-    config?: Partial<CheckpointConfig>
+    config?: Partial<CheckpointConfig>,
   ) {
     this.filePath = resolve(filePath);
     this.maxBackups = config?.maxBackups ?? 3;
@@ -87,7 +87,8 @@ export class CheckpointLedger implements ICheckpointLedger {
       if (!existsSync(candidate)) continue;
       try {
         const stats = lstatSync(candidate);
-        if (!stats.isFile() || stats.isSymbolicLink()) throw new TypeError("Checkpoint evidence is unsafe");
+        if (!stats.isFile() || stats.isSymbolicLink())
+          throw new TypeError("Checkpoint evidence is unsafe");
         const parsed = JSON.parse(readFileSync(candidate, "utf8")) as CheckpointState;
         this.assertCompatibleCheckpoint(parsed);
         this.state = parsed;
@@ -103,7 +104,9 @@ export class CheckpointLedger implements ICheckpointLedger {
     await this.persistState(() => state);
   }
 
-  private async persistState(createState: (current: CheckpointState) => CheckpointState): Promise<void> {
+  private async persistState(
+    createState: (current: CheckpointState) => CheckpointState,
+  ): Promise<void> {
     let releaseLock: () => void = () => {};
     const previousLock = this.writeLock;
     this.writeLock = new Promise<void>((resolve) => {
@@ -121,7 +124,11 @@ export class CheckpointLedger implements ICheckpointLedger {
           updatedAt: new Date().toISOString(),
         },
       };
-      const serialized = JSON.stringify(sanitizeBenchmarkArtifactStreamValue(updatedState), null, 2);
+      const serialized = JSON.stringify(
+        sanitizeBenchmarkArtifactStreamValue(updatedState),
+        null,
+        2,
+      );
       writeCheckpointSnapshot(this.filePath, serialized, this.maxBackups);
       this.state = updatedState;
     } finally {
@@ -139,7 +146,8 @@ export class CheckpointLedger implements ICheckpointLedger {
       totalTokens: 0,
     };
 
-    const cellCost = result.scenarioResult?.totalCostUSD ?? result.runRecord?.operationalCost.amountUSD ?? 0;
+    const cellCost =
+      result.scenarioResult?.totalCostUSD ?? result.runRecord?.operationalCost.amountUSD ?? 0;
     await this.persistState((current) => {
       const completedSet = new Set(current.completedCellIds);
       completedSet.add(cellId);
@@ -148,13 +156,20 @@ export class CheckpointLedger implements ICheckpointLedger {
       const newTokens: TokenUsage = {
         inputTokens: prevTokens.inputTokens + cellTokens.inputTokens,
         outputTokens: prevTokens.outputTokens + cellTokens.outputTokens,
-        cacheCreationInputTokens: prevTokens.cacheCreationInputTokens + cellTokens.cacheCreationInputTokens,
+        cacheCreationInputTokens:
+          prevTokens.cacheCreationInputTokens + cellTokens.cacheCreationInputTokens,
         cacheReadInputTokens: prevTokens.cacheReadInputTokens + cellTokens.cacheReadInputTokens,
         totalTokens: prevTokens.totalTokens + cellTokens.totalTokens,
       };
       return {
         ...current,
-        status: resolveCheckpointStatus(current, completedSet, new Set(current.failedCellIds), new Set(current.skippedCellIds), completedResults),
+        status: resolveCheckpointStatus(
+          current,
+          completedSet,
+          new Set(current.failedCellIds),
+          new Set(current.skippedCellIds),
+          completedResults,
+        ),
         completedCellIds: Array.from(completedSet),
         completedResults,
         totalTokens: newTokens,
@@ -172,7 +187,13 @@ export class CheckpointLedger implements ICheckpointLedger {
       const completedResults = { ...current.completedResults, [cellId]: result };
       return {
         ...current,
-        status: resolveCheckpointStatus(current, new Set(current.completedCellIds), failedSet, new Set(current.skippedCellIds), completedResults),
+        status: resolveCheckpointStatus(
+          current,
+          new Set(current.completedCellIds),
+          failedSet,
+          new Set(current.skippedCellIds),
+          completedResults,
+        ),
         failedCellIds: Array.from(failedSet),
         completedResults,
         wallClockDurationMs: current.wallClockDurationMs + result.durationMs,
@@ -188,7 +209,13 @@ export class CheckpointLedger implements ICheckpointLedger {
       const completedResults = { ...current.completedResults, [cellId]: result };
       return {
         ...current,
-        status: resolveCheckpointStatus(current, new Set(current.completedCellIds), new Set(current.failedCellIds), skippedSet, completedResults),
+        status: resolveCheckpointStatus(
+          current,
+          new Set(current.completedCellIds),
+          new Set(current.failedCellIds),
+          skippedSet,
+          completedResults,
+        ),
         skippedCellIds: Array.from(skippedSet),
         completedResults,
       };
@@ -196,7 +223,9 @@ export class CheckpointLedger implements ICheckpointLedger {
   }
 
   isCellCompleted(cellId: string): boolean {
-    return this.state.completedCellIds.includes(cellId) || this.state.skippedCellIds.includes(cellId);
+    return (
+      this.state.completedCellIds.includes(cellId) || this.state.skippedCellIds.includes(cellId)
+    );
   }
 
   getCompletedResults(): readonly MatrixCellResult[] {
@@ -219,11 +248,13 @@ function resolveCheckpointStatus(
   completedIds: ReadonlySet<string>,
   failedIds: ReadonlySet<string>,
   skippedIds: ReadonlySet<string>,
-  results: Readonly<Record<string, MatrixCellResult>>
+  results: Readonly<Record<string, MatrixCellResult>>,
 ): SweepExecutionStatus {
   const terminalIds = new Set([...completedIds, ...failedIds, ...skippedIds]);
   if (terminalIds.size < current.totalPlannedCells) return "running";
   if (failedIds.size === 0) return "completed";
-  const allFailuresAborted = [...failedIds].every((cellId) => results[cellId]?.runRecord?.terminationReason === "aborted");
+  const allFailuresAborted = [...failedIds].every(
+    (cellId) => results[cellId]?.runRecord?.terminationReason === "aborted",
+  );
   return allFailuresAborted ? "aborted" : "failed";
 }

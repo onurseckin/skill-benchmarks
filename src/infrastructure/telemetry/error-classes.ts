@@ -16,7 +16,7 @@ export class DockerDaemonUnavailableError extends InfrastructureFaultError {
       readonly isRetryable?: boolean;
       readonly details?: Readonly<Record<string, unknown>>;
       readonly cause?: unknown;
-    }
+    },
   ) {
     super(message, "ERR_DOCKER_DAEMON_UNAVAILABLE", options);
   }
@@ -31,7 +31,7 @@ export class ImagePullFailedError extends InfrastructureFaultError {
       readonly isRetryable?: boolean;
       readonly details?: Readonly<Record<string, unknown>>;
       readonly cause?: unknown;
-    }
+    },
   ) {
     super(`Required base image '${imageTag}' could not be pulled`, "ERR_IMAGE_PULL_FAILED", {
       ...options,
@@ -49,12 +49,16 @@ export class VolumeCreationFailedError extends InfrastructureFaultError {
       readonly isRetryable?: boolean;
       readonly details?: Readonly<Record<string, unknown>>;
       readonly cause?: unknown;
-    }
+    },
   ) {
-    super(`Failed to create ephemeral Docker volume '${volumeName}'`, "ERR_VOLUME_CREATION_FAILED", {
-      ...options,
-      details: { volumeName, ...options?.details },
-    });
+    super(
+      `Failed to create ephemeral Docker volume '${volumeName}'`,
+      "ERR_VOLUME_CREATION_FAILED",
+      {
+        ...options,
+        details: { volumeName, ...options?.details },
+      },
+    );
   }
 }
 
@@ -68,7 +72,7 @@ export class ContainerBootTimeoutError extends InfrastructureFaultError {
       readonly isRetryable?: boolean;
       readonly details?: Readonly<Record<string, unknown>>;
       readonly cause?: unknown;
-    }
+    },
   ) {
     super(
       `Container '${containerId}' failed to reach READY state within ${timeoutMs}ms`,
@@ -76,7 +80,7 @@ export class ContainerBootTimeoutError extends InfrastructureFaultError {
       {
         ...options,
         details: { containerId, timeoutMs, ...options?.details },
-      }
+      },
     );
   }
 }
@@ -90,7 +94,7 @@ export class OomKilledError extends InfrastructureFaultError {
       readonly memoryLimitBytes?: number;
       readonly details?: Readonly<Record<string, unknown>>;
       readonly cause?: unknown;
-    }
+    },
   ) {
     super(
       `Container '${containerId}' exceeded memory limit and was killed by Linux OOM killer (Exit 137)`,
@@ -103,7 +107,7 @@ export class OomKilledError extends InfrastructureFaultError {
           ...options?.details,
         },
         cause: options?.cause,
-      }
+      },
     );
   }
 }
@@ -117,7 +121,7 @@ export class CommandTimeoutError extends ExecutionTimeoutError {
     options?: {
       readonly details?: Readonly<Record<string, unknown>>;
       readonly cause?: unknown;
-    }
+    },
   ) {
     super(
       `Command execution timed out after ${timeoutMs}ms: ${command.slice(0, 100)}`,
@@ -125,7 +129,7 @@ export class CommandTimeoutError extends ExecutionTimeoutError {
       {
         ...options,
         details: { command, timeoutMs, ...options?.details },
-      }
+      },
     );
   }
 }
@@ -139,16 +143,12 @@ export class TurnTimeoutError extends ExecutionTimeoutError {
     options?: {
       readonly details?: Readonly<Record<string, unknown>>;
       readonly cause?: unknown;
-    }
+    },
   ) {
-    super(
-      `Benchmark turn ${turnIndex} exceeded deadline of ${timeoutMs}ms`,
-      "ERR_TURN_TIMEOUT",
-      {
-        ...options,
-        details: { turnIndex, timeoutMs, ...options?.details },
-      }
-    );
+    super(`Benchmark turn ${turnIndex} exceeded deadline of ${timeoutMs}ms`, "ERR_TURN_TIMEOUT", {
+      ...options,
+      details: { turnIndex, timeoutMs, ...options?.details },
+    });
   }
 }
 
@@ -161,7 +161,7 @@ export class ScenarioTimeoutError extends ExecutionTimeoutError {
     options?: {
       readonly details?: Readonly<Record<string, unknown>>;
       readonly cause?: unknown;
-    }
+    },
   ) {
     super(
       `Scenario '${scenarioId}' exceeded total execution deadline of ${timeoutMs}ms`,
@@ -169,7 +169,7 @@ export class ScenarioTimeoutError extends ExecutionTimeoutError {
       {
         ...options,
         details: { scenarioId, timeoutMs, ...options?.details },
-      }
+      },
     );
   }
 }
@@ -184,16 +184,12 @@ export class InvalidToolPayloadError extends AgentToolError {
       readonly payload?: unknown;
       readonly details?: Readonly<Record<string, unknown>>;
       readonly cause?: unknown;
-    }
+    },
   ) {
-    super(
-      `Invalid tool payload for '${toolName}': ${reason}`,
-      "ERR_INVALID_TOOL_PAYLOAD",
-      {
-        ...options,
-        details: { toolName, reason, payload: options?.payload, ...options?.details },
-      }
-    );
+    super(`Invalid tool payload for '${toolName}': ${reason}`, "ERR_INVALID_TOOL_PAYLOAD", {
+      ...options,
+      details: { toolName, reason, payload: options?.payload, ...options?.details },
+    });
   }
 }
 
@@ -207,7 +203,7 @@ export class CommandNonZeroExitError extends AgentToolError {
     options?: {
       readonly details?: Readonly<Record<string, unknown>>;
       readonly cause?: unknown;
-    }
+    },
   ) {
     super(
       `Command '${command.slice(0, 80)}' failed with exit code ${exitCode}`,
@@ -216,7 +212,7 @@ export class CommandNonZeroExitError extends AgentToolError {
         exitCode,
         details: { command, exitCode, stderrSnippet: stderr.slice(-500), ...options?.details },
         cause: options?.cause,
-      }
+      },
     );
   }
 }
@@ -230,7 +226,7 @@ export class OutputLimitExceededError extends AgentToolError {
     options?: {
       readonly details?: Readonly<Record<string, unknown>>;
       readonly cause?: unknown;
-    }
+    },
   ) {
     super(
       `Command output exceeded maximum ceiling of ${limitBytes} bytes (5MB)`,
@@ -238,7 +234,7 @@ export class OutputLimitExceededError extends AgentToolError {
       {
         ...options,
         details: { commandId, limitBytes, ...options?.details },
-      }
+      },
     );
   }
 }
@@ -251,16 +247,12 @@ export class DiffExtractionFailedError extends StateIntegrityError {
     options?: {
       readonly details?: Readonly<Record<string, unknown>>;
       readonly cause?: unknown;
-    }
+    },
   ) {
-    super(
-      `Failed to extract Git diff from workspace: ${reason}`,
-      "ERR_DIFF_EXTRACTION_FAILED",
-      {
-        ...options,
-        details: { reason, ...options?.details },
-      }
-    );
+    super(`Failed to extract Git diff from workspace: ${reason}`, "ERR_DIFF_EXTRACTION_FAILED", {
+      ...options,
+      details: { reason, ...options?.details },
+    });
   }
 }
 
@@ -272,7 +264,7 @@ export class BaselineTamperingError extends StateIntegrityError {
     options?: {
       readonly details?: Readonly<Record<string, unknown>>;
       readonly cause?: unknown;
-    }
+    },
   ) {
     super(
       `Agent tampered with immutable baseline fixtures: ${tamperedFiles.join(", ")}`,
@@ -280,7 +272,7 @@ export class BaselineTamperingError extends StateIntegrityError {
       {
         ...options,
         details: { tamperedFiles, ...options?.details },
-      }
+      },
     );
   }
 }

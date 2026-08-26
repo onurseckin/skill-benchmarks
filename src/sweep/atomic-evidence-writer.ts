@@ -1,7 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { closeSync, constants, fchmodSync, fsyncSync, fstatSync, writeFileSync } from "node:fs";
 import { basename, dirname } from "node:path";
-import { openAuthorizedRunDirectory, requireRunArtifactAuthority } from "../infrastructure/workspace/run-artifact-authority.js";
+import {
+  openAuthorizedRunDirectory,
+  requireRunArtifactAuthority,
+} from "../infrastructure/workspace/run-artifact-authority.js";
 import type { RunArtifactLayout } from "../infrastructure/workspace/types.js";
 import { sanitizeBenchmarkArtifactValue } from "../shared/artifact-sanitization.js";
 import {
@@ -44,7 +47,7 @@ export async function writeAtomicEvidenceJson(
   layout: RunArtifactLayout,
   path: string,
   value: unknown,
-  syncOperations: EvidenceSyncOperations = durableEvidenceSync
+  syncOperations: EvidenceSyncOperations = durableEvidenceSync,
 ): Promise<EvidenceArtifactIdentity> {
   return commitEvidence(layout, path, value, syncOperations);
 }
@@ -53,7 +56,7 @@ export function commitAtomicEvidenceJson(
   layout: RunArtifactLayout,
   path: string,
   value: unknown,
-  syncOperations: EvidenceSyncOperations = durableEvidenceSync
+  syncOperations: EvidenceSyncOperations = durableEvidenceSync,
 ): EvidenceArtifactIdentity {
   return commitEvidence(layout, path, value, syncOperations);
 }
@@ -61,7 +64,7 @@ export function commitAtomicEvidenceJson(
 export function removeAtomicEvidence(
   layout: RunArtifactLayout,
   path: string,
-  expectedIdentity: EvidenceArtifactIdentity
+  expectedIdentity: EvidenceArtifactIdentity,
 ): void {
   const directoryDescriptor = openAuthorizedArtifactDirectory(layout, path);
   const targetName = basename(path);
@@ -75,11 +78,15 @@ export function removeAtomicEvidence(
     quarantineDescriptor = openDirectoryEntry(
       directoryDescriptor,
       quarantineName,
-      constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK
+      constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
     );
     const targetStats = fstatSync(quarantineDescriptor);
     const targetIdentity = { device: targetStats.dev, inode: targetStats.ino };
-    if (!targetStats.isFile() || targetStats.nlink !== 1 || !sameFileIdentity(targetIdentity, expectedIdentity)) {
+    if (
+      !targetStats.isFile() ||
+      targetStats.nlink !== 1 ||
+      !sameFileIdentity(targetIdentity, expectedIdentity)
+    ) {
       throw new EvidenceCommitError(true, expectedIdentity);
     }
     closeSync(quarantineDescriptor);
@@ -112,7 +119,7 @@ function commitEvidence(
   layout: RunArtifactLayout,
   path: string,
   value: unknown,
-  syncOperations: EvidenceSyncOperations
+  syncOperations: EvidenceSyncOperations,
 ): EvidenceArtifactIdentity {
   const directoryDescriptor = openAuthorizedArtifactDirectory(layout, path);
   const targetName = basename(path);
@@ -126,7 +133,7 @@ function commitEvidence(
       directoryDescriptor,
       temporaryName,
       constants.O_CREAT | constants.O_EXCL | constants.O_RDWR | constants.O_NOFOLLOW,
-      0o600
+      0o600,
     );
     temporaryExists = true;
     fchmodSync(temporaryDescriptor, 0o600);
@@ -162,7 +169,10 @@ function commitEvidence(
     }
     closeSync(directoryDescriptor);
     if (cleanupFailed) {
-      throw new EvidenceCommitError(targetCommitted, targetCommitted ? temporaryIdentity : undefined);
+      throw new EvidenceCommitError(
+        targetCommitted,
+        targetCommitted ? temporaryIdentity : undefined,
+      );
     }
   }
 }
@@ -181,18 +191,23 @@ function assertOwnedDirectoryEntry(
   entryName: string,
   expected: EvidenceArtifactIdentity,
   minimumLinks: number,
-  maximumLinks: number
+  maximumLinks: number,
 ): void {
   const descriptor = openDirectoryEntry(
     directoryDescriptor,
     entryName,
-    constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK
+    constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
   );
   try {
     const stats = fstatSync(descriptor);
     const identity = { device: stats.dev, inode: stats.ino };
-    if (!stats.isFile() || stats.nlink < minimumLinks || stats.nlink > maximumLinks
-      || !sameFileIdentity(identity, expected)) throw new EvidenceCommitError(true);
+    if (
+      !stats.isFile() ||
+      stats.nlink < minimumLinks ||
+      stats.nlink > maximumLinks ||
+      !sameFileIdentity(identity, expected)
+    )
+      throw new EvidenceCommitError(true);
   } finally {
     closeSync(descriptor);
   }
@@ -203,7 +218,10 @@ function descriptorIdentity(descriptor: number): EvidenceArtifactIdentity {
   return { device: stats.dev, inode: stats.ino };
 }
 
-function sameFileIdentity(left: EvidenceArtifactIdentity, right: EvidenceArtifactIdentity): boolean {
+function sameFileIdentity(
+  left: EvidenceArtifactIdentity,
+  right: EvidenceArtifactIdentity,
+): boolean {
   return left.device === right.device && left.inode === right.inode;
 }
 

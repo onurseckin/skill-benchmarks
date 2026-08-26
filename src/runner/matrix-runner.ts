@@ -22,10 +22,8 @@ export function aggregateTokens(usages: ReadonlyArray<TokenUsage>): TokenUsage {
     (acc, curr) => ({
       inputTokens: acc.inputTokens + curr.inputTokens,
       outputTokens: acc.outputTokens + curr.outputTokens,
-      cacheCreationInputTokens:
-        acc.cacheCreationInputTokens + curr.cacheCreationInputTokens,
-      cacheReadInputTokens:
-        acc.cacheReadInputTokens + curr.cacheReadInputTokens,
+      cacheCreationInputTokens: acc.cacheCreationInputTokens + curr.cacheCreationInputTokens,
+      cacheReadInputTokens: acc.cacheReadInputTokens + curr.cacheReadInputTokens,
       totalTokens: acc.totalTokens + curr.totalTokens,
     }),
     {
@@ -34,7 +32,7 @@ export function aggregateTokens(usages: ReadonlyArray<TokenUsage>): TokenUsage {
       cacheCreationInputTokens: 0,
       cacheReadInputTokens: 0,
       totalTokens: 0,
-    }
+    },
   );
 }
 
@@ -49,13 +47,14 @@ export interface MatrixCellDescriptor {
 }
 
 export function generateMatrixPermutations(
-  config: MatrixExecutionConfig
+  config: MatrixExecutionConfig,
 ): ReadonlyArray<MatrixCellDescriptor> {
   const cells: MatrixCellDescriptor[] = [];
   const repetitions = Math.max(1, config.repetitions);
-  const thinkingLevels = config.thinkingLevels !== undefined && config.thinkingLevels.length > 0
-    ? config.thinkingLevels
-    : [undefined];
+  const thinkingLevels =
+    config.thinkingLevels !== undefined && config.thinkingLevels.length > 0
+      ? config.thinkingLevels
+      : [undefined];
 
   for (const scenarioId of config.scenarioIds) {
     for (const model of config.models) {
@@ -83,10 +82,7 @@ export interface MatrixRunnerOptions {
   readonly toolDispatcher?: StandardToolDispatcher;
   readonly runnerEngine?: ScenarioRunnerEngine;
   readonly onCellStart?: (cell: MatrixCellDescriptor, runId: string) => void;
-  readonly onCellComplete?: (
-    cell: MatrixCellDescriptor,
-    result: ScenarioResult
-  ) => void;
+  readonly onCellComplete?: (cell: MatrixCellDescriptor, result: ScenarioResult) => void;
 }
 
 export class MatrixRunner {
@@ -95,10 +91,8 @@ export class MatrixRunner {
   private readonly options?: MatrixRunnerOptions;
 
   constructor(options?: MatrixRunnerOptions) {
-    this.toolDispatcher =
-      options?.toolDispatcher ?? new StandardToolDispatcher();
-    this.runnerEngine =
-      options?.runnerEngine ?? new ScenarioRunnerEngine(this.toolDispatcher);
+    this.toolDispatcher = options?.toolDispatcher ?? new StandardToolDispatcher();
+    this.runnerEngine = options?.runnerEngine ?? new ScenarioRunnerEngine(this.toolDispatcher);
     this.options = options;
   }
 
@@ -112,7 +106,7 @@ export class MatrixRunner {
 
   public async runMatrix(
     config: MatrixExecutionConfig,
-    collectorFactory?: (cell: MatrixCellDescriptor) => StreamCollector
+    collectorFactory?: (cell: MatrixCellDescriptor) => StreamCollector,
   ): Promise<MatrixExecutionSummary> {
     const startTime = performance.now();
     const permutations = generateMatrixPermutations(config);
@@ -129,11 +123,7 @@ export class MatrixRunner {
         if (cell === undefined) {
           break;
         }
-        results[index] = await this.executeCell(
-          cell,
-          config,
-          collectorFactory
-        );
+        results[index] = await this.executeCell(cell, config, collectorFactory);
       }
     });
 
@@ -141,11 +131,10 @@ export class MatrixRunner {
 
     const totalRuns = results.length;
     const successfulRuns = results.filter(
-      (r) => r.completed && r.terminationReason === "success"
+      (r) => r.completed && r.terminationReason === "success",
     ).length;
     const failedRuns = totalRuns - successfulRuns;
-    const totalDurationMs =
-      Math.round((performance.now() - startTime) * 100) / 100;
+    const totalDurationMs = Math.round((performance.now() - startTime) * 100) / 100;
     const rawCost = results.reduce((acc, r) => acc + r.totalCostUSD, 0);
     const totalCostUSD = Math.round(rawCost * 1000000) / 1000000;
     const totalTokens = aggregateTokens(results.map((r) => r.totalTokens));
@@ -166,7 +155,7 @@ export class MatrixRunner {
   private async executeCell(
     cell: MatrixCellDescriptor,
     config: MatrixExecutionConfig,
-    collectorFactory?: (cell: MatrixCellDescriptor) => StreamCollector
+    collectorFactory?: (cell: MatrixCellDescriptor) => StreamCollector,
   ): Promise<ScenarioResult> {
     const runId = `matrix-${cell.scenarioId}-${cell.modelId}-r${cell.repetitionIndex}-${randomUUID().slice(0, 8)}`;
     const cellStartedAt = new Date().toISOString();
@@ -216,10 +205,8 @@ export class MatrixRunner {
       const collector = collectorFactory ? collectorFactory(cell) : undefined;
       result = await this.runnerEngine.run(runConfig, collector);
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-      const totalDurationMs =
-        Math.round((performance.now() - cellStartTime) * 100) / 100;
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const totalDurationMs = Math.round((performance.now() - cellStartTime) * 100) / 100;
 
       result = {
         runId,
@@ -253,8 +240,7 @@ export class MatrixRunner {
       if (config.containerPool && container) {
         try {
           await config.containerPool.release(container);
-        } catch {
-        }
+        } catch {}
       }
     }
 

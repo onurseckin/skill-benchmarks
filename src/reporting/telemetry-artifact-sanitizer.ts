@@ -6,16 +6,27 @@ export class TelemetryArtifactSanitizer {
   private readonly streams = new ArtifactTextStreamSanitizers();
 
   public sanitize(event: TelemetryEventRecord): TelemetryEventRecord {
-    const commandId = typeof event.payload?.commandId === "string" ? event.payload.commandId : undefined;
-    const scopeId = commandId === undefined ? undefined : `${event.runId.length}:${event.runId}:${commandId}`;
-    if (scopeId !== undefined && event.eventType === "TOOL_CALL_STARTED") this.streams.clear(scopeId);
+    const commandId =
+      typeof event.payload?.commandId === "string" ? event.payload.commandId : undefined;
+    const scopeId =
+      commandId === undefined ? undefined : `${event.runId.length}:${event.runId}:${commandId}`;
+    if (scopeId !== undefined && event.eventType === "TOOL_CALL_STARTED")
+      this.streams.clear(scopeId);
     const channel = resolveChannel(event.eventType);
     const chunk = event.payload?.chunk;
-    const normalizedEvent = scopeId !== undefined && channel !== undefined && typeof chunk === "string"
-      ? { ...event, payload: { ...event.payload, chunk: this.streams.get(scopeId, channel).sanitize(chunk) } }
-      : event;
+    const normalizedEvent =
+      scopeId !== undefined && channel !== undefined && typeof chunk === "string"
+        ? {
+            ...event,
+            payload: {
+              ...event.payload,
+              chunk: this.streams.get(scopeId, channel).sanitize(chunk),
+            },
+          }
+        : event;
     const sanitized = sanitizeBenchmarkArtifactValue(normalizedEvent) as TelemetryEventRecord;
-    if (scopeId !== undefined && event.eventType === "TOOL_CALL_COMPLETED") this.streams.clear(scopeId);
+    if (scopeId !== undefined && event.eventType === "TOOL_CALL_COMPLETED")
+      this.streams.clear(scopeId);
     return sanitized;
   }
 }

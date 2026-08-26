@@ -9,7 +9,11 @@ export const STANDARD_TOOLS: ReadonlyArray<ToolDefinition> = [
       properties: {
         command: { type: "string", description: "The command line string to execute" },
         timeout_seconds: { type: "number", description: "Timeout in seconds" },
-        env: { type: "object", description: "Environment variables", additionalProperties: { type: "string" } },
+        env: {
+          type: "object",
+          description: "Environment variables",
+          additionalProperties: { type: "string" },
+        },
       },
       required: ["command"],
     },

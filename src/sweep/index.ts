@@ -29,10 +29,6 @@ export {
   createDefaultRateLimiter,
 } from "./token-bucket.js";
 
-export {
-  CheckpointLedger,
-} from "./checkpoint.js";
+export { CheckpointLedger } from "./checkpoint.js";
 
-export {
-  MatrixSweepEngine,
-} from "./sweep-engine.js";
+export { MatrixSweepEngine } from "./sweep-engine.js";

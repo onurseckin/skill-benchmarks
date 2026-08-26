@@ -1,9 +1,5 @@
 import * as path from "node:path";
-import type {
-  TelemetryEvent,
-  TelemetryEventType,
-  ResourceProfileSample,
-} from "./types.js";
+import type { TelemetryEvent, TelemetryEventType, ResourceProfileSample } from "./types.js";
 import { BenchmarkArtifactValueStreamSanitizer } from "../../shared/artifact-sanitization.js";
 import { ArtifactTextStreamSanitizers } from "../../shared/artifact-stream-sanitizers.js";
 import type { RunArtifactLayout } from "../workspace/types.js";
@@ -31,7 +27,7 @@ export function createTelemetryEvent(
   runId: string,
   sequenceNumber: number,
   type: TelemetryEventType,
-  payload: Readonly<Record<string, unknown>> = {}
+  payload: Readonly<Record<string, unknown>> = {},
 ): TelemetryEvent {
   return { runId, sequenceNumber, timestampUs: getMonotonicMicroseconds(), type, payload };
 }
@@ -88,10 +84,8 @@ export class EventScribe {
     this.maxOutputBytesPerCommand =
       options.maxOutputBytesPerCommand ?? DEFAULT_MAX_OUTPUT_BYTES_PER_COMMAND;
     this.batchSize = options.batchSize ?? DEFAULT_BATCH_SIZE;
-    this.flushIntervalMs =
-      options.flushIntervalMs ?? DEFAULT_FLUSH_INTERVAL_MS;
-    this.retainRecentLinesCount =
-      options.retainRecentLinesCount ?? DEFAULT_RECENT_LINES_COUNT;
+    this.flushIntervalMs = options.flushIntervalMs ?? DEFAULT_FLUSH_INTERVAL_MS;
+    this.retainRecentLinesCount = options.retainRecentLinesCount ?? DEFAULT_RECENT_LINES_COUNT;
 
     if (this.flushIntervalMs > 0) {
       this.flushTimer = setInterval(() => {
@@ -109,10 +103,12 @@ export class EventScribe {
 
   public emit(
     type: TelemetryEventType,
-    payload: Readonly<Record<string, unknown>> = {}
+    payload: Readonly<Record<string, unknown>> = {},
   ): TelemetryEvent {
     this.sequenceNumber += 1;
-    const sanitizedPayload = this.valueSanitizer.sanitize(payload) as Readonly<Record<string, unknown>>;
+    const sanitizedPayload = this.valueSanitizer.sanitize(payload) as Readonly<
+      Record<string, unknown>
+    >;
     const event = createTelemetryEvent(this.runId, this.sequenceNumber, type, sanitizedPayload);
     this.eventBuffer.push(JSON.stringify(event) + "\n");
     if (this.eventBuffer.length >= this.batchSize) void this.flush();
@@ -121,7 +117,7 @@ export class EventScribe {
 
   public startCommand(
     commandId: string,
-    payload: Readonly<Record<string, unknown>> = {}
+    payload: Readonly<Record<string, unknown>> = {},
   ): TelemetryEvent {
     this.textSanitizers.clear(commandId);
     this.commandByteCounts.set(commandId, 0);
@@ -136,10 +132,9 @@ export class EventScribe {
   public recordStdout(
     commandId: string,
     chunk: string | Uint8Array,
-    metadata: Readonly<Record<string, unknown>> = {}
+    metadata: Readonly<Record<string, unknown>> = {},
   ): RecordChunkResult {
-    const rawBytes =
-      typeof chunk === "string" ? Buffer.from(chunk, "utf-8") : Buffer.from(chunk);
+    const rawBytes = typeof chunk === "string" ? Buffer.from(chunk, "utf-8") : Buffer.from(chunk);
     const chunkByteLength = rawBytes.length;
 
     const currentCount = this.commandByteCounts.get(commandId) ?? 0;
@@ -185,7 +180,9 @@ export class EventScribe {
       this.commandTruncated.add(commandId);
     }
 
-    const textToWrite = this.textSanitizers.get(commandId, "stdout").sanitize(bufferToWrite.toString("utf-8"));
+    const textToWrite = this.textSanitizers
+      .get(commandId, "stdout")
+      .sanitize(bufferToWrite.toString("utf-8"));
     const newTotal = currentCount + bytesToWrite;
     this.commandByteCounts.set(commandId, newTotal);
 
@@ -212,10 +209,9 @@ export class EventScribe {
   public recordStderr(
     commandId: string,
     chunk: string | Uint8Array,
-    metadata: Readonly<Record<string, unknown>> = {}
+    metadata: Readonly<Record<string, unknown>> = {},
   ): RecordChunkResult {
-    const rawBytes =
-      typeof chunk === "string" ? Buffer.from(chunk, "utf-8") : Buffer.from(chunk);
+    const rawBytes = typeof chunk === "string" ? Buffer.from(chunk, "utf-8") : Buffer.from(chunk);
     const chunkByteLength = rawBytes.length;
 
     const currentCount = this.commandByteCounts.get(commandId) ?? 0;
@@ -261,7 +257,9 @@ export class EventScribe {
       this.commandTruncated.add(commandId);
     }
 
-    const textToWrite = this.textSanitizers.get(commandId, "stderr").sanitize(bufferToWrite.toString("utf-8"));
+    const textToWrite = this.textSanitizers
+      .get(commandId, "stderr")
+      .sanitize(bufferToWrite.toString("utf-8"));
     const newTotal = currentCount + bytesToWrite;
     this.commandByteCounts.set(commandId, newTotal);
 
@@ -289,7 +287,7 @@ export class EventScribe {
     commandId: string,
     exitCode: number,
     durationMs?: number,
-    payload: Readonly<Record<string, unknown>> = {}
+    payload: Readonly<Record<string, unknown>> = {},
   ): TelemetryEvent {
     const totalBytes = this.commandByteCounts.get(commandId) ?? 0;
     const wasTruncated = this.commandTruncated.has(commandId);
@@ -306,9 +304,7 @@ export class EventScribe {
     return event;
   }
 
-  public recordResourceSample(
-    sample: ResourceProfileSample
-  ): TelemetryEvent {
+  public recordResourceSample(sample: ResourceProfileSample): TelemetryEvent {
     return this.emit("RESOURCE_SAMPLE", {
       sample,
     });

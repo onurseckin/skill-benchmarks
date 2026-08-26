@@ -14,7 +14,9 @@ export class QueueTimeoutError extends Error {
   readonly queueTimeoutMs: number;
 
   constructor(queueTimeoutMs: number, message?: string) {
-    super(message ?? `Container pool acquisition timed out after waiting ${queueTimeoutMs}ms in queue`);
+    super(
+      message ?? `Container pool acquisition timed out after waiting ${queueTimeoutMs}ms in queue`,
+    );
     this.name = "QueueTimeoutError";
     this.queueTimeoutMs = queueTimeoutMs;
   }
@@ -68,7 +70,9 @@ export class ContainerPoolManager implements IContainerPoolManager {
 
   static calculateMaxConcurrency(hostCpus?: number, totalMemoryBytes?: number): number {
     const cpus = hostCpus ?? (typeof os.cpus === "function" ? os.cpus().length : 4);
-    const memBytes = totalMemoryBytes ?? (typeof os.totalmem === "function" ? os.totalmem() : 16 * 1024 * 1024 * 1024);
+    const memBytes =
+      totalMemoryBytes ??
+      (typeof os.totalmem === "function" ? os.totalmem() : 16 * 1024 * 1024 * 1024);
 
     const totalMemoryGb = memBytes / (1024 * 1024 * 1024);
     const mFreeGb = Math.max(0, totalMemoryGb - 4.0);
@@ -101,7 +105,9 @@ export class ContainerPoolManager implements IContainerPoolManager {
     }
   }
 
-  private async createContainerInstance(config: ContainerLaunchConfig): Promise<IContainerInstance> {
+  private async createContainerInstance(
+    config: ContainerLaunchConfig,
+  ): Promise<IContainerInstance> {
     await this.enforceStartupJitter();
 
     const stateMachine = new ContainerStateMachine("PENDING");
@@ -186,7 +192,9 @@ export class ContainerPoolManager implements IContainerPoolManager {
         runId: config.runId,
         state: "CREATING",
         config,
-        executeCommand: async () => { throw new Error("Not implemented"); },
+        executeCommand: async () => {
+          throw new Error("Not implemented");
+        },
         readFile: async () => new Uint8Array(),
         writeFile: async () => {},
         extractGitDiff: async () => "",
@@ -253,7 +261,9 @@ export class ContainerPoolManager implements IContainerPoolManager {
       runId: next.config.runId,
       state: "CREATING",
       config: next.config,
-      executeCommand: async () => { throw new Error("Not implemented"); },
+      executeCommand: async () => {
+        throw new Error("Not implemented");
+      },
       readFile: async () => new Uint8Array(),
       writeFile: async () => {},
       extractGitDiff: async () => "",
@@ -303,9 +313,8 @@ export class ContainerPoolManager implements IContainerPoolManager {
       activeList.map(async (instance) => {
         try {
           await instance.teardown();
-        } catch {
-        }
-      })
+        } catch {}
+      }),
     );
   }
 }

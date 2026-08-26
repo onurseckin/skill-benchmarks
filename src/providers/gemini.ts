@@ -22,8 +22,14 @@ import {
 interface GeminiPart {
   readonly text?: string;
   readonly inlineData?: { readonly mimeType: string; readonly data: string };
-  readonly functionCall?: { readonly name: string; readonly args: Readonly<Record<string, unknown>> };
-  readonly functionResponse?: { readonly name: string; readonly response: Readonly<Record<string, unknown>> };
+  readonly functionCall?: {
+    readonly name: string;
+    readonly args: Readonly<Record<string, unknown>>;
+  };
+  readonly functionResponse?: {
+    readonly name: string;
+    readonly response: Readonly<Record<string, unknown>>;
+  };
 }
 
 interface GeminiContent {
@@ -58,13 +64,19 @@ function mapGeminiFinishReason(reason: string | undefined): FinishReason {
 
 function parseGeminiError(status: number, message: string, raw: unknown): ProviderError {
   if (status === 401 || status === 403 || message.includes("API key not valid")) {
-    return new ProviderAuthenticationError(message, "google", { statusCode: status, rawError: raw });
+    return new ProviderAuthenticationError(message, "google", {
+      statusCode: status,
+      rawError: raw,
+    });
   }
   if (status === 429 || message.includes("RESOURCE_EXHAUSTED")) {
     return new ProviderRateLimitError(message, "google", { statusCode: status, rawError: raw });
   }
   if (status === 400 && message.includes("context length")) {
-    return new ProviderContextLengthExceededError(message, "google", { statusCode: status, rawError: raw });
+    return new ProviderContextLengthExceededError(message, "google", {
+      statusCode: status,
+      rawError: raw,
+    });
   }
   if (status === 408 || status === 504) {
     return new ProviderTimeoutError(message, "google", { statusCode: status, rawError: raw });
@@ -77,7 +89,7 @@ function parseGeminiError(status: number, message: string, raw: unknown): Provid
 }
 
 function convertPartsToGeminiParts(
-  parts: readonly AgentMessageContentPart[]
+  parts: readonly AgentMessageContentPart[],
 ): readonly GeminiPart[] {
   const geminiParts: GeminiPart[] = [];
   for (const part of parts) {
@@ -107,7 +119,10 @@ export class GeminiProviderAdapter implements LLMProviderAdapter {
 
   constructor(modelId?: string, config?: Partial<ProviderConfig>) {
     this.modelId = modelId !== undefined && modelId.length > 0 ? modelId : "gemini-2.0-flash";
-    const envKey = process.env.GEMINI_API_KEY !== undefined ? process.env.GEMINI_API_KEY : process.env.GOOGLE_API_KEY;
+    const envKey =
+      process.env.GEMINI_API_KEY !== undefined
+        ? process.env.GEMINI_API_KEY
+        : process.env.GOOGLE_API_KEY;
     this.config = {
       providerId: "google",
       apiKey: config !== undefined && config.apiKey !== undefined ? config.apiKey : envKey,
@@ -130,9 +145,12 @@ export class GeminiProviderAdapter implements LLMProviderAdapter {
     messages: ReadonlyArray<AgentMessage>,
     tools: ReadonlyArray<ToolDefinition>,
     options: GenerateOptions,
-    stream: boolean
+    stream: boolean,
   ): { readonly url: string; readonly headers: Record<string, string>; readonly body: string } {
-    const rawBase = this.config.baseUrl !== undefined ? this.config.baseUrl : "https://generativelanguage.googleapis.com/v1beta";
+    const rawBase =
+      this.config.baseUrl !== undefined
+        ? this.config.baseUrl
+        : "https://generativelanguage.googleapis.com/v1beta";
     const apiKey = this.config.apiKey !== undefined ? this.config.apiKey : "";
     const action = stream ? "streamGenerateContent?alt=sse" : "generateContent";
     const cleanBase = rawBase.endsWith("/") ? rawBase.slice(0, -1) : rawBase;
@@ -156,10 +174,16 @@ export class GeminiProviderAdapter implements LLMProviderAdapter {
         const text = typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content);
         systemInstruction = { parts: [{ text }] };
       } else if (msg.role === "user" || msg.role === "tool") {
-        const parts = typeof msg.content === "string" ? [{ text: msg.content }] : convertPartsToGeminiParts(msg.content);
+        const parts =
+          typeof msg.content === "string"
+            ? [{ text: msg.content }]
+            : convertPartsToGeminiParts(msg.content);
         contents.push({ role: "user", parts });
       } else if (msg.role === "assistant") {
-        const parts = typeof msg.content === "string" ? [{ text: msg.content }] : convertPartsToGeminiParts(msg.content);
+        const parts =
+          typeof msg.content === "string"
+            ? [{ text: msg.content }]
+            : convertPartsToGeminiParts(msg.content);
         contents.push({ role: "model", parts });
       }
     }
@@ -190,7 +214,7 @@ export class GeminiProviderAdapter implements LLMProviderAdapter {
   public async *generateStream(
     messages: ReadonlyArray<AgentMessage>,
     tools: ReadonlyArray<ToolDefinition>,
-    options: GenerateOptions
+    options: GenerateOptions,
   ): AsyncIterable<CompletionChunk> {
     const { url, headers, body } = this.buildPayload(messages, tools, options, true);
     let response: Response;
@@ -200,7 +224,7 @@ export class GeminiProviderAdapter implements LLMProviderAdapter {
       throw new ProviderError(
         `Gemini network failure: ${err instanceof Error ? err.message : String(err)}`,
         "google",
-        { cause: err, isRetryable: true }
+        { cause: err, isRetryable: true },
       );
     }
 
@@ -209,7 +233,8 @@ export class GeminiProviderAdapter implements LLMProviderAdapter {
       let errMsg = `Gemini API error ${response.status}`;
       try {
         const parsed = JSON.parse(rawText) as { readonly error?: { readonly message?: string } };
-        if (parsed.error !== undefined && parsed.error.message !== undefined) errMsg = parsed.error.message;
+        if (parsed.error !== undefined && parsed.error.message !== undefined)
+          errMsg = parsed.error.message;
       } catch {
         if (rawText.length > 0) errMsg = rawText;
       }
@@ -238,7 +263,11 @@ export class GeminiProviderAdapter implements LLMProviderAdapter {
             const payload = JSON.parse(dataStr) as GeminiResponsePayload;
             if (payload.candidates !== undefined && payload.candidates.length > 0) {
               const cand = payload.candidates[0];
-              if (cand !== undefined && cand.content !== undefined && cand.content.parts !== undefined) {
+              if (
+                cand !== undefined &&
+                cand.content !== undefined &&
+                cand.content.parts !== undefined
+              ) {
                 for (const part of cand.content.parts) {
                   if (part.text !== undefined) yield { textDelta: part.text };
                 }
@@ -260,7 +289,7 @@ export class GeminiProviderAdapter implements LLMProviderAdapter {
   public async generateTurn(
     messages: ReadonlyArray<AgentMessage>,
     tools: ReadonlyArray<ToolDefinition>,
-    options: GenerateOptions
+    options: GenerateOptions,
   ): Promise<ModelTurnResponse> {
     const startTime = Date.now();
     const { url, headers, body } = this.buildPayload(messages, tools, options, false);
@@ -271,7 +300,7 @@ export class GeminiProviderAdapter implements LLMProviderAdapter {
       throw new ProviderError(
         `Gemini network failure: ${err instanceof Error ? err.message : String(err)}`,
         "google",
-        { cause: err, isRetryable: true }
+        { cause: err, isRetryable: true },
       );
     }
 
@@ -281,7 +310,8 @@ export class GeminiProviderAdapter implements LLMProviderAdapter {
       let errMsg = `Gemini API error ${response.status}`;
       try {
         const parsed = JSON.parse(rawText) as { readonly error?: { readonly message?: string } };
-        if (parsed.error !== undefined && parsed.error.message !== undefined) errMsg = parsed.error.message;
+        if (parsed.error !== undefined && parsed.error.message !== undefined)
+          errMsg = parsed.error.message;
       } catch {
         if (rawText.length > 0) errMsg = rawText;
       }
@@ -314,10 +344,14 @@ export class GeminiProviderAdapter implements LLMProviderAdapter {
     }
 
     const meta = payload.usageMetadata;
-    const inputTokens = meta !== undefined && meta.promptTokenCount !== undefined ? meta.promptTokenCount : 0;
-    const outputTokens = meta !== undefined && meta.candidatesTokenCount !== undefined ? meta.candidatesTokenCount : 0;
+    const inputTokens =
+      meta !== undefined && meta.promptTokenCount !== undefined ? meta.promptTokenCount : 0;
+    const outputTokens =
+      meta !== undefined && meta.candidatesTokenCount !== undefined ? meta.candidatesTokenCount : 0;
     const cacheReadInputTokens =
-      meta !== undefined && meta.cachedContentTokenCount !== undefined ? meta.cachedContentTokenCount : 0;
+      meta !== undefined && meta.cachedContentTokenCount !== undefined
+        ? meta.cachedContentTokenCount
+        : 0;
 
     const usage: TokenUsage = {
       inputTokens,

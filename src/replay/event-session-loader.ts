@@ -20,7 +20,8 @@ export function loadReplaySession(source: ReplayEvidenceSource): ReplaySession {
   try {
     const extension = extname(source.eventsPath).toLowerCase();
     if (extension === ".json") {
-      if (source.manifestPath !== undefined || source.resultPath !== undefined) throw new ReplayEvidenceInvalidError();
+      if (source.manifestPath !== undefined || source.resultPath !== undefined)
+        throw new ReplayEvidenceInvalidError();
       const session = parseReplaySessionJson(readBoundedReplayFile(source.eventsPath));
       if (source.expectedRunId !== undefined && session.metadata.runId !== source.expectedRunId) {
         throw new ReplayEvidenceInvalidError();
@@ -37,7 +38,7 @@ export function loadReplaySession(source: ReplayEvidenceSource): ReplaySession {
         source.eventsPath,
         source.manifestPath,
         source.resultPath,
-        expectedRunId
+        expectedRunId,
       );
       const identity = parseReplayArtifactIdentity(contents.manifest, contents.result, {
         ...source.expectedIdentity,
@@ -52,7 +53,11 @@ export function loadReplaySession(source: ReplayEvidenceSource): ReplaySession {
     } as ReplayEvidenceIdentity;
     return parseReplayJsonl(readBoundedReplayFile(source.eventsPath), identity);
   } catch (error) {
-    if (error instanceof ReplayEvidenceInvalidError || error instanceof ReplayEvidenceUnavailableError) throw error;
+    if (
+      error instanceof ReplayEvidenceInvalidError ||
+      error instanceof ReplayEvidenceUnavailableError
+    )
+      throw error;
     if (error instanceof RunArtifactReadError) {
       if (error.failure === "unavailable") throw new ReplayEvidenceUnavailableError();
       throw new ReplayEvidenceInvalidError();
@@ -61,7 +66,10 @@ export function loadReplaySession(source: ReplayEvidenceSource): ReplaySession {
   }
 }
 
-export function parseReplayJsonl(content: string, identity?: ReplayEvidenceIdentity): ReplaySession {
+export function parseReplayJsonl(
+  content: string,
+  identity?: ReplayEvidenceIdentity,
+): ReplaySession {
   const events = parseCanonicalEventLines(content);
   return projectReplaySession(events, requireDirectReplayExpectation(identity));
 }
@@ -74,7 +82,8 @@ export function parseReplaySessionJson(content: string): ReplaySession {
     if (error instanceof ReplayEvidenceInvalidError) throw error;
     throw new ReplayEvidenceInvalidError();
   }
-  if (candidate.schemaVersion !== replaySessionSchemaVersion) throw new ReplayEvidenceInvalidError();
+  if (candidate.schemaVersion !== replaySessionSchemaVersion)
+    throw new ReplayEvidenceInvalidError();
   const provenance = requireRecord(candidate.provenance);
   const metadata = requireRecord(candidate.metadata);
   const sourceEvents = validateCanonicalEvents(requireArray(candidate.sourceEvents));
@@ -86,7 +95,7 @@ export function parseReplaySessionJson(content: string): ReplaySession {
 
 function readExportedIdentity(
   provenance: Readonly<Record<string, unknown>>,
-  metadata: Readonly<Record<string, unknown>>
+  metadata: Readonly<Record<string, unknown>>,
 ): ReplayEvidenceIdentity {
   if (provenance.source !== "persisted-events") throw new ReplayEvidenceInvalidError();
   if (provenance.sourceKind !== "direct" && provenance.sourceKind !== "canonical-run") {
@@ -97,10 +106,23 @@ function readExportedIdentity(
   copyOptionalString(provenance, identity, "sweepId");
   copyOptionalString(provenance, identity, "cellId");
   copyOptionalString(provenance, identity, "planFingerprint");
-  copyOptionalEnum(provenance, identity, "benchmarkCohort", ["eligible", "validation", "operational"]);
-  copyOptionalEnum(provenance, identity, "eligibilityStatus", ["eligible", "ineligible", "unknown"]);
+  copyOptionalEnum(provenance, identity, "benchmarkCohort", [
+    "eligible",
+    "validation",
+    "operational",
+  ]);
+  copyOptionalEnum(provenance, identity, "eligibilityStatus", [
+    "eligible",
+    "ineligible",
+    "unknown",
+  ]);
   copyOptionalStringArray(provenance, identity, "eligibilityReasons");
-  copyOptionalEnum(provenance, identity, "evaluationStatus", ["not_requested", "not_evaluated", "evaluated", "invalid"]);
+  copyOptionalEnum(provenance, identity, "evaluationStatus", [
+    "not_requested",
+    "not_evaluated",
+    "evaluated",
+    "invalid",
+  ]);
   if (sourceKind === "canonical-run") {
     const skillIds = requireStringArray(metadata.skillIds, true);
     if (skillIds.length !== 1) throw new ReplayEvidenceInvalidError();
@@ -109,7 +131,8 @@ function readExportedIdentity(
     requireNonemptyString(skillIds[0]);
     requireNonemptyString(metadata.modelId);
     identity.providerId = requireNonemptyString(metadata.providerId);
-    if (metadata.executionMode !== "fake" && metadata.executionMode !== "live") throw new ReplayEvidenceInvalidError();
+    if (metadata.executionMode !== "fake" && metadata.executionMode !== "live")
+      throw new ReplayEvidenceInvalidError();
     identity.executionMode = metadata.executionMode;
     if (typeof metadata.simulated !== "boolean") throw new ReplayEvidenceInvalidError();
     identity.simulated = metadata.simulated;
@@ -129,14 +152,29 @@ function readExportedIdentity(
 
 function rejectDirectIdentityClaims(
   provenance: Readonly<Record<string, unknown>>,
-  metadata: Readonly<Record<string, unknown>>
+  metadata: Readonly<Record<string, unknown>>,
 ): void {
   const provenanceClaims = [
-    "sweepId", "cellId", "planFingerprint", "benchmarkCohort", "eligibilityStatus",
-    "eligibilityReasons", "evaluationStatus",
+    "sweepId",
+    "cellId",
+    "planFingerprint",
+    "benchmarkCohort",
+    "eligibilityStatus",
+    "eligibilityReasons",
+    "evaluationStatus",
   ];
-  const metadataClaims = ["providerId", "executionMode", "simulated", "startedAt", "completedAt", "totalTokens"];
-  if (provenanceClaims.some((key) => key in provenance) || metadataClaims.some((key) => key in metadata)) {
+  const metadataClaims = [
+    "providerId",
+    "executionMode",
+    "simulated",
+    "startedAt",
+    "completedAt",
+    "totalTokens",
+  ];
+  if (
+    provenanceClaims.some((key) => key in provenance) ||
+    metadataClaims.some((key) => key in metadata)
+  ) {
     throw new ReplayEvidenceInvalidError();
   }
 }
@@ -149,7 +187,12 @@ function requireExpectedRunId(source: ReplayEvidenceSource): string {
 }
 
 function requireRecord(value: unknown): Readonly<Record<string, unknown>> {
-  if (value === null || typeof value !== "object" || Array.isArray(value) || Object.getPrototypeOf(value) !== Object.prototype) {
+  if (
+    value === null ||
+    typeof value !== "object" ||
+    Array.isArray(value) ||
+    Object.getPrototypeOf(value) !== Object.prototype
+  ) {
     throw new ReplayEvidenceInvalidError();
   }
   return value as Readonly<Record<string, unknown>>;
@@ -161,19 +204,25 @@ function requireArray(value: unknown): readonly unknown[] {
 }
 
 function requireNonemptyString(value: unknown): string {
-  if (typeof value !== "string" || value.trim().length === 0) throw new ReplayEvidenceInvalidError();
+  if (typeof value !== "string" || value.trim().length === 0)
+    throw new ReplayEvidenceInvalidError();
   return value;
 }
 
 function requireStringArray(value: unknown, nonempty: boolean): readonly string[] {
-  if (!Array.isArray(value) || (nonempty && value.length === 0) || !value.every((item) => typeof item === "string" && item.trim().length > 0)) {
+  if (
+    !Array.isArray(value) ||
+    (nonempty && value.length === 0) ||
+    !value.every((item) => typeof item === "string" && item.trim().length > 0)
+  ) {
     throw new ReplayEvidenceInvalidError();
   }
   return value;
 }
 
 function requireNonnegativeNumber(value: unknown): number {
-  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) throw new ReplayEvidenceInvalidError();
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0)
+    throw new ReplayEvidenceInvalidError();
   return value;
 }
 
@@ -183,11 +232,19 @@ function requireNonnegativeInteger(value: unknown): number {
   return number;
 }
 
-function copyOptionalString(source: Readonly<Record<string, unknown>>, target: Record<string, unknown>, key: string): void {
+function copyOptionalString(
+  source: Readonly<Record<string, unknown>>,
+  target: Record<string, unknown>,
+  key: string,
+): void {
   if (source[key] !== undefined) target[key] = requireNonemptyString(source[key]);
 }
 
-function copyOptionalStringArray(source: Readonly<Record<string, unknown>>, target: Record<string, unknown>, key: string): void {
+function copyOptionalStringArray(
+  source: Readonly<Record<string, unknown>>,
+  target: Record<string, unknown>,
+  key: string,
+): void {
   if (source[key] !== undefined) target[key] = requireStringArray(source[key], false);
 }
 
@@ -195,7 +252,7 @@ function copyOptionalEnum(
   source: Readonly<Record<string, unknown>>,
   target: Record<string, unknown>,
   key: string,
-  allowed: readonly string[]
+  allowed: readonly string[],
 ): void {
   if (source[key] !== undefined) target[key] = requireEnum(source[key], allowed);
 }
@@ -206,14 +263,26 @@ function requireEnum(value: unknown, allowed: readonly string[]): string {
   return text;
 }
 
-function requireDirectReplayExpectation(identity: ReplayEvidenceIdentity | undefined): ReplayEvidenceIdentity {
+function requireDirectReplayExpectation(
+  identity: ReplayEvidenceIdentity | undefined,
+): ReplayEvidenceIdentity {
   if (identity === undefined) return { sourceKind: "direct" };
   if (Object.getPrototypeOf(identity) !== Object.prototype) throw new ReplayEvidenceInvalidError();
   const allowed = new Set([
-    "sourceKind", "runId", "scenarioId", "skillId", "modelId", "status",
-    "terminationReason", "durationMs", "totalCostUSD", "totalTurns",
+    "sourceKind",
+    "runId",
+    "scenarioId",
+    "skillId",
+    "modelId",
+    "status",
+    "terminationReason",
+    "durationMs",
+    "totalCostUSD",
+    "totalTurns",
   ]);
-  if (Object.keys(identity).some((key) => !allowed.has(key))) throw new ReplayEvidenceInvalidError();
-  if (identity.sourceKind !== undefined && identity.sourceKind !== "direct") throw new ReplayEvidenceInvalidError();
+  if (Object.keys(identity).some((key) => !allowed.has(key)))
+    throw new ReplayEvidenceInvalidError();
+  if (identity.sourceKind !== undefined && identity.sourceKind !== "direct")
+    throw new ReplayEvidenceInvalidError();
   return { ...identity, sourceKind: "direct" };
 }

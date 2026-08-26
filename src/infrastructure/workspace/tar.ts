@@ -2,22 +2,16 @@ import { spawn } from "node:child_process";
 import { mkdir, stat } from "node:fs/promises";
 import { resolve } from "node:path";
 
-export async function packDirectoryToTar(
-  sourceDir: string
-): Promise<Uint8Array> {
+export async function packDirectoryToTar(sourceDir: string): Promise<Uint8Array> {
   const absoluteSource = resolve(sourceDir);
   let dirStat;
   try {
     dirStat = await stat(absoluteSource);
   } catch {
-    throw new Error(
-      `Fixture source path is not a directory or does not exist: ${absoluteSource}`
-    );
+    throw new Error(`Fixture source path is not a directory or does not exist: ${absoluteSource}`);
   }
   if (!dirStat.isDirectory()) {
-    throw new Error(
-      `Fixture source path is not a directory: ${absoluteSource}`
-    );
+    throw new Error(`Fixture source path is not a directory: ${absoluteSource}`);
   }
 
   return new Promise<Uint8Array>((resolvePromise, rejectPromise) => {
@@ -37,17 +31,13 @@ export async function packDirectoryToTar(
     });
 
     tarProcess.on("error", (err) => {
-      rejectPromise(
-        new Error(`Failed to spawn tar process: ${err.message}`)
-      );
+      rejectPromise(new Error(`Failed to spawn tar process: ${err.message}`));
     });
 
     tarProcess.on("close", (code) => {
       if (code !== 0) {
         const stderrText = Buffer.concat(stderrChunks).toString("utf-8");
-        rejectPromise(
-          new Error(`tar archive creation failed with code ${code}: ${stderrText}`)
-        );
+        rejectPromise(new Error(`tar archive creation failed with code ${code}: ${stderrText}`));
       } else {
         const totalBuffer = Buffer.concat(chunks);
         resolvePromise(new Uint8Array(totalBuffer));
@@ -56,10 +46,7 @@ export async function packDirectoryToTar(
   });
 }
 
-export async function unpackTarToDirectory(
-  tarBytes: Uint8Array,
-  targetDir: string
-): Promise<void> {
+export async function unpackTarToDirectory(tarBytes: Uint8Array, targetDir: string): Promise<void> {
   const absoluteTarget = resolve(targetDir);
   await mkdir(absoluteTarget, { recursive: true });
 
@@ -75,17 +62,13 @@ export async function unpackTarToDirectory(
     });
 
     tarProcess.on("error", (err) => {
-      rejectPromise(
-        new Error(`Failed to spawn tar unpack process: ${err.message}`)
-      );
+      rejectPromise(new Error(`Failed to spawn tar unpack process: ${err.message}`));
     });
 
     tarProcess.on("close", (code) => {
       if (code !== 0) {
         const stderrText = Buffer.concat(stderrChunks).toString("utf-8");
-        rejectPromise(
-          new Error(`tar extraction failed with code ${code}: ${stderrText}`)
-        );
+        rejectPromise(new Error(`tar extraction failed with code ${code}: ${stderrText}`));
       } else {
         resolvePromise();
       }

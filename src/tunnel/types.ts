@@ -13,7 +13,20 @@ export type StreamChannel =
   | "scrollback_request"
   | "scrollback_replay";
 
-export type StreamChannelCode = 0x01 | 0x02 | 0x03 | 0x04 | 0x05 | 0x06 | 0x07 | 0x08 | 0x09 | 0x0a | 0x0b | 0x0c | 0x0d;
+export type StreamChannelCode =
+  | 0x01
+  | 0x02
+  | 0x03
+  | 0x04
+  | 0x05
+  | 0x06
+  | 0x07
+  | 0x08
+  | 0x09
+  | 0x0a
+  | 0x0b
+  | 0x0c
+  | 0x0d;
 
 export const CHANNEL_TO_CODE: Readonly<Record<StreamChannel, StreamChannelCode>> = {
   stdin: 0x01,
@@ -62,7 +75,14 @@ export interface BinaryFrameEnvelope {
   readonly payload: Uint8Array;
 }
 
-export type ControlSignalType = "sigint" | "sigterm" | "sigkill" | "pause" | "resume" | "reset" | "eof";
+export type ControlSignalType =
+  | "sigint"
+  | "sigterm"
+  | "sigkill"
+  | "pause"
+  | "resume"
+  | "reset"
+  | "eof";
 
 export interface TerminalDimensions {
   readonly cols: number;
@@ -321,7 +341,11 @@ export interface TunnelServerState {
   readonly totalFramesProcessed: number;
 }
 
-export type PtyOutputListener = (data: Uint8Array, channel: "stdout" | "stderr", sequence: number) => void;
+export type PtyOutputListener = (
+  data: Uint8Array,
+  channel: "stdout" | "stderr",
+  sequence: number,
+) => void;
 export type PtyResizeListener = (dimensions: TerminalDimensions) => void;
 export type PtyExitListener = (exitCode: number) => void;
 export type PtyErrorListener = (error: Error) => void;

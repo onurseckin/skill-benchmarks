@@ -6,7 +6,7 @@ const DEFAULT_STORAGE_DIR = "/tmp/testbed-storage";
 
 export function readStorageFile(
   userSuppliedPath: string,
-  baseDirectory: string = DEFAULT_STORAGE_DIR
+  baseDirectory: string = DEFAULT_STORAGE_DIR,
 ): ApiResponse<string> {
   const targetPath = resolve(baseDirectory, userSuppliedPath);
   if (!existsSync(targetPath)) {
@@ -25,7 +25,7 @@ export function readStorageFile(
 
 export function inspectStorageFile(
   userSuppliedPath: string,
-  baseDirectory: string = DEFAULT_STORAGE_DIR
+  baseDirectory: string = DEFAULT_STORAGE_DIR,
 ): ApiResponse<FileMetadata> {
   const targetPath = resolve(baseDirectory, userSuppliedPath);
   if (!existsSync(targetPath)) {

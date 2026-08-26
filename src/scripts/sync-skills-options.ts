@@ -47,7 +47,9 @@ const specifications: readonly SyncOptionSpecification[] = Object.freeze([
 ]);
 
 const specificationByName: ReadonlyMap<string, SyncOptionSpecification> = new Map(
-  specifications.flatMap((specification) => specification.names.map((name) => [name, specification]))
+  specifications.flatMap((specification) =>
+    specification.names.map((name) => [name, specification]),
+  ),
 );
 
 export function parseSyncSkillsOptions(args: readonly string[]): SyncSkillsOptions {
@@ -60,27 +62,30 @@ export function parseSyncSkillsOptions(args: readonly string[]): SyncSkillsOptio
     if (specification === undefined) throw new SyncSkillsInputError("unknown_flag");
     const canonicalName = specification.names[0];
     const aliases = specification.names.slice(1);
-    if ((parsed.prefix === "long" && parsed.name !== canonicalName)
-      || (parsed.prefix === "short" && !aliases.includes(parsed.name))) {
+    if (
+      (parsed.prefix === "long" && parsed.name !== canonicalName) ||
+      (parsed.prefix === "short" && !aliases.includes(parsed.name))
+    ) {
       throw new SyncSkillsInputError("unknown_flag");
     }
-    if (values[specification.key] !== undefined) throw new SyncSkillsInputError("duplicate_argument");
+    if (values[specification.key] !== undefined)
+      throw new SyncSkillsInputError("duplicate_argument");
     if (specification.kind === "boolean") {
       if (parsed.attachedValue !== undefined) throw new SyncSkillsInputError("invalid_value");
       values[specification.key] = true;
       continue;
     }
     const candidate = parsed.attachedValue ?? args[index + 1];
-    if (candidate === undefined || candidate.trim().length === 0) throw new SyncSkillsInputError("missing_value");
+    if (candidate === undefined || candidate.trim().length === 0)
+      throw new SyncSkillsInputError("missing_value");
     if (parsed.attachedValue === undefined) {
       if (specification.kind !== "number" && candidate.startsWith("-")) {
         throw new SyncSkillsInputError("missing_value");
       }
       index += 1;
     }
-    values[specification.key] = specification.kind === "number"
-      ? parsePositiveInteger(candidate)
-      : candidate.trim();
+    values[specification.key] =
+      specification.kind === "number" ? parsePositiveInteger(candidate) : candidate.trim();
   }
   if (values.force === true && values.dryRun === true) {
     throw new SyncSkillsInputError("conflicting_arguments");
@@ -97,7 +102,11 @@ export function parseSyncSkillsOptions(args: readonly string[]): SyncSkillsOptio
   });
 }
 
-function parseToken(argument: string): { readonly name: string; readonly prefix: "long" | "short"; readonly attachedValue?: string } {
+function parseToken(argument: string): {
+  readonly name: string;
+  readonly prefix: "long" | "short";
+  readonly attachedValue?: string;
+} {
   const prefix = argument.startsWith("--") ? "long" : "short";
   const prefixLength = prefix === "long" ? 2 : 1;
   const body = argument.slice(prefixLength);

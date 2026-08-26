@@ -26,12 +26,13 @@ import { requireDistinctReplayOutput } from "./replay-path-collision.js";
 export function writeReplayExportAtomic(
   outputPath: string,
   content: string,
-  protectedPaths: readonly string[] = []
+  protectedPaths: readonly string[] = [],
 ): void {
   const resolvedPath = resolve(outputPath);
   const directoryPath = dirname(resolvedPath);
   const targetName = basename(resolvedPath);
-  if (targetName.length === 0 || targetName === "." || targetName === "..") throw new TypeError("Replay output path is invalid");
+  if (targetName.length === 0 || targetName === "." || targetName === "..")
+    throw new TypeError("Replay output path is invalid");
   requireDistinctReplayOutput(resolvedPath, protectedPaths);
   mkdirSync(directoryPath, { recursive: true });
   const directoryDescriptor = openRetainedDirectory(directoryPath);
@@ -44,7 +45,7 @@ export function writeReplayExportAtomic(
       directoryDescriptor,
       temporaryName,
       constants.O_CREAT | constants.O_EXCL | constants.O_RDWR | constants.O_NOFOLLOW,
-      0o600
+      0o600,
     );
     temporaryExists = true;
     fchmodSync(temporaryDescriptor, 0o600);
@@ -78,45 +79,41 @@ function verifyPublishedEntry(
   directoryDescriptor: number,
   entryName: string,
   expectedIdentity: Stats,
-  content: string
+  content: string,
 ): void {
   const descriptor = openDirectoryEntry(
     directoryDescriptor,
     entryName,
-    constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK
+    constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
   );
   try {
     const before = fstatSync(descriptor);
     requireMatchingExportFile(before, expectedIdentity, content);
-    if (readFileSync(descriptor, "utf8") !== content) throw new TypeError("Replay export publication changed");
+    if (readFileSync(descriptor, "utf8") !== content)
+      throw new TypeError("Replay export publication changed");
     requireMatchingExportFile(fstatSync(descriptor), before, content);
   } finally {
     closeSync(descriptor);
   }
 }
 
-function requireStableExportFile(
-  identity: Stats,
-  content: string
-): void {
+function requireStableExportFile(identity: Stats, content: string): void {
   if (
-    !identity.isFile()
-    || identity.nlink !== 1
-    || (identity.mode & 0o7777) !== 0o600
-    || identity.size !== Buffer.byteLength(content)
-  ) throw new TypeError("Replay export temporary file is unsafe");
+    !identity.isFile() ||
+    identity.nlink !== 1 ||
+    (identity.mode & 0o7777) !== 0o600 ||
+    identity.size !== Buffer.byteLength(content)
+  )
+    throw new TypeError("Replay export temporary file is unsafe");
 }
 
-function requireMatchingExportFile(
-  actual: Stats,
-  expected: Stats,
-  content: string
-): void {
+function requireMatchingExportFile(actual: Stats, expected: Stats, content: string): void {
   requireStableExportFile(actual, content);
   if (
-    actual.dev !== expected.dev
-    || actual.ino !== expected.ino
-    || actual.size !== expected.size
-    || actual.mtimeMs !== expected.mtimeMs
-  ) throw new TypeError("Replay export publication changed");
+    actual.dev !== expected.dev ||
+    actual.ino !== expected.ino ||
+    actual.size !== expected.size ||
+    actual.mtimeMs !== expected.mtimeMs
+  )
+    throw new TypeError("Replay export publication changed");
 }

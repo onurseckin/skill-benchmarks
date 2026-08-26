@@ -3,11 +3,7 @@ import { validateDatabasePathBeforeOpen } from "./database-path-authority.js";
 import { ReportingQueryStore } from "./query-store.js";
 import { ReportingRunStore } from "./run-store.js";
 import { initializeReportingSchema, validateReportingSchema } from "./schema.js";
-import type {
-  EligibleRunRecord,
-  RunRecord,
-  TelemetryEventRecord,
-} from "./types.js";
+import type { EligibleRunRecord, RunRecord, TelemetryEventRecord } from "./types.js";
 import type { RunQueryFilter } from "./report-cohorts.js";
 
 export { TerminalRunIdentityConflictError } from "./run-identity.js";
@@ -19,12 +15,11 @@ export class TelemetryDatabase {
 
   public constructor(
     dbPath: string = ":memory:",
-    options?: { readonly readonly?: boolean; readonly authorityRoot?: string }
+    options?: { readonly readonly?: boolean; readonly authorityRoot?: string },
   ) {
     validateDatabasePathBeforeOpen(dbPath, options?.authorityRoot);
-    const database = options?.readonly === true
-      ? new Database(dbPath, { readonly: true })
-      : new Database(dbPath);
+    const database =
+      options?.readonly === true ? new Database(dbPath, { readonly: true }) : new Database(dbPath);
     try {
       validateDatabasePathBeforeOpen(dbPath, options?.authorityRoot);
       this.database = database;

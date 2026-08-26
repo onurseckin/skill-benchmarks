@@ -18,7 +18,9 @@ export function getHelpText(command?: CliCommandName): string {
 }
 
 function renderGlobalHelp(): string {
-  const commands = commandSpecifications.map((entry) => `  ${entry.name.padEnd(12)} ${entry.description}`);
+  const commands = commandSpecifications.map(
+    (entry) => `  ${entry.name.padEnd(12)} ${entry.description}`,
+  );
   return [
     "skill-benchmarks - Deterministic LLM Agent Skill Benchmarking Harness",
     "",
@@ -37,8 +39,11 @@ function renderGlobalHelp(): string {
 }
 
 function renderCommandHelp(specification: CliCommandSpecification): string {
-  const options = specification.flags.map((entry) => `  ${formatFlagLabel(entry).padEnd(31)} ${entry.description}`);
-  if (specification.acceptsHelp) options.push("  --help                          Show this command's help.");
+  const options = specification.flags.map(
+    (entry) => `  ${formatFlagLabel(entry).padEnd(31)} ${entry.description}`,
+  );
+  if (specification.acceptsHelp)
+    options.push("  --help                          Show this command's help.");
   return [
     "Usage:",
     `  ${specification.usage}`,

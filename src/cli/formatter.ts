@@ -3,8 +3,9 @@ const resetSequence = "\u001B[0m";
 const ansiPattern = /\u001B\[[0-9;]*[a-zA-Z]/g;
 
 function colorEnabled(): boolean {
-  return process.stdout.isTTY === true
-    && !Object.prototype.hasOwnProperty.call(process.env, "NO_COLOR");
+  return (
+    process.stdout.isTTY === true && !Object.prototype.hasOwnProperty.call(process.env, "NO_COLOR")
+  );
 }
 
 function applyAnsi(code: number, resetCode: number, text: string): string {
@@ -61,7 +62,9 @@ export function gray(text: string): string {
 
 export function reset(text?: string): string {
   if (!colorEnabled()) return text ?? "";
-  return text === undefined || text === "" ? resetSequence : `${resetSequence}${text}${resetSequence}`;
+  return text === undefined || text === ""
+    ? resetSequence
+    : `${resetSequence}${text}${resetSequence}`;
 }
 
 export function stripAnsi(text: string): string {
@@ -103,6 +106,9 @@ function defaultBadgeText(status: StatusBadgeStatus): string {
 export function formatSectionHeader(title: string): string {
   const prefix = "─── ";
   const suffix = " ";
-  const remaining = Math.max(3, 60 - stringWidth(title) - stringWidth(prefix) - stringWidth(suffix));
+  const remaining = Math.max(
+    3,
+    60 - stringWidth(title) - stringWidth(prefix) - stringWidth(suffix),
+  );
   return `\n${bold(cyan(prefix + title + suffix))}${gray("─".repeat(remaining))}`;
 }

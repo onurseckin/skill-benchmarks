@@ -3,36 +3,115 @@ import type { Database } from "bun:sqlite";
 export const reportingSchemaVersion = 3;
 
 const legacyRunColumns = new Set([
-  "run_id", "sweep_id", "plan_fingerprint", "cell_id", "matrix_occurrence_index",
-  "scenario_id", "category", "skill_id", "skill_version", "model_id", "provider_id",
-  "execution_mode", "simulated", "thinking_level", "thinking_budget_tokens", "reasoning_tokens",
-  "status", "termination_reason", "composite_score", "passed_benchmark", "wall_clock_ms",
-  "total_tokens", "cache_hit_ratio", "total_cost_usd", "total_turns", "error_count",
-  "attempt_count", "started_at", "completed_at", "manifest_json", "metrics_json",
-  "evaluation_json", "commit_sha",
+  "run_id",
+  "sweep_id",
+  "plan_fingerprint",
+  "cell_id",
+  "matrix_occurrence_index",
+  "scenario_id",
+  "category",
+  "skill_id",
+  "skill_version",
+  "model_id",
+  "provider_id",
+  "execution_mode",
+  "simulated",
+  "thinking_level",
+  "thinking_budget_tokens",
+  "reasoning_tokens",
+  "status",
+  "termination_reason",
+  "composite_score",
+  "passed_benchmark",
+  "wall_clock_ms",
+  "total_tokens",
+  "cache_hit_ratio",
+  "total_cost_usd",
+  "total_turns",
+  "error_count",
+  "attempt_count",
+  "started_at",
+  "completed_at",
+  "manifest_json",
+  "metrics_json",
+  "evaluation_json",
+  "commit_sha",
 ]);
 
 const authorityRunColumns = new Set([
-  "run_id", "sweep_id", "plan_fingerprint", "cell_id", "matrix_occurrence_index",
-  "scenario_id", "category", "skill_id", "skill_version", "model_id", "provider_id",
-  "execution_mode", "simulated", "dry_run", "thinking_level", "thinking_budget_tokens",
-  "reasoning_tokens", "status", "termination_reason", "benchmark_cohort", "eligibility_status",
-  "eligibility_reasons_json", "evidence_status", "evaluation_status", "required_checks_declared",
-  "required_checks_executed", "required_checks_passed", "artifact_integrity_status",
-  "evaluator_id", "evaluator_version", "evidence_digest", "evidence_identity_json",
-  "composite_score", "passed_benchmark", "operational_cost_usd", "cost_evidence_status",
-  "actual_cost_usd", "cost_pricing_identity", "cost_usage_digest", "wall_clock_ms",
-  "total_tokens", "cache_hit_ratio", "total_turns", "error_count", "attempt_count",
-  "started_at", "completed_at", "manifest_json", "metrics_json", "evaluation_json", "commit_sha",
+  "run_id",
+  "sweep_id",
+  "plan_fingerprint",
+  "cell_id",
+  "matrix_occurrence_index",
+  "scenario_id",
+  "category",
+  "skill_id",
+  "skill_version",
+  "model_id",
+  "provider_id",
+  "execution_mode",
+  "simulated",
+  "dry_run",
+  "thinking_level",
+  "thinking_budget_tokens",
+  "reasoning_tokens",
+  "status",
+  "termination_reason",
+  "benchmark_cohort",
+  "eligibility_status",
+  "eligibility_reasons_json",
+  "evidence_status",
+  "evaluation_status",
+  "required_checks_declared",
+  "required_checks_executed",
+  "required_checks_passed",
+  "artifact_integrity_status",
+  "evaluator_id",
+  "evaluator_version",
+  "evidence_digest",
+  "evidence_identity_json",
+  "composite_score",
+  "passed_benchmark",
+  "operational_cost_usd",
+  "cost_evidence_status",
+  "actual_cost_usd",
+  "cost_pricing_identity",
+  "cost_usage_digest",
+  "wall_clock_ms",
+  "total_tokens",
+  "cache_hit_ratio",
+  "total_turns",
+  "error_count",
+  "attempt_count",
+  "started_at",
+  "completed_at",
+  "manifest_json",
+  "metrics_json",
+  "evaluation_json",
+  "commit_sha",
 ]);
 
 const runClaimColumns = new Set(["run_id", "sweep_id", "cell_id", "created_at"]);
 const telemetryColumns = new Set([
-  "id", "run_id", "scenario_id", "skill_id", "model_id", "timestamp_us",
-  "event_type", "sequence_number", "payload_json",
+  "id",
+  "run_id",
+  "scenario_id",
+  "skill_id",
+  "model_id",
+  "timestamp_us",
+  "event_type",
+  "sequence_number",
+  "payload_json",
 ]);
 const retiredEloColumns = new Set([
-  "skill_id", "rating", "matches_played", "wins", "losses", "ties", "last_updated",
+  "skill_id",
+  "rating",
+  "matches_played",
+  "wins",
+  "losses",
+  "ties",
+  "last_updated",
 ]);
 
 export function initializeReportingSchema(database: Database): void {
@@ -56,7 +135,9 @@ export function initializeReportingSchema(database: Database): void {
     if (runColumns.length === 0) createAuthoritySchema(database);
     else migrateLegacyRuns(database);
     createSupportingSchema(database);
-    database.exec("DROP INDEX IF EXISTS idx_elo_rating; DROP TABLE IF EXISTS elo_ratings; DELETE FROM run_claims;");
+    database.exec(
+      "DROP INDEX IF EXISTS idx_elo_rating; DROP TABLE IF EXISTS elo_ratings; DELETE FROM run_claims;",
+    );
     database.exec(`PRAGMA user_version = ${reportingSchemaVersion};`);
   })();
   validateReportingSchema(database);
@@ -64,15 +145,19 @@ export function initializeReportingSchema(database: Database): void {
 }
 
 export function validateReportingSchema(database: Database): void {
-  if (readUserVersion(database) !== reportingSchemaVersion) throw new TypeError("Unsupported benchmark database schema version");
+  if (readUserVersion(database) !== reportingSchemaVersion)
+    throw new TypeError("Unsupported benchmark database schema version");
   assertExactColumns(readColumns(database, "runs"), authorityRunColumns);
   assertExactColumns(readColumns(database, "run_claims"), runClaimColumns);
   assertExactColumns(readColumns(database, "telemetry_events"), telemetryColumns);
-  if (readColumns(database, "elo_ratings").length !== 0) throw new TypeError("Unsupported ranked history table");
+  if (readColumns(database, "elo_ratings").length !== 0)
+    throw new TypeError("Unsupported ranked history table");
 }
 
 function configureDatabase(database: Database): void {
-  database.exec("PRAGMA journal_mode = DELETE; PRAGMA synchronous = FULL; PRAGMA foreign_keys = ON; PRAGMA temp_store = MEMORY;");
+  database.exec(
+    "PRAGMA journal_mode = DELETE; PRAGMA synchronous = FULL; PRAGMA foreign_keys = ON; PRAGMA temp_store = MEMORY;",
+  );
 }
 
 function createAuthoritySchema(database: Database): void {
@@ -253,14 +338,20 @@ function dropRunIndexes(database: Database): void {
 }
 
 function readUserVersion(database: Database): number {
-  const row = database.query("PRAGMA user_version").get() as { readonly user_version: number } | null;
+  const row = database.query("PRAGMA user_version").get() as {
+    readonly user_version: number;
+  } | null;
   return row?.user_version ?? 0;
 }
 
 function readColumns(database: Database, table: string): readonly string[] {
-  const exists = database.query("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get(table);
+  const exists = database
+    .query("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?")
+    .get(table);
   if (exists === null) return [];
-  return (database.query(`PRAGMA table_info(${table})`).all() as { readonly name: string }[]).map((row) => row.name);
+  return (database.query(`PRAGMA table_info(${table})`).all() as { readonly name: string }[]).map(
+    (row) => row.name,
+  );
 }
 
 function assertExactColumns(actual: readonly string[], expected: ReadonlySet<string>): void {

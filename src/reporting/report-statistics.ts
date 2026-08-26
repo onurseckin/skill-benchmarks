@@ -14,12 +14,14 @@ export function calculateObservedStatistics(values: readonly number[]): Observed
   const sorted = [...values].sort((left, right) => left - right);
   const mean = sorted.reduce((sum, value) => sum + value, 0) / sorted.length;
   const middle = Math.floor(sorted.length / 2);
-  const median = sorted.length % 2 === 0
-    ? ((sorted[middle - 1] as number) + (sorted[middle] as number)) / 2
-    : sorted[middle] as number;
-  const variance = sorted.length === 1
-    ? 0
-    : sorted.reduce((sum, value) => sum + (value - mean) ** 2, 0) / (sorted.length - 1);
+  const median =
+    sorted.length % 2 === 0
+      ? ((sorted[middle - 1] as number) + (sorted[middle] as number)) / 2
+      : (sorted[middle] as number);
+  const variance =
+    sorted.length === 1
+      ? 0
+      : sorted.reduce((sum, value) => sum + (value - mean) ** 2, 0) / (sorted.length - 1);
   return Object.freeze({
     mean,
     median,
@@ -30,23 +32,38 @@ export function calculateObservedStatistics(values: readonly number[]): Observed
   });
 }
 
-export function calculateWilsonInterval(successes: number, total: number): readonly [number, number] {
-  if (!Number.isInteger(successes) || !Number.isInteger(total) || total < 1 || successes < 0 || successes > total) {
+export function calculateWilsonInterval(
+  successes: number,
+  total: number,
+): readonly [number, number] {
+  if (
+    !Number.isInteger(successes) ||
+    !Number.isInteger(total) ||
+    total < 1 ||
+    successes < 0 ||
+    successes > total
+  ) {
     throw new TypeError("Wilson interval requires valid observation counts");
   }
   const proportion = successes / total;
   const z = 1.96;
   const denominator = 1 + (z * z) / total;
   const center = (proportion + (z * z) / (2 * total)) / denominator;
-  const margin = z * Math.sqrt((proportion * (1 - proportion) + (z * z) / (4 * total)) / total) / denominator;
-  return Object.freeze([
-    Math.max(0, center - margin) * 100,
-    Math.min(1, center + margin) * 100,
-  ]);
+  const margin =
+    (z * Math.sqrt((proportion * (1 - proportion) + (z * z) / (4 * total)) / total)) / denominator;
+  return Object.freeze([Math.max(0, center - margin) * 100, Math.min(1, center + margin) * 100]);
 }
 
-export function calculateNearestRankPercentile(values: readonly number[], percentile: number): number {
-  if (values.length === 0 || values.some((value) => !Number.isFinite(value)) || percentile <= 0 || percentile > 1) {
+export function calculateNearestRankPercentile(
+  values: readonly number[],
+  percentile: number,
+): number {
+  if (
+    values.length === 0 ||
+    values.some((value) => !Number.isFinite(value)) ||
+    percentile <= 0 ||
+    percentile > 1
+  ) {
     throw new TypeError("Nearest-rank percentile requires finite observations");
   }
   const sorted = [...values].sort((left, right) => left - right);

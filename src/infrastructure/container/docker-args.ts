@@ -1,7 +1,4 @@
-import type {
-  DockerCreateOptions,
-  DockerExecOptions,
-} from "./types.js";
+import type { DockerCreateOptions, DockerExecOptions } from "./types.js";
 
 export interface RawDockerInspectState {
   Status?: string;
@@ -135,7 +132,7 @@ export function buildCreateContainerArgs(options: DockerCreateOptions): string[]
 export function buildExecArgs(
   containerId: string,
   command: ReadonlyArray<string>,
-  options?: DockerExecOptions
+  options?: DockerExecOptions,
 ): string[] {
   const args: string[] = ["exec"];
 

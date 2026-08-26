@@ -14,7 +14,9 @@ export class ExecutionModeConfigurationError extends TypeError {
 
 const useMockEnvironmentVariable = "SKILL_BENCHMARKS_USE_MOCK";
 
-function resolveEnvironmentExecutionMode(environment: NodeJS.ProcessEnv): ExecutionMode | undefined {
+function resolveEnvironmentExecutionMode(
+  environment: NodeJS.ProcessEnv,
+): ExecutionMode | undefined {
   const configuredValue = environment[useMockEnvironmentVariable];
   if (configuredValue === undefined || configuredValue === "") {
     return undefined;
@@ -30,7 +32,7 @@ function resolveEnvironmentExecutionMode(environment: NodeJS.ProcessEnv): Execut
 
 export function resolveExecutionMode(
   input: ExecutionModeInput,
-  environment: NodeJS.ProcessEnv = process.env
+  environment: NodeJS.ProcessEnv = process.env,
 ): ExecutionMode {
   if (input.mock === true && input.live === true) {
     throw new ExecutionModeConfigurationError();

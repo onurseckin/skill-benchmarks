@@ -1,10 +1,7 @@
-import type {
-  ResourceMetricsSummary,
-  ResourceProfileSample,
-} from "./types.js";
+import type { ResourceMetricsSummary, ResourceProfileSample } from "./types.js";
 
 export function computeMetricsSummary(
-  samples: ReadonlyArray<ResourceProfileSample>
+  samples: ReadonlyArray<ResourceProfileSample>,
 ): ResourceMetricsSummary {
   if (samples.length === 0) {
     return {
@@ -111,9 +108,10 @@ export function computeMetricsSummary(
   }
 
   const finalRssBytes = lastSample.memoryRssBytes;
-  const limitBytes = lastSample.memoryLimitBytes > 0
-    ? lastSample.memoryLimitBytes
-    : Math.max(...samples.map((s) => s.memoryLimitBytes), 0);
+  const limitBytes =
+    lastSample.memoryLimitBytes > 0
+      ? lastSample.memoryLimitBytes
+      : Math.max(...samples.map((s) => s.memoryLimitBytes), 0);
 
   const peakRssMb = Math.round((peakRssBytes / (1024 * 1024)) * 100) / 100;
 

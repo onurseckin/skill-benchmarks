@@ -1,8 +1,4 @@
-import type {
-  ErrorCategory,
-  InfrastructureError,
-  InfrastructureErrorCode,
-} from "./types.js";
+import type { ErrorCategory, InfrastructureError, InfrastructureErrorCode } from "./types.js";
 import { getMonotonicMicroseconds } from "./event-scribe.js";
 
 export abstract class BenchmarkError extends Error {
@@ -20,7 +16,7 @@ export abstract class BenchmarkError extends Error {
       readonly exitCode?: number;
       readonly details?: Readonly<Record<string, unknown>>;
       readonly cause?: unknown;
-    }
+    },
   ) {
     super(message, { cause: options?.cause });
     this.name = this.constructor.name;
@@ -60,7 +56,7 @@ export class InfrastructureFaultError extends BenchmarkError {
       readonly exitCode?: number;
       readonly details?: Readonly<Record<string, unknown>>;
       readonly cause?: unknown;
-    }
+    },
   ) {
     super(message, options);
     this.code = code;
@@ -79,7 +75,7 @@ export class ExecutionTimeoutError extends BenchmarkError {
       readonly exitCode?: number;
       readonly details?: Readonly<Record<string, unknown>>;
       readonly cause?: unknown;
-    }
+    },
   ) {
     super(message, options);
     this.code = code;
@@ -98,7 +94,7 @@ export class AgentToolError extends BenchmarkError {
       readonly exitCode?: number;
       readonly details?: Readonly<Record<string, unknown>>;
       readonly cause?: unknown;
-    }
+    },
   ) {
     super(message, options);
     this.code = code;
@@ -117,7 +113,7 @@ export class StateIntegrityError extends BenchmarkError {
       readonly exitCode?: number;
       readonly details?: Readonly<Record<string, unknown>>;
       readonly cause?: unknown;
-    }
+    },
   ) {
     super(message, options);
     this.code = code;

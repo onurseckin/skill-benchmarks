@@ -1,11 +1,4 @@
-import {
-  closeSync,
-  constants,
-  fchmodSync,
-  fstatSync,
-  mkdirSync,
-  writeFileSync,
-} from "node:fs";
+import { closeSync, constants, fchmodSync, fstatSync, mkdirSync, writeFileSync } from "node:fs";
 import type { RunArtifactLayout } from "../workspace/types.js";
 import {
   inspectDirectoryDescriptor,
@@ -36,7 +29,7 @@ export class EventArtifactWriter {
 
   public constructor(
     private readonly outputDirectory: string,
-    private readonly layout?: RunArtifactLayout
+    private readonly layout?: RunArtifactLayout,
   ) {}
 
   public initialize(): void {
@@ -89,7 +82,8 @@ export class EventArtifactWriter {
     if (this.layout !== undefined) {
       requireRunArtifactAuthority(this.layout);
       const expected = this.layout.authority?.runDirectory;
-      if (expected === undefined) throw new TypeError("Benchmark artifact directory authority is missing");
+      if (expected === undefined)
+        throw new TypeError("Benchmark artifact directory authority is missing");
       requireIdentity(inspectDirectoryDescriptor(directoryDescriptor), expected);
       return;
     }
@@ -99,7 +93,8 @@ export class EventArtifactWriter {
 }
 
 function openArtifactFile(directoryDescriptor: number, name: string): OpenArtifactFile {
-  const appendFlags = constants.O_WRONLY | constants.O_APPEND | constants.O_NOFOLLOW | constants.O_NONBLOCK;
+  const appendFlags =
+    constants.O_WRONLY | constants.O_APPEND | constants.O_NOFOLLOW | constants.O_NONBLOCK;
   let descriptor = tryOpenDirectoryEntry(directoryDescriptor, name, appendFlags);
   const created = descriptor === undefined;
   if (created) {
@@ -107,7 +102,7 @@ function openArtifactFile(directoryDescriptor: number, name: string): OpenArtifa
       directoryDescriptor,
       name,
       appendFlags | constants.O_CREAT | constants.O_EXCL,
-      0o600
+      0o600,
     );
     fchmodSync(createdDescriptor, 0o600);
     descriptor = createdDescriptor;
@@ -127,7 +122,7 @@ function requireArtifactFile(directoryDescriptor: number, expected: OpenArtifact
   const currentDescriptor = openDirectoryEntry(
     directoryDescriptor,
     expected.name,
-    constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK
+    constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
   );
   try {
     requireIdentity(inspectArtifactFile(currentDescriptor), expected);
@@ -140,11 +135,11 @@ function inspectArtifactFile(descriptor: number): ArtifactFileIdentity {
   const stats = fstatSync(descriptor);
   const processUserId = process.getuid?.();
   if (
-    !stats.isFile()
-    || stats.nlink !== 1
-    || processUserId === undefined
-    || stats.uid !== processUserId
-    || (stats.mode & 0o7777) !== 0o600
+    !stats.isFile() ||
+    stats.nlink !== 1 ||
+    processUserId === undefined ||
+    stats.uid !== processUserId ||
+    (stats.mode & 0o7777) !== 0o600
   ) {
     throw new TypeError("Benchmark event artifact is unsafe");
   }

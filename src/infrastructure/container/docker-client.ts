@@ -46,7 +46,7 @@ export class DockerClient implements IDockerClient {
       readonly timeoutMs?: number;
       readonly onStdoutChunk?: (chunk: Uint8Array) => void;
       readonly onStderrChunk?: (chunk: Uint8Array) => void;
-    }
+    },
   ): Promise<DockerExecProcessResult> {
     const fullCommand = [this.dockerBinary, ...args];
     const startTime = Date.now();
@@ -104,8 +104,7 @@ export class DockerClient implements IDockerClient {
           timedOut = true;
           try {
             proc.kill(9);
-          } catch {
-          }
+          } catch {}
           resolve(124);
         }, options.timeoutMs);
       }
@@ -156,7 +155,7 @@ export class DockerClient implements IDockerClient {
   async exec(
     containerId: string,
     command: ReadonlyArray<string>,
-    options?: DockerExecOptions
+    options?: DockerExecOptions,
   ): Promise<DockerExecProcessResult> {
     const args = buildExecArgs(containerId, command, options);
     return this.runSubprocess(args, {
@@ -178,7 +177,11 @@ export class DockerClient implements IDockerClient {
     const parsed = JSON.parse(rawJson) as ReadonlyArray<RawDockerInspectItem>;
     const item = parsed[0];
     if (!item) {
-      throw new DockerError([this.dockerBinary, ...args], result.exitCode, "Inspect returned empty array");
+      throw new DockerError(
+        [this.dockerBinary, ...args],
+        result.exitCode,
+        "Inspect returned empty array",
+      );
     }
 
     const state: ContainerInspectState = {
@@ -213,7 +216,10 @@ export class DockerClient implements IDockerClient {
     const result = await this.runSubprocess(args);
     if (result.exitCode !== 0) {
       const stderrStr = new TextDecoder().decode(result.stderr);
-      if (!stderrStr.toLowerCase().includes("is not running") && !stderrStr.toLowerCase().includes("no such container")) {
+      if (
+        !stderrStr.toLowerCase().includes("is not running") &&
+        !stderrStr.toLowerCase().includes("no such container")
+      ) {
         throw new DockerError([this.dockerBinary, ...args], result.exitCode, stderrStr);
       }
     }
@@ -221,7 +227,7 @@ export class DockerClient implements IDockerClient {
 
   async removeContainer(
     containerId: string,
-    options?: { readonly force?: boolean; readonly removeVolumes?: boolean }
+    options?: { readonly force?: boolean; readonly removeVolumes?: boolean },
   ): Promise<void> {
     const args: string[] = ["rm"];
     if (options?.force === true) {
@@ -243,7 +249,7 @@ export class DockerClient implements IDockerClient {
 
   async createVolume(
     name: string,
-    options?: { readonly labels?: Record<string, string> }
+    options?: { readonly labels?: Record<string, string> },
   ): Promise<void> {
     const args: string[] = ["volume", "create", name];
     if (options?.labels) {
@@ -259,10 +265,7 @@ export class DockerClient implements IDockerClient {
     }
   }
 
-  async removeVolume(
-    name: string,
-    options?: { readonly force?: boolean }
-  ): Promise<void> {
+  async removeVolume(name: string, options?: { readonly force?: boolean }): Promise<void> {
     const args: string[] = ["volume", "rm"];
     if (options?.force === true) {
       args.push("-f");
@@ -300,8 +303,7 @@ export class DockerClient implements IDockerClient {
       try {
         const info = await this.inspectContainer(id);
         infos.push(info);
-      } catch {
-      }
+      } catch {}
     }
 
     return infos;

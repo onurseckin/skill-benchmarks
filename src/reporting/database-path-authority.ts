@@ -5,9 +5,10 @@ export function validateDatabasePathBeforeOpen(databasePath: string, authorityRo
   if (databasePath === ":memory:") return;
   const resolvedDatabasePath = resolve(databasePath);
   const databaseDirectory = dirname(resolvedDatabasePath);
-  const structuredRoot = authorityRoot === undefined && basename(databaseDirectory) === "db"
-    ? dirname(databaseDirectory)
-    : resolve(authorityRoot ?? databaseDirectory);
+  const structuredRoot =
+    authorityRoot === undefined && basename(databaseDirectory) === "db"
+      ? dirname(databaseDirectory)
+      : resolve(authorityRoot ?? databaseDirectory);
   validateDatabaseDirectory(structuredRoot, databaseDirectory);
   let targetStats;
   try {
@@ -21,17 +22,20 @@ export function validateDatabasePathBeforeOpen(databasePath: string, authorityRo
   }
   let descriptor: number;
   try {
-    descriptor = openSync(resolvedDatabasePath, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+    descriptor = openSync(
+      resolvedDatabasePath,
+      constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+    );
   } catch {
     throw unsafeDatabasePath();
   }
   try {
     const descriptorStats = fstatSync(descriptor);
     if (
-      !descriptorStats.isFile()
-      || descriptorStats.nlink !== 1
-      || descriptorStats.dev !== targetStats.dev
-      || descriptorStats.ino !== targetStats.ino
+      !descriptorStats.isFile() ||
+      descriptorStats.nlink !== 1 ||
+      descriptorStats.dev !== targetStats.dev ||
+      descriptorStats.ino !== targetStats.ino
     ) {
       throw unsafeDatabasePath();
     }

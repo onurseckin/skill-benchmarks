@@ -25,7 +25,7 @@ export async function computeFileSha256(filePath: string): Promise<string> {
 function shouldIgnorePath(
   relPath: string,
   fileName: string,
-  ignorePatterns: ReadonlyArray<string | RegExp>
+  ignorePatterns: ReadonlyArray<string | RegExp>,
 ): boolean {
   const normalizedRel = relPath.replace(/\\/g, "/");
   const pathSegments = normalizedRel.split("/");
@@ -52,7 +52,7 @@ async function collectFiles(
   dirPath: string,
   baseDir: string,
   ignorePatterns: ReadonlyArray<string | RegExp>,
-  includeHidden: boolean
+  includeHidden: boolean,
 ): Promise<ReadonlyArray<string>> {
   const entries = await readdir(dirPath, { withFileTypes: true });
   const collected: string[] = [];
@@ -66,12 +66,7 @@ async function collectFiles(
     }
 
     if (entry.isDirectory()) {
-      const subFiles = await collectFiles(
-        fullPath,
-        baseDir,
-        ignorePatterns,
-        includeHidden
-      );
+      const subFiles = await collectFiles(fullPath, baseDir, ignorePatterns, includeHidden);
       collected.push(...subFiles);
     } else if (entry.isFile()) {
       collected.push(fullPath);
@@ -81,8 +76,7 @@ async function collectFiles(
         if (linkStat.isFile()) {
           collected.push(fullPath);
         }
-      } catch {
-      }
+      } catch {}
     }
   }
 
@@ -91,7 +85,7 @@ async function collectFiles(
 
 export async function generateWorkspaceFingerprint(
   workspaceDir: string,
-  options: FingerprintOptions = {}
+  options: FingerprintOptions = {},
 ): Promise<PreRunFingerprintManifest> {
   const rootDir = resolve(workspaceDir);
   const ignorePatterns = options.ignorePatterns ?? DEFAULT_FINGERPRINT_IGNORES;
@@ -99,12 +93,7 @@ export async function generateWorkspaceFingerprint(
   const runId = options.runId ?? `run-${Date.now()}`;
   const scenarioId = options.scenarioId ?? "unknown-scenario";
 
-  const allFilePaths = await collectFiles(
-    rootDir,
-    rootDir,
-    ignorePatterns,
-    includeHidden
-  );
+  const allFilePaths = await collectFiles(rootDir, rootDir, ignorePatterns, includeHidden);
 
   const fileEntries: Array<[string, string]> = [];
 
@@ -139,7 +128,7 @@ export interface FingerprintDiff {
 
 export function diffFingerprints(
   before: PreRunFingerprintManifest,
-  after: PreRunFingerprintManifest
+  after: PreRunFingerprintManifest,
 ): FingerprintDiff {
   const beforeKeys = new Set(Object.keys(before.files));
   const afterKeys = new Set(Object.keys(after.files));

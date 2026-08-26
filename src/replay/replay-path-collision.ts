@@ -8,16 +8,21 @@ interface FileIdentity {
 
 export function requireDistinctReplayOutput(
   outputPath: string | undefined,
-  protectedPaths: readonly string[]
+  protectedPaths: readonly string[],
 ): void {
   if (outputPath === undefined) return;
   const resolvedOutput = resolve(outputPath);
   const outputIdentities = inspectPathIdentities(resolvedOutput);
   for (const protectedPath of protectedPaths) {
     const resolvedProtected = resolve(protectedPath);
-    if (resolvedOutput === resolvedProtected) throw new TypeError("Replay input and output must differ");
+    if (resolvedOutput === resolvedProtected)
+      throw new TypeError("Replay input and output must differ");
     const protectedIdentities = inspectPathIdentities(resolvedProtected);
-    if (outputIdentities.some((output) => protectedIdentities.some((source) => sameIdentity(output, source)))) {
+    if (
+      outputIdentities.some((output) =>
+        protectedIdentities.some((source) => sameIdentity(output, source)),
+      )
+    ) {
       throw new TypeError("Replay input and output must differ");
     }
   }
@@ -28,7 +33,8 @@ function inspectPathIdentities(path: string): readonly FileIdentity[] {
   const direct = inspectIdentity(path, false);
   if (direct !== undefined) identities.push(direct);
   const followed = inspectIdentity(path, true);
-  if (followed !== undefined && !identities.some((value) => sameIdentity(value, followed))) identities.push(followed);
+  if (followed !== undefined && !identities.some((value) => sameIdentity(value, followed)))
+    identities.push(followed);
   return identities;
 }
 

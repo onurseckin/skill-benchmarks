@@ -16,7 +16,11 @@ export interface SweepLeaseEntryIdentity {
 export interface SweepLeaseNamespace {
   readonly path: string;
   sync(): Promise<void>;
-  removeEntry(name: string, expected: SweepLeaseEntryIdentity, expectedLinkCount: number): Promise<void>;
+  removeEntry(
+    name: string,
+    expected: SweepLeaseEntryIdentity,
+    expectedLinkCount: number,
+  ): Promise<void>;
   close(): Promise<void>;
 }
 
@@ -28,14 +32,17 @@ interface DirectoryIdentity {
 export async function openSweepLeaseNamespace(
   outputRoot: string,
   sweepId: string,
-  conflict: () => Error
+  conflict: () => Error,
 ): Promise<SweepLeaseNamespace> {
   const canonicalRoot = await canonicalizeOwnershipRoot(outputRoot, conflict);
   const namespacePath = join(canonicalRoot, "sweeps", sweepId);
   await assertNoSymlinkComponents(namespacePath, conflict);
   await mkdir(namespacePath, { recursive: true, mode: 0o700 });
   await assertNoSymlinkComponents(namespacePath, conflict);
-  const handle = await open(namespacePath, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW);
+  const handle = await open(
+    namespacePath,
+    constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW,
+  );
   try {
     const identity = await validateHandle(handle, conflict);
     const namespace = createNamespace(namespacePath, handle, identity, conflict);
@@ -51,7 +58,7 @@ function createNamespace(
   path: string,
   handle: FileHandle,
   identity: DirectoryIdentity,
-  conflict: () => Error
+  conflict: () => Error,
 ): SweepLeaseNamespace {
   let closed = false;
   return {
@@ -79,18 +86,18 @@ function createNamespace(
         descriptor = openDirectoryEntry(
           handle.fd,
           quarantineName,
-          constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK
+          constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
         );
         quarantinePresent = true;
         const value = fstatSync(descriptor);
         const processUserId = process.getuid?.();
         if (
-          !value.isFile()
-          || value.dev !== expected.device
-          || value.ino !== expected.inode
-          || value.nlink !== expectedLinkCount
-          || (value.mode & 0o777) !== 0o600
-          || (processUserId !== undefined && value.uid !== processUserId)
+          !value.isFile() ||
+          value.dev !== expected.device ||
+          value.ino !== expected.inode ||
+          value.nlink !== expectedLinkCount ||
+          (value.mode & 0o777) !== 0o600 ||
+          (processUserId !== undefined && value.uid !== processUserId)
         ) {
           throw conflict();
         }
@@ -121,18 +128,25 @@ function createNamespace(
   };
 }
 
-async function validateHandle(handle: FileHandle, conflict: () => Error): Promise<DirectoryIdentity> {
+async function validateHandle(
+  handle: FileHandle,
+  conflict: () => Error,
+): Promise<DirectoryIdentity> {
   const value = await handle.stat();
   const processUserId = process.getuid?.();
-  if (!value.isDirectory() || (value.mode & 0o777) !== 0o700
-    || (processUserId !== undefined && value.uid !== processUserId)) throw conflict();
+  if (
+    !value.isDirectory() ||
+    (value.mode & 0o777) !== 0o700 ||
+    (processUserId !== undefined && value.uid !== processUserId)
+  )
+    throw conflict();
   return { device: value.dev, inode: value.ino };
 }
 
 async function validateHandleIdentity(
   handle: FileHandle,
   expected: DirectoryIdentity,
-  conflict: () => Error
+  conflict: () => Error,
 ): Promise<void> {
   const current = await validateHandle(handle, conflict);
   if (!sameIdentity(current, expected)) throw conflict();
@@ -141,16 +155,20 @@ async function validateHandleIdentity(
 async function validatePathIdentity(
   path: string,
   expected: DirectoryIdentity,
-  conflict: () => Error
+  conflict: () => Error,
 ): Promise<void> {
   const value = await lstat(path);
-  if (!value.isDirectory() || !sameIdentity({ device: value.dev, inode: value.ino }, expected)) throw conflict();
+  if (!value.isDirectory() || !sameIdentity({ device: value.dev, inode: value.ino }, expected))
+    throw conflict();
 }
 
-async function canonicalizeOwnershipRoot(outputRoot: string, conflict: () => Error): Promise<string> {
+async function canonicalizeOwnershipRoot(
+  outputRoot: string,
+  conflict: () => Error,
+): Promise<string> {
   let existingAncestor = resolve(outputRoot);
   const missingSegments: string[] = [];
-  while (!await pathExists(existingAncestor)) {
+  while (!(await pathExists(existingAncestor))) {
     const parent = dirname(existingAncestor);
     if (parent === existingAncestor) throw conflict();
     missingSegments.unshift(basename(existingAncestor));
@@ -162,7 +180,10 @@ async function canonicalizeOwnershipRoot(outputRoot: string, conflict: () => Err
 async function assertNoSymlinkComponents(path: string, conflict: () => Error): Promise<void> {
   const resolvedPath = resolve(path);
   const pathRoot = parse(resolvedPath).root;
-  const segments = resolvedPath.slice(pathRoot.length).split(/[\\/]+/).filter(Boolean);
+  const segments = resolvedPath
+    .slice(pathRoot.length)
+    .split(/[\\/]+/)
+    .filter(Boolean);
   let currentPath = pathRoot;
   for (const segment of segments) {
     currentPath = join(currentPath, segment);

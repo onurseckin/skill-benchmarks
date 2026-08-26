@@ -102,7 +102,7 @@ export interface CliOutput {
 
 export type CliCommandHandler = (
   args: CliParsedArgs,
-  output: CliOutput
+  output: CliOutput,
 ) => Promise<CliCommandResult>;
 
 export type { CliCommandName } from "./grammar/types.js";

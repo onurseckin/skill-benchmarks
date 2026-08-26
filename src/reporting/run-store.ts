@@ -24,7 +24,8 @@ export class ReportingRunStore {
     const eligibleRecord = isEligibleRunRecord(sanitizedRecord) ? sanitizedRecord : undefined;
     const evidence = authority.evidence;
     const cost = authority.operationalCost;
-    const skillVersion = sanitizedRecord.skillVersion ?? sanitizedRecord.manifest?.skillVersion ?? null;
+    const skillVersion =
+      sanitizedRecord.skillVersion ?? sanitizedRecord.manifest?.skillVersion ?? null;
     const commitSha = sanitizedRecord.manifest?.environment?.hostCommitSha ?? null;
     const manifestJson = sanitizedRecord.manifest ? JSON.stringify(sanitizedRecord.manifest) : null;
     const metricsJson = sanitizedRecord.metrics ? JSON.stringify(sanitizedRecord.metrics) : null;
@@ -63,8 +64,12 @@ export class ReportingRunStore {
         sanitizedRecord.executionMode,
         sanitizedRecord.simulated ? 1 : 0,
         sanitizedRecord.dryRun ? 1 : 0,
-        sanitizedRecord.thinkingLevel ?? sanitizedRecord.manifest?.modelParameters?.thinkingLevel ?? null,
-        sanitizedRecord.thinkingBudgetTokens ?? sanitizedRecord.manifest?.modelParameters?.thinkingBudgetTokens ?? null,
+        sanitizedRecord.thinkingLevel ??
+          sanitizedRecord.manifest?.modelParameters?.thinkingLevel ??
+          null,
+        sanitizedRecord.thinkingBudgetTokens ??
+          sanitizedRecord.manifest?.modelParameters?.thinkingBudgetTokens ??
+          null,
         sanitizedRecord.reasoningTokens ?? null,
         sanitizedRecord.status,
         sanitizedRecord.terminationReason ?? null,
@@ -82,7 +87,7 @@ export class ReportingRunStore {
         evidence.evidenceDigest ?? null,
         evidence.identity ? JSON.stringify(evidence.identity) : null,
         eligibleRecord?.compositeScore ?? null,
-        eligibleRecord === undefined ? null : (eligibleRecord.passedBenchmark ? 1 : 0),
+        eligibleRecord === undefined ? null : eligibleRecord.passedBenchmark ? 1 : 0,
         cost.amountUSD,
         cost.status,
         eligibleRecord?.actualCostUSD ?? null,
@@ -99,11 +104,13 @@ export class ReportingRunStore {
         manifestJson,
         metricsJson,
         evaluationJson,
-        commitSha
+        commitSha,
       );
       this.database.prepare("DELETE FROM run_claims WHERE run_id = ?").run(record.runId);
     } catch (error) {
-      const existing = this.database.prepare("SELECT 1 FROM runs WHERE run_id = ?").get(record.runId);
+      const existing = this.database
+        .prepare("SELECT 1 FROM runs WHERE run_id = ?")
+        .get(record.runId);
       if (existing !== null) throw new TerminalRunIdentityConflictError();
       throw error;
     }
@@ -138,7 +145,7 @@ export class ReportingRunStore {
           sanitized.timestampUs,
           sanitized.eventType,
           sanitized.sequenceNumber ?? null,
-          sanitized.payload ? JSON.stringify(sanitized.payload) : null
+          sanitized.payload ? JSON.stringify(sanitized.payload) : null,
         );
       }
     })(events);
@@ -147,7 +154,8 @@ export class ReportingRunStore {
 
 function assertRunRecordAuthority(record: RunRecord): void {
   assertBenchmarkAuthority(record);
-  if (record.eligibility.status === "unknown") throw new TypeError("Unknown evidence cannot be newly persisted");
+  if (record.eligibility.status === "unknown")
+    throw new TypeError("Unknown evidence cannot be newly persisted");
   const expectedIdentity = {
     runId: record.runId,
     scenarioId: record.scenarioId,
@@ -168,7 +176,8 @@ function assertRunRecordAuthority(record: RunRecord): void {
     operationalCost: record.operationalCost,
   });
   const recordAuthority = authorityProjection(record);
-  if (!isDeepStrictEqual(classified, recordAuthority)) throw new TypeError("Run record does not match benchmark authority");
+  if (!isDeepStrictEqual(classified, recordAuthority))
+    throw new TypeError("Run record does not match benchmark authority");
 }
 
 function authorityProjection(record: RunRecord): BenchmarkAuthority {

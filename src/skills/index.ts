@@ -21,11 +21,18 @@ export function lookupCanonicalSkill(query: SkillLookupQuery): readonly Canonica
   }
   if (query.author !== undefined) {
     const a = query.author.toLowerCase();
-    results = results.filter((s) => s.author.handle.toLowerCase().includes(a) || s.author.name.toLowerCase().includes(a));
+    results = results.filter(
+      (s) => s.author.handle.toLowerCase().includes(a) || s.author.name.toLowerCase().includes(a),
+    );
   }
   if (query.query !== undefined && query.query.length > 0) {
     const q = query.query.toLowerCase();
-    results = results.filter((s) => s.name.toLowerCase().includes(q) || s.description.toLowerCase().includes(q) || s.tags.some((t) => t.toLowerCase().includes(q)));
+    results = results.filter(
+      (s) =>
+        s.name.toLowerCase().includes(q) ||
+        s.description.toLowerCase().includes(q) ||
+        s.tags.some((t) => t.toLowerCase().includes(q)),
+    );
   }
   return results;
 }

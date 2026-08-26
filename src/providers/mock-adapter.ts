@@ -27,7 +27,10 @@ export class MockProviderAdapter implements LLMProviderAdapter {
       executionMode: "fake",
       runId: config?.runId ?? "mock-run",
       apiKey: config !== undefined && config.apiKey !== undefined ? config.apiKey : "mock-key",
-      baseUrl: config !== undefined && config.baseUrl !== undefined ? config.baseUrl : "http://localhost:8080/mock",
+      baseUrl:
+        config !== undefined && config.baseUrl !== undefined
+          ? config.baseUrl
+          : "http://localhost:8080/mock",
       timeoutMs: config !== undefined && config.timeoutMs !== undefined ? config.timeoutMs : 30000,
       maxRetries: config !== undefined && config.maxRetries !== undefined ? config.maxRetries : 0,
       customHeaders: config !== undefined ? config.customHeaders : undefined,
@@ -43,7 +46,7 @@ export class MockProviderAdapter implements LLMProviderAdapter {
   public async *generateStream(
     messages: ReadonlyArray<AgentMessage>,
     tools: ReadonlyArray<ToolDefinition>,
-    options: GenerateOptions
+    options: GenerateOptions,
   ): AsyncIterable<CompletionChunk> {
     const turn = await this.generateTurn(messages, tools, options);
     const text = turn.text;
@@ -58,12 +61,14 @@ export class MockProviderAdapter implements LLMProviderAdapter {
 
     for (const toolCall of turn.toolCalls) {
       yield {
-        toolCallDeltas: [{
-          index: 0,
-          id: toolCall.id,
-          name: toolCall.name,
-          argumentsDelta: toolCall.rawArguments,
-        }],
+        toolCallDeltas: [
+          {
+            index: 0,
+            id: toolCall.id,
+            name: toolCall.name,
+            argumentsDelta: toolCall.rawArguments,
+          },
+        ],
       };
     }
 
@@ -76,7 +81,7 @@ export class MockProviderAdapter implements LLMProviderAdapter {
   public async generateTurn(
     messages: ReadonlyArray<AgentMessage>,
     tools: ReadonlyArray<ToolDefinition>,
-    options: GenerateOptions
+    options: GenerateOptions,
   ): Promise<ModelTurnResponse> {
     const turnCount = messages.filter((m) => m.role === "assistant").length;
     const toolCalls: ToolCallRequest[] = [];
@@ -97,7 +102,10 @@ export class MockProviderAdapter implements LLMProviderAdapter {
         id: `${this.config.runId}-turn-1`,
         name: "write_file",
         arguments: { path: "benchmark-output.txt", content: "fake benchmark artifact\n" },
-        rawArguments: JSON.stringify({ path: "benchmark-output.txt", content: "fake benchmark artifact\n" }),
+        rawArguments: JSON.stringify({
+          path: "benchmark-output.txt",
+          content: "fake benchmark artifact\n",
+        }),
       });
       text = "Writing the deterministic benchmark artifact.";
       finishReason = "tool_calls";
@@ -108,7 +116,8 @@ export class MockProviderAdapter implements LLMProviderAdapter {
 
     const inputTokens = 250 + turnCount * 120;
     const outputTokens = text.length + toolCalls.length * 40;
-    const reasoningTokens = options.thinkingBudgetTokens !== undefined && options.thinkingBudgetTokens > 0 ? 512 : 0;
+    const reasoningTokens =
+      options.thinkingBudgetTokens !== undefined && options.thinkingBudgetTokens > 0 ? 512 : 0;
 
     const usage: TokenUsage = {
       inputTokens,

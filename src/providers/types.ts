@@ -166,12 +166,12 @@ export interface LLMProviderAdapter {
   generateStream(
     messages: ReadonlyArray<AgentMessage>,
     tools: ReadonlyArray<ToolDefinition>,
-    options: GenerateOptions
+    options: GenerateOptions,
   ): AsyncIterable<CompletionChunk>;
   generateTurn(
     messages: ReadonlyArray<AgentMessage>,
     tools: ReadonlyArray<ToolDefinition>,
-    options: GenerateOptions
+    options: GenerateOptions,
   ): Promise<ModelTurnResponse>;
   calculateCostUSD(usage: TokenUsage): number;
 }
@@ -190,13 +190,14 @@ export class ProviderError extends Error {
       readonly isRetryable?: boolean;
       readonly cause?: unknown;
       readonly rawError?: unknown;
-    }
+    },
   ) {
     super(message, { cause: options?.cause });
     this.name = this.constructor.name;
     this.providerId = providerId;
     this.statusCode = options?.statusCode;
-    this.isRetryable = options !== undefined && options.isRetryable !== undefined ? options.isRetryable : false;
+    this.isRetryable =
+      options !== undefined && options.isRetryable !== undefined ? options.isRetryable : false;
     this.rawError = options?.rawError;
   }
 }
@@ -212,10 +213,11 @@ export class ProviderRateLimitError extends ProviderError {
       readonly retryAfterMs?: number;
       readonly cause?: unknown;
       readonly rawError?: unknown;
-    }
+    },
   ) {
     super(message, providerId, {
-      statusCode: options !== undefined && options.statusCode !== undefined ? options.statusCode : 429,
+      statusCode:
+        options !== undefined && options.statusCode !== undefined ? options.statusCode : 429,
       isRetryable: true,
       cause: options?.cause,
       rawError: options?.rawError,
@@ -232,10 +234,11 @@ export class ProviderAuthenticationError extends ProviderError {
       readonly statusCode?: number;
       readonly cause?: unknown;
       readonly rawError?: unknown;
-    }
+    },
   ) {
     super(message, providerId, {
-      statusCode: options !== undefined && options.statusCode !== undefined ? options.statusCode : 401,
+      statusCode:
+        options !== undefined && options.statusCode !== undefined ? options.statusCode : 401,
       isRetryable: false,
       cause: options?.cause,
       rawError: options?.rawError,
@@ -256,10 +259,11 @@ export class ProviderContextLengthExceededError extends ProviderError {
       readonly requestedTokens?: number;
       readonly cause?: unknown;
       readonly rawError?: unknown;
-    }
+    },
   ) {
     super(message, providerId, {
-      statusCode: options !== undefined && options.statusCode !== undefined ? options.statusCode : 400,
+      statusCode:
+        options !== undefined && options.statusCode !== undefined ? options.statusCode : 400,
       isRetryable: false,
       cause: options?.cause,
       rawError: options?.rawError,
@@ -280,10 +284,11 @@ export class ProviderTimeoutError extends ProviderError {
       readonly timeoutMs?: number;
       readonly cause?: unknown;
       readonly rawError?: unknown;
-    }
+    },
   ) {
     super(message, providerId, {
-      statusCode: options !== undefined && options.statusCode !== undefined ? options.statusCode : 408,
+      statusCode:
+        options !== undefined && options.statusCode !== undefined ? options.statusCode : 408,
       isRetryable: true,
       cause: options?.cause,
       rawError: options?.rawError,

@@ -5,16 +5,20 @@ import type { CliCommandResult, CliOutput, CliParsedArgs, ListOptions } from "..
 
 export async function runListCommand(
   args: CliParsedArgs,
-  output: CliOutput
+  output: CliOutput,
 ): Promise<CliCommandResult> {
   const startedAt = Date.now();
   const options = requireOptions(args.listOptions);
-  output.stdout(`${formatSectionHeader(`Listing Benchmark Catalog Entities [target: ${options.target}]`)}\n`);
+  output.stdout(
+    `${formatSectionHeader(`Listing Benchmark Catalog Entities [target: ${options.target}]`)}\n`,
+  );
   if (options.target === "scenarios" || options.target === "all") {
     const scenarios = new ScenarioLoader().loadAllScenarios();
     output.stdout(`${bold("\nAvailable Benchmark Scenarios:")}\n`);
     for (const scenario of scenarios) {
-      output.stdout(`  ${cyan(scenario.id.padEnd(25))} ${scenario.name} [${scenario.category}] (${scenario.difficulty})\n`);
+      output.stdout(
+        `  ${cyan(scenario.id.padEnd(25))} ${scenario.name} [${scenario.category}] (${scenario.difficulty})\n`,
+      );
     }
   }
   if (options.target === "skills" || options.target === "all") {

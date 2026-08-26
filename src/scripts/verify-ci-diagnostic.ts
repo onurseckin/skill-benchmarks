@@ -8,7 +8,10 @@ import { validateDiagnosticReport } from "./ci-diagnostic/report.js";
 export function verifyCiDiagnostic(argumentsList: readonly string[]): void {
   requireCondition(argumentsList.length === 1, "usage_requires_one_bundle");
   const bundleArgument = argumentsList[0];
-  requireCondition(typeof bundleArgument === "string" && bundleArgument.trim().length > 0, "usage_requires_one_bundle");
+  requireCondition(
+    typeof bundleArgument === "string" && bundleArgument.trim().length > 0,
+    "usage_requires_one_bundle",
+  );
   const paths = validateDiagnosticBundleFilesystem(bundleArgument);
   const artifacts = validateDiagnosticArtifacts(paths);
   validateDiagnosticEvents(paths.events, artifacts);
@@ -21,7 +24,8 @@ function runVerifier(): void {
     verifyCiDiagnostic(process.argv.slice(2));
     process.stdout.write("CI diagnostic evidence verified\n");
   } catch (error) {
-    const code = error instanceof DiagnosticVerificationError ? error.code : "verification_internal_error";
+    const code =
+      error instanceof DiagnosticVerificationError ? error.code : "verification_internal_error";
     process.stderr.write(`CI diagnostic verification failed: ${code}\n`);
     process.exitCode = 1;
   }

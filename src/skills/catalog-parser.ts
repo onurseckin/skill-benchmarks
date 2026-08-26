@@ -3,7 +3,10 @@ import { join } from "node:path";
 import type { CatalogEntry, CanonicalSkillDomain, SkillCategory } from "./types";
 
 export function normalizeSkillId(id: string): string {
-  return id.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "-");
+  return id
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]/g, "-");
 }
 
 export function parseInstallsCount(raw: string | number | undefined): number {
@@ -22,7 +25,11 @@ export function parseInstallsCount(raw: string | number | undefined): number {
   return Number.isNaN(num) ? 0 : Math.round(num);
 }
 
-export function parseAuthorFromSource(source: string): { readonly name: string; readonly handle: string; readonly repository: string } {
+export function parseAuthorFromSource(source: string): {
+  readonly name: string;
+  readonly handle: string;
+  readonly repository: string;
+} {
   const parts = source.split("/");
   if (parts.length >= 2) {
     const handle = parts[0] ?? "unknown";
@@ -109,12 +116,16 @@ export function parseCatalogMarkdown(content: string): readonly CatalogEntry[] {
     }
     if (inCompositionSection) continue;
     if (!trimmed.startsWith("|") || trimmed.includes("---|---")) continue;
-    const cols = trimmed.split("|").map((c) => c.trim()).filter((c) => c.length > 0);
+    const cols = trimmed
+      .split("|")
+      .map((c) => c.trim())
+      .filter((c) => c.length > 0);
     if (cols.length < 3) continue;
 
     const [c0, c1, c2, c3] = cols;
     if (c0 === undefined || c1 === undefined || c2 === undefined) continue;
-    if (c0.toLowerCase() === "category" || c0.toLowerCase() === "#" || c0.toLowerCase() === "skill") continue;
+    if (c0.toLowerCase() === "category" || c0.toLowerCase() === "#" || c0.toLowerCase() === "skill")
+      continue;
     if (c1.toLowerCase() === "skill" || c2.toLowerCase() === "source") continue;
 
     let skillName = "";
@@ -141,7 +152,8 @@ export function parseCatalogMarkdown(content: string): readonly CatalogEntry[] {
       installsDisplay = c2.trim();
     }
 
-    if (skillName.length === 0 || source.length === 0 || skillName.toLowerCase() === "skill") continue;
+    if (skillName.length === 0 || source.length === 0 || skillName.toLowerCase() === "skill")
+      continue;
     if (source.includes(",") && !source.includes("/")) continue;
 
     const id = normalizeSkillId(skillName);
@@ -173,10 +185,23 @@ export async function collectSkillFilePaths(dirPath: string): Promise<string[]> 
     }
     const entries = await readdir(dirPath, { withFileTypes: true });
     for (const e of entries) {
-      if (e.name === ".git" || e.name === "node_modules" || e.name === ".benchmarks" || e.name === "dist") continue;
+      if (
+        e.name === ".git" ||
+        e.name === "node_modules" ||
+        e.name === ".benchmarks" ||
+        e.name === "dist"
+      )
+        continue;
       const full = join(dirPath, e.name);
       if (e.isDirectory()) result.push(...(await collectSkillFilePaths(full)));
-      else if (e.isFile() && (e.name === "SKILL.md" || e.name === "skill.md" || e.name.endsWith(".skill.md") || e.name === "skill.json")) result.push(full);
+      else if (
+        e.isFile() &&
+        (e.name === "SKILL.md" ||
+          e.name === "skill.md" ||
+          e.name.endsWith(".skill.md") ||
+          e.name === "skill.json")
+      )
+        result.push(full);
     }
   } catch {
     return result;

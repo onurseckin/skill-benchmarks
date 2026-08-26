@@ -94,12 +94,7 @@ export interface CliRequiredOptionSpecification {
   readonly code: CliDiagnosticCode;
 }
 
-export type CliGrammarRule =
-  | "run"
-  | "arena"
-  | "tournament"
-  | "report"
-  | "replay";
+export type CliGrammarRule = "run" | "arena" | "tournament" | "report" | "replay";
 
 export interface CliCommandSpecification {
   readonly name: CliCommandName;

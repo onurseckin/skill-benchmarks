@@ -1,5 +1,4 @@
 import type {
-  ArtifactCriterionResult,
   ArtifactEvaluationResult,
   ArtifactType,
   ClarificationAssertion,
@@ -11,6 +10,7 @@ import type {
   InterviewGraderConfig,
   InterviewScript,
 } from "./types.js";
+import { gradeInterviewArtifact } from "./artifact-evaluator.js";
 import { StakeholderSimulator } from "./stakeholder-simulator.js";
 
 void StakeholderSimulator;
@@ -27,14 +27,21 @@ export class InterviewEvaluator {
     script: InterviewScript,
     assertions: readonly ClarificationAssertion[],
     artifacts: Readonly<Record<string, string>> = {},
-    candidateModelId = "candidate-model"
+    candidateModelId = "candidate-model",
   ): Promise<DialogEvaluationResult> {
     const startTime = Date.now();
 
-    const clarificationResult = this.evaluateClarificationCoverage(assertions, script.clarificationTopics);
+    const clarificationResult = this.evaluateClarificationCoverage(
+      assertions,
+      script.clarificationTopics,
+    );
     const questionQualityScore = this.evaluateQuestionQuality(transcript, script);
     const domainDepthScore = this.evaluateDomainDepth(transcript, script);
-    const requirementCoverageScore = this.evaluateRequirementCoverage(assertions, transcript, script);
+    const requirementCoverageScore = this.evaluateRequirementCoverage(
+      assertions,
+      transcript,
+      script,
+    );
     const artifactEvaluations = this.evaluateArtifacts(artifacts, script);
 
     let artifactQualityScore = 100;
@@ -53,10 +60,10 @@ export class InterviewEvaluator {
 
     const overallScore = Math.round(
       clarificationResult.score * weights.clarification +
-      requirementCoverageScore * weights.requirementCoverage +
-      questionQualityScore * weights.questionQuality +
-      domainDepthScore * weights.domainDepth +
-      artifactQualityScore * weights.artifactQuality
+        requirementCoverageScore * weights.requirementCoverage +
+        questionQualityScore * weights.questionQuality +
+        domainDepthScore * weights.domainDepth +
+        artifactQualityScore * weights.artifactQuality,
     );
 
     const scoreBreakdown: DialogScoreBreakdown = {
@@ -88,7 +95,9 @@ export class InterviewEvaluator {
     }
 
     if (artifactEvaluations.some((a) => !a.passed)) {
-      weaknesses.push("One or more generated artifacts did not meet structural or content criteria.");
+      weaknesses.push(
+        "One or more generated artifacts did not meet structural or content criteria.",
+      );
     }
 
     const summary = `Multi-turn interview evaluation completed with overall score ${overallScore}/100 (${overallScore >= (this.config.minPassingScore ?? 70) ? "PASSED" : "FAILED"}).`;
@@ -109,7 +118,7 @@ export class InterviewEvaluator {
 
   private evaluateClarificationCoverage(
     assertions: readonly ClarificationAssertion[],
-    topics: readonly ClarificationTopic[]
+    topics: readonly ClarificationTopic[],
   ): { score: number; assertions: readonly ClarificationAssertion[] } {
     if (topics.length === 0) {
       return { score: 100, assertions };
@@ -125,12 +134,14 @@ export class InterviewEvaluator {
 
       const assertion = assertions.find((a) => a.topicId === topic.id);
       if (!assertion || assertion.status === "missed") {
-        resolvedAssertions.push(assertion ?? {
-          topicId: topic.id,
-          status: "missed",
-          scoreImpact: -topic.penaltyIfNotAsked,
-          details: `Topic "${topic.id}" was required but never clarified.`,
-        });
+        resolvedAssertions.push(
+          assertion ?? {
+            topicId: topic.id,
+            status: "missed",
+            scoreImpact: -topic.penaltyIfNotAsked,
+            details: `Topic "${topic.id}" was required but never clarified.`,
+          },
+        );
       } else if (assertion.status === "clarified") {
         earnedPoints += weight + topic.bonusIfAskedEarly;
         resolvedAssertions.push(assertion);
@@ -164,11 +175,24 @@ export class InterviewEvaluator {
         turnPoints += 20;
       }
 
-      const specificTerms = ["constraint", "requirement", "latency", "scalability", "failure", "trade-off", "sla", "edge case"];
+      const specificTerms = [
+        "constraint",
+        "requirement",
+        "latency",
+        "scalability",
+        "failure",
+        "trade-off",
+        "sla",
+        "edge case",
+      ];
       const matchesSpecific = specificTerms.filter((term) => content.includes(term)).length;
       turnPoints += Math.min(30, matchesSpecific * 10);
 
-      if (content.includes("i will just") || content.includes("assuming that") || content.includes("i decided to")) {
+      if (
+        content.includes("i will just") ||
+        content.includes("assuming that") ||
+        content.includes("i decided to")
+      ) {
         turnPoints -= 15;
       }
 
@@ -203,23 +227,27 @@ export class InterviewEvaluator {
   private evaluateRequirementCoverage(
     assertions: readonly ClarificationAssertion[],
     transcript: DialogTranscript,
-    script: InterviewScript
+    script: InterviewScript,
   ): number {
-    const totalReqs = script.persona.ambiguousRequirements.length + script.persona.hiddenConstraints.length;
+    const totalReqs =
+      script.persona.ambiguousRequirements.length + script.persona.hiddenConstraints.length;
     if (totalReqs === 0) {
       return 100;
     }
 
     const clarifiedCount = assertions.filter(
-      (a) => a.status === "clarified" || a.status === "clarified_late"
+      (a) => a.status === "clarified" || a.status === "clarified_late",
     ).length;
 
-    return Math.min(100, Math.round((clarifiedCount / Math.max(1, script.clarificationTopics.length)) * 100));
+    return Math.min(
+      100,
+      Math.round((clarifiedCount / Math.max(1, script.clarificationTopics.length)) * 100),
+    );
   }
 
   private evaluateArtifacts(
     artifacts: Readonly<Record<string, string>>,
-    script: InterviewScript
+    script: InterviewScript,
   ): readonly ArtifactEvaluationResult[] {
     const results: ArtifactEvaluationResult[] = [];
     const requiredTypes = script.requiredArtifactTypes ?? [];
@@ -231,14 +259,16 @@ export class InterviewEvaluator {
           artifactType: type,
           passed: false,
           score: 0,
-          criteriaResults: [{
-            name: "Artifact Presence",
-            description: `Artifact of type ${type} must be provided`,
-            passed: false,
-            weight: 100,
-            score: 0,
-            feedback: `Missing required artifact ${type}`,
-          }],
+          criteriaResults: [
+            {
+              name: "Artifact Presence",
+              description: `Artifact of type ${type} must be provided`,
+              passed: false,
+              weight: 100,
+              score: 0,
+              feedback: `Missing required artifact ${type}`,
+            },
+          ],
           summary: `Required artifact ${type} was not generated.`,
         });
         continue;
@@ -257,75 +287,10 @@ export class InterviewEvaluator {
   }
 
   private gradeArtifactContent(type: ArtifactType, content: string): ArtifactEvaluationResult {
-    const criteria: ArtifactCriterionResult[] = [];
-    const lower = content.toLowerCase();
-
-    switch (type) {
-      case "adr": {
-        const hasContext = lower.includes("context") || lower.includes("background");
-        const hasDecision = lower.includes("decision") || lower.includes("choice");
-        const hasConsequences = lower.includes("consequences") || lower.includes("trade-offs");
-        const hasAlternatives = lower.includes("alternatives") || lower.includes("considered");
-
-        criteria.push(
-          { name: "Context & Problem Statement", description: "Describes background and requirements", passed: hasContext, weight: 25, score: hasContext ? 25 : 0 },
-          { name: "Decision", description: "Clearly states the chosen architectural decision", passed: hasDecision, weight: 30, score: hasDecision ? 30 : 0 },
-          { name: "Consequences & Trade-offs", description: "Analyzes positive and negative impacts", passed: hasConsequences, weight: 25, score: hasConsequences ? 25 : 0 },
-          { name: "Alternatives Considered", description: "Evaluates other possible approaches", passed: hasAlternatives, weight: 20, score: hasAlternatives ? 20 : 0 }
-        );
-        break;
-      }
-      case "bug_report": {
-        const hasRootCause = lower.includes("root cause") || lower.includes("analysis");
-        const hasRepro = lower.includes("reproduce") || lower.includes("steps");
-        const hasFix = lower.includes("fix") || lower.includes("solution") || lower.includes("patch");
-
-        criteria.push(
-          { name: "Root Cause Analysis", description: "Identifies source defect accurately", passed: hasRootCause, weight: 40, score: hasRootCause ? 40 : 0 },
-          { name: "Reproduction Steps", description: "Clear steps to recreate the issue", passed: hasRepro, weight: 30, score: hasRepro ? 30 : 0 },
-          { name: "Remediation", description: "Proposes robust fix without regressions", passed: hasFix, weight: 30, score: hasFix ? 30 : 0 }
-        );
-        break;
-      }
-      case "code_review": {
-        const hasSummary = lower.includes("summary") || lower.includes("overview");
-        const hasIssues = lower.includes("issue") || lower.includes("finding") || lower.includes("defect");
-        const hasRecommendations = lower.includes("recommendation") || lower.includes("suggestion");
-
-        criteria.push(
-          { name: "Review Summary", description: "High-level summary of reviewed changes", passed: hasSummary, weight: 30, score: hasSummary ? 30 : 0 },
-          { name: "Actionable Findings", description: "Identifies concrete issues or defects", passed: hasIssues, weight: 40, score: hasIssues ? 40 : 0 },
-          { name: "Constructive Guidance", description: "Gives clear fix guidance", passed: hasRecommendations, weight: 30, score: hasRecommendations ? 30 : 0 }
-        );
-        break;
-      }
-      case "spec":
-      case "markdown":
-      default: {
-        const hasStructure = content.includes("#") && content.length > 100;
-        const hasRequirements = lower.includes("requirement") || lower.includes("scope");
-        criteria.push(
-          { name: "Structured Markdown", description: "Proper headings and organization", passed: hasStructure, weight: 50, score: hasStructure ? 50 : 0 },
-          { name: "Scope & Requirements", description: "Detailed specification points", passed: hasRequirements, weight: 50, score: hasRequirements ? 50 : 0 }
-        );
-        break;
-      }
-    }
-
-    const totalScore = criteria.reduce((sum, c) => sum + c.score, 0);
-    const passed = totalScore >= 70;
-
-    return {
-      artifactType: type,
-      passed,
-      score: totalScore,
-      criteriaResults: criteria,
-      summary: `Artifact ${type} scored ${totalScore}/100 (${passed ? "PASSED" : "FAILED"}).`,
-    };
+    return gradeInterviewArtifact(type, content);
   }
 }
 
 export function createInterviewEvaluator(config?: InterviewGraderConfig): InterviewEvaluator {
   return new InterviewEvaluator(config);
 }
-

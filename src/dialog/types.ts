@@ -20,11 +20,7 @@ export type PersonaTone =
   | "supportive"
   | "demanding";
 
-export type DialogMessageRole =
-  | "stakeholder"
-  | "agent"
-  | "system"
-  | "evaluator";
+export type DialogMessageRole = "stakeholder" | "agent" | "system" | "evaluator";
 
 export type ScriptTriggerType =
   | "keyword_match"

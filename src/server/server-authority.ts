@@ -35,7 +35,12 @@ function requireExistingDatabase(value: string, outputRoot: string): string {
   if (!stats.isFile() || stats.isSymbolicLink() || stats.nlink !== 1) throw invalidOptions();
   const canonical = realpathSync(resolved);
   const relation = relative(outputRoot, canonical);
-  if (relation === "" || relation === ".." || relation.startsWith("../") || relation.startsWith("..\\")) {
+  if (
+    relation === "" ||
+    relation === ".." ||
+    relation.startsWith("../") ||
+    relation.startsWith("..\\")
+  ) {
     throw invalidOptions();
   }
   return canonical;

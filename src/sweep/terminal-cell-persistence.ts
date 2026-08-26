@@ -28,7 +28,7 @@ export interface PersistTerminalCellInput {
 export function createTerminalIdentityConflict(
   cell: MatrixCellDescriptor,
   startedAt: string,
-  startedMs: number
+  startedMs: number,
 ): MatrixCellResult {
   return {
     cell,
@@ -55,17 +55,32 @@ export function persistTerminalCell(input: PersistTerminalCellInput): MatrixCell
     terminationReason: input.terminationReason,
     completedAt: scenarioResult?.finishedAt ?? new Date().toISOString(),
   } as const;
-  const runRecord = createTerminalRunRecord(input.context, terminal, scenarioResult, input.attemptCount, durationMs);
+  const runRecord = createTerminalRunRecord(
+    input.context,
+    terminal,
+    scenarioResult,
+    input.attemptCount,
+    durationMs,
+  );
   let resultIdentity: ReturnType<typeof commitRunResult> | undefined;
   try {
     input.telemetryDb.saveRunRecordWithArtifact(runRecord, () => {
-      resultIdentity = commitRunResult(input.artifactLayout, input.context, terminal, scenarioResult, input.attemptCount, durationMs);
+      resultIdentity = commitRunResult(
+        input.artifactLayout,
+        input.context,
+        terminal,
+        scenarioResult,
+        input.attemptCount,
+        durationMs,
+      );
     });
   } catch (error) {
     if (error instanceof TerminalRunIdentityConflictError) {
       return createTerminalIdentityConflict(input.cell, input.context.startedAt, input.startedMs);
     }
-    const committedIdentity = resultIdentity ?? (error instanceof EvidenceCommitError ? error.committedIdentity : undefined);
+    const committedIdentity =
+      resultIdentity ??
+      (error instanceof EvidenceCommitError ? error.committedIdentity : undefined);
     const targetCommitted = committedIdentity !== undefined;
     if (targetCommitted) {
       try {
@@ -86,31 +101,53 @@ export function persistTerminalFailure(
   context: RunEvidenceContext,
   scenarioResult: ScenarioResult | undefined,
   attemptCount: number,
-  startedMs: number
+  startedMs: number,
 ): MatrixCellResult {
-  return createPersistenceFailureResult({
-    cell,
-    telemetryDb,
-    artifactLayout,
-    context,
+  return createPersistenceFailureResult(
+    {
+      cell,
+      telemetryDb,
+      artifactLayout,
+      context,
+      scenarioResult,
+      attemptCount,
+      terminationReason: "persistence_failed",
+      startedMs,
+    },
     scenarioResult,
-    attemptCount,
-    terminationReason: "persistence_failed",
-    startedMs,
-  }, scenarioResult, true);
+    true,
+  );
 }
 
 function createPersistenceFailureResult(
   input: PersistTerminalCellInput,
   scenarioResult: ScenarioResult | undefined,
-  preferResultPath: boolean
+  preferResultPath: boolean,
 ): MatrixCellResult {
-  const terminal = { status: "failed", terminationReason: "persistence_failed", completedAt: new Date().toISOString() } as const;
+  const terminal = {
+    status: "failed",
+    terminationReason: "persistence_failed",
+    completedAt: new Date().toISOString(),
+  } as const;
   const durationMs = scenarioResult?.totalDurationMs ?? Date.now() - input.startedMs;
-  const runRecord = createTerminalRunRecord(input.context, terminal, scenarioResult, input.attemptCount, durationMs);
+  const runRecord = createTerminalRunRecord(
+    input.context,
+    terminal,
+    scenarioResult,
+    input.attemptCount,
+    durationMs,
+  );
   let failureArtifactDurable = false;
   try {
-    commitTerminalFailure(input.artifactLayout, input.context, terminal, scenarioResult, preferResultPath, input.attemptCount, durationMs);
+    commitTerminalFailure(
+      input.artifactLayout,
+      input.context,
+      terminal,
+      scenarioResult,
+      preferResultPath,
+      input.attemptCount,
+      durationMs,
+    );
     failureArtifactDurable = true;
   } catch {
     failureArtifactDurable = false;
@@ -125,14 +162,16 @@ function createPersistenceFailureResult(
   const result = createCellResult(input, scenarioResult, runRecord, terminal.terminationReason);
   const { scenarioResult: executionResult, ...terminalResult } = result;
   const publicResult = executionResult === undefined ? result : terminalResult;
-  return failureArtifactDurable && databaseRecordDurable ? publicResult : { ...publicResult, retryable: false };
+  return failureArtifactDurable && databaseRecordDurable
+    ? publicResult
+    : { ...publicResult, retryable: false };
 }
 
 function createCellResult(
   input: PersistTerminalCellInput,
   scenarioResult: ScenarioResult | undefined,
   runRecord: ReturnType<typeof createTerminalRunRecord>,
-  terminationReason: RunTerminationReason
+  terminationReason: RunTerminationReason,
 ): MatrixCellResult {
   const executionCompleted = runRecord.status === "completed";
   return {
@@ -154,7 +193,10 @@ function createCellResult(
   };
 }
 
-function normalizeScenarioResult(context: RunEvidenceContext, result: ScenarioResult | undefined): ScenarioResult | undefined {
+function normalizeScenarioResult(
+  context: RunEvidenceContext,
+  result: ScenarioResult | undefined,
+): ScenarioResult | undefined {
   if (result === undefined) return undefined;
   return {
     ...result,

@@ -24,10 +24,7 @@ export class ChaosEngine implements IChaosEngine {
   public readonly config: ChaosEngineConfig;
   private readonly faultInjector: IFaultInjector;
 
-  public constructor(
-    faultInjector?: IFaultInjector,
-    config?: Partial<ChaosEngineConfig>
-  ) {
+  public constructor(faultInjector?: IFaultInjector, config?: Partial<ChaosEngineConfig>) {
     this.faultInjector = faultInjector ?? new ContainerFaultInjector();
     this.config = { ...DEFAULT_CONFIG, ...config };
   }
@@ -35,7 +32,7 @@ export class ChaosEngine implements IChaosEngine {
   public async executeExperiment<T>(
     scenarioId: string,
     schedule: ChaosSchedule,
-    scenarioRunner: (context: ChaosExecutionContext) => Promise<T>
+    scenarioRunner: (context: ChaosExecutionContext) => Promise<T>,
   ): Promise<{ readonly result: T; readonly report: ChaosExperimentReport }> {
     const experimentId = `exp-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
     const startedAt = new Date().toISOString();
@@ -48,7 +45,7 @@ export class ChaosEngine implements IChaosEngine {
     const recordEvent = (
       phase: ChaosExperimentTimelineEvent["phase"],
       eventType: string,
-      details: Readonly<Record<string, unknown>>
+      details: Readonly<Record<string, unknown>>,
     ): void => {
       timeline.push({
         timestamp: new Date().toISOString(),
@@ -201,18 +198,16 @@ export class ChaosEngine implements IChaosEngine {
     scenarioRunner: (
       scenarioId: string,
       schedule: ChaosSchedule,
-      context: ChaosExecutionContext
-    ) => Promise<T>
+      context: ChaosExecutionContext,
+    ) => Promise<T>,
   ): Promise<readonly ChaosExperimentReport[]> {
     const reports: ChaosExperimentReport[] = [];
 
     for (let rep = 0; rep < matrix.repetitions; rep++) {
       for (const scenarioId of matrix.scenarios) {
         for (const schedule of matrix.schedules) {
-          const { report } = await this.executeExperiment(
-            scenarioId,
-            schedule,
-            (context) => scenarioRunner(scenarioId, schedule, context)
+          const { report } = await this.executeExperiment(scenarioId, schedule, (context) =>
+            scenarioRunner(scenarioId, schedule, context),
           );
           reports.push(report);
         }
@@ -225,7 +220,7 @@ export class ChaosEngine implements IChaosEngine {
 
 export function createChaosEngine(
   faultInjector?: IFaultInjector,
-  config?: Partial<ChaosEngineConfig>
+  config?: Partial<ChaosEngineConfig>,
 ): ChaosEngine {
   return new ChaosEngine(faultInjector, config);
 }

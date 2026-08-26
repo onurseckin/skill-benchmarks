@@ -40,11 +40,6 @@
     "testbed/microservice/types.ts",
     "testbed/package.json"
   ],
-  "include": [
-    "src/**/*"
-  ],
-  "exclude": [
-    "node_modules",
-    "dist"
-  ]
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist"]
 }

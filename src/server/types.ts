@@ -87,7 +87,9 @@ export type ApiSummaryResponse = ReportSnapshot & {
   };
 };
 
-export type ApiTrendsResponse = ReportSnapshot & { readonly trends: NonNullable<ReportSnapshot["trends"]> };
+export type ApiTrendsResponse = ReportSnapshot & {
+  readonly trends: NonNullable<ReportSnapshot["trends"]>;
+};
 
 export interface ApiHealthResponse {
   readonly status: "healthy";

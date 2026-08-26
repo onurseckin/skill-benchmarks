@@ -15,7 +15,7 @@ import {
 
 export function projectReplaySession(
   events: readonly TelemetryEvent[],
-  identity: ReplayEvidenceIdentity = {}
+  identity: ReplayEvidenceIdentity = {},
 ): ReplaySession {
   const first = requireEvent(events[0]);
   const last = requireEvent(events[events.length - 1]);
@@ -23,10 +23,12 @@ export function projectReplaySession(
   const finish = last.payload;
   assertExpectedIdentity(events, identity);
   const frames = events.map((event, index) => projectFrame(event, index, first.timestampUs));
-  const telemetrySeries = frames.flatMap((frame) => frame.telemetry === undefined ? [] : [frame.telemetry]);
-  const diffs = events.flatMap((event) => event.type === "GIT_DIFF_CAPTURED"
-    ? parseUnifiedDiff(event.payload.rawDiff as string)
-    : []);
+  const telemetrySeries = frames.flatMap((frame) =>
+    frame.telemetry === undefined ? [] : [frame.telemetry],
+  );
+  const diffs = events.flatMap((event) =>
+    event.type === "GIT_DIFF_CAPTURED" ? parseUnifiedDiff(event.payload.rawDiff as string) : [],
+  );
   const metadata = {
     runId: first.runId,
     scenarioId: start.scenarioId as string,
@@ -52,11 +54,21 @@ export function projectReplaySession(
     sourceKind: identity.sourceKind ?? "direct",
     ...(identity.sweepId === undefined ? {} : { sweepId: identity.sweepId }),
     ...(identity.cellId === undefined ? {} : { cellId: identity.cellId }),
-    ...(identity.planFingerprint === undefined ? {} : { planFingerprint: identity.planFingerprint }),
-    ...(identity.benchmarkCohort === undefined ? {} : { benchmarkCohort: identity.benchmarkCohort }),
-    ...(identity.eligibilityStatus === undefined ? {} : { eligibilityStatus: identity.eligibilityStatus }),
-    ...(identity.eligibilityReasons === undefined ? {} : { eligibilityReasons: Object.freeze([...identity.eligibilityReasons]) }),
-    ...(identity.evaluationStatus === undefined ? {} : { evaluationStatus: identity.evaluationStatus }),
+    ...(identity.planFingerprint === undefined
+      ? {}
+      : { planFingerprint: identity.planFingerprint }),
+    ...(identity.benchmarkCohort === undefined
+      ? {}
+      : { benchmarkCohort: identity.benchmarkCohort }),
+    ...(identity.eligibilityStatus === undefined
+      ? {}
+      : { eligibilityStatus: identity.eligibilityStatus }),
+    ...(identity.eligibilityReasons === undefined
+      ? {}
+      : { eligibilityReasons: Object.freeze([...identity.eligibilityReasons]) }),
+    ...(identity.evaluationStatus === undefined
+      ? {}
+      : { evaluationStatus: identity.evaluationStatus }),
   } as const;
   return Object.freeze({
     schemaVersion: replaySessionSchemaVersion,
@@ -69,7 +81,11 @@ export function projectReplaySession(
   });
 }
 
-function projectFrame(event: TelemetryEvent, frameIndex: number, startTimestampUs: string): TrajectoryFrame {
+function projectFrame(
+  event: TelemetryEvent,
+  frameIndex: number,
+  startTimestampUs: string,
+): TrajectoryFrame {
   const elapsed = BigInt(event.timestampUs) - BigInt(startTimestampUs);
   if (elapsed > BigInt(Number.MAX_SAFE_INTEGER)) throw new ReplayEvidenceInvalidError();
   const projection = projectEvent(event);
@@ -94,21 +110,40 @@ function projectEvent(event: TelemetryEvent): {
   readonly details: Partial<TrajectoryFrame>;
 } {
   const payload = event.payload;
-  if (event.type === "run:start") return { eventType: "session_start", summary: "Execution started", details: {} };
-  if (event.type === "run:finish") return {
-    eventType: "session_end",
-    summary: `Execution ${mapExecutionStatus(payload.terminationReason as string)}`,
-    details: { totalCostUSD: payload.totalCostUSD as number },
-  };
-  if (event.type === "turn:start") return { eventType: "turn_start", summary: `Turn ${payload.turnIndex as number} started`, details: {} };
-  if (event.type === "turn:finish") return { eventType: "turn_end", summary: `Turn ${payload.turnIndex as number} finished`, details: {} };
-  if (event.type === "turn:error") return { eventType: "error", summary: `Turn ${payload.turnIndex as number} error`, details: {} };
+  if (event.type === "run:start")
+    return { eventType: "session_start", summary: "Execution started", details: {} };
+  if (event.type === "run:finish")
+    return {
+      eventType: "session_end",
+      summary: `Execution ${mapExecutionStatus(payload.terminationReason as string)}`,
+      details: { totalCostUSD: payload.totalCostUSD as number },
+    };
+  if (event.type === "turn:start")
+    return {
+      eventType: "turn_start",
+      summary: `Turn ${payload.turnIndex as number} started`,
+      details: {},
+    };
+  if (event.type === "turn:finish")
+    return {
+      eventType: "turn_end",
+      summary: `Turn ${payload.turnIndex as number} finished`,
+      details: {},
+    };
+  if (event.type === "turn:error")
+    return {
+      eventType: "error",
+      summary: `Turn ${payload.turnIndex as number} error`,
+      details: {},
+    };
   if (event.type === "tool:dispatch") return projectToolDispatch(event);
   if (event.type === "tool:finish") return projectToolFinish(event);
-  if (event.type === "TOOL_CALL_STARTED") return projectCommand(event, "command_start", "Command started");
+  if (event.type === "TOOL_CALL_STARTED")
+    return projectCommand(event, "command_start", "Command started");
   if (event.type === "TOOL_STDOUT_CHUNK") return projectCommandChunk(event, "stdout");
   if (event.type === "TOOL_STDERR_CHUNK") return projectCommandChunk(event, "stderr");
-  if (event.type === "TOOL_CALL_COMPLETED") return projectCommand(event, "command_end", "Command completed");
+  if (event.type === "TOOL_CALL_COMPLETED")
+    return projectCommand(event, "command_end", "Command completed");
   if (event.type === "RESOURCE_SAMPLE") return projectResourceSample(event);
   if (event.type === "GIT_DIFF_CAPTURED") return projectGitDiff(event);
   return { eventType: "generic", summary: `Persisted event: ${event.type}`, details: {} };
@@ -122,7 +157,11 @@ function projectToolDispatch(event: TelemetryEvent) {
     inputPayload: payload.arguments as Readonly<Record<string, unknown>>,
     timestampUs: event.timestampUs,
   };
-  return { eventType: "tool_call" as const, summary: `Tool dispatched: ${toolCall.toolName}`, details: { toolCall } };
+  return {
+    eventType: "tool_call" as const,
+    summary: `Tool dispatched: ${toolCall.toolName}`,
+    details: { toolCall },
+  };
 }
 
 function projectToolFinish(event: TelemetryEvent) {
@@ -135,16 +174,26 @@ function projectToolFinish(event: TelemetryEvent) {
     isError: payload.isError as boolean,
     ...(payload.exitCode === undefined ? {} : { exitCode: payload.exitCode as number }),
   };
-  return { eventType: "tool_result" as const, summary: `Tool finished: ${toolCall.toolName}`, details: { toolCall } };
+  return {
+    eventType: "tool_result" as const,
+    summary: `Tool finished: ${toolCall.toolName}`,
+    details: { toolCall },
+  };
 }
 
-function projectCommand(event: TelemetryEvent, eventType: "command_start" | "command_end", summary: string) {
+function projectCommand(
+  event: TelemetryEvent,
+  eventType: "command_start" | "command_end",
+  summary: string,
+) {
   const payload = event.payload;
   const command: CommandEvent = {
     commandId: payload.commandId as string,
     ...(payload.durationMs === undefined ? {} : { durationMs: payload.durationMs as number }),
     ...(payload.exitCode === undefined ? {} : { exitCode: payload.exitCode as number }),
-    ...(payload.output_truncated === undefined ? {} : { outputTruncated: payload.output_truncated as boolean }),
+    ...(payload.output_truncated === undefined
+      ? {}
+      : { outputTruncated: payload.output_truncated as boolean }),
   };
   return { eventType, summary, details: { command } };
 }
@@ -157,7 +206,11 @@ function projectCommandChunk(event: TelemetryEvent, stream: "stdout" | "stderr")
     chunk: payload.chunk as string,
     outputTruncated: payload.output_truncated as boolean,
   };
-  return { eventType: "command_stream" as const, summary: `Command ${stream} chunk`, details: { command } };
+  return {
+    eventType: "command_stream" as const,
+    summary: `Command ${stream} chunk`,
+    details: { command },
+  };
 }
 
 function projectResourceSample(event: TelemetryEvent) {
@@ -174,7 +227,11 @@ function projectResourceSample(event: TelemetryEvent) {
     networkTxKb: bytesToKilobytes(sample.networkTxBytes as number),
     activePids: sample.activePids as number,
   };
-  return { eventType: "resource_sample" as const, summary: "Resource sample recorded", details: { telemetry } };
+  return {
+    eventType: "resource_sample" as const,
+    summary: "Resource sample recorded",
+    details: { telemetry },
+  };
 }
 
 function projectGitDiff(event: TelemetryEvent) {
@@ -186,7 +243,10 @@ function projectGitDiff(event: TelemetryEvent) {
   };
 }
 
-function assertExpectedIdentity(events: readonly TelemetryEvent[], identity: ReplayEvidenceIdentity): void {
+function assertExpectedIdentity(
+  events: readonly TelemetryEvent[],
+  identity: ReplayEvidenceIdentity,
+): void {
   const first = requireEvent(events[0]);
   const last = requireEvent(events[events.length - 1]);
   const start = first.payload;
@@ -196,7 +256,8 @@ function assertExpectedIdentity(events: readonly TelemetryEvent[], identity: Rep
   requireEqual(identity.modelId, start.modelId);
   if (identity.skillId !== undefined) {
     const skills = start.skillIds as readonly string[];
-    if (skills.length !== 1 || skills[0] !== identity.skillId) throw new ReplayEvidenceInvalidError();
+    if (skills.length !== 1 || skills[0] !== identity.skillId)
+      throw new ReplayEvidenceInvalidError();
   }
   requireEqual(identity.terminationReason, finish.terminationReason);
   requireEqual(identity.status, mapExecutionStatus(finish.terminationReason as string));
@@ -213,7 +274,9 @@ function mapExecutionStatus(reason: string): ReplayExecutionStatus {
 }
 
 function countToolDispatches(events: readonly TelemetryEvent[]): number {
-  return events.filter((event) => event.type === "tool:dispatch" || event.type === "TOOL_CALL_STARTED").length;
+  return events.filter(
+    (event) => event.type === "tool:dispatch" || event.type === "TOOL_CALL_STARTED",
+  ).length;
 }
 
 function optionalTurnIndex(value: unknown): { readonly turnIndex?: number } {
@@ -238,5 +301,6 @@ function requireEqual(expected: unknown, actual: unknown): void {
 }
 
 function requireRoundedEqual(expected: number | undefined, actual: number, decimals: number): void {
-  if (expected !== undefined && expected !== Number(actual.toFixed(decimals))) throw new ReplayEvidenceInvalidError();
+  if (expected !== undefined && expected !== Number(actual.toFixed(decimals)))
+    throw new ReplayEvidenceInvalidError();
 }

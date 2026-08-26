@@ -1,55 +1,25 @@
 import type {
-  AnsiColorValue, AnsiStyle, BarChartModel, CanvasCell, CanvasDimensions,
-  CanvasFrame, CanvasStreamerOptions, CellDelta, FrameCompressionFormat,
-  FrameDelta, FrameStats, HistogramChartModel, HudOverlayConfig, HudSnapshot,
-  RgbColor, SparklineChartModel,
+  AnsiStyle,
+  BarChartModel,
+  CanvasCell,
+  CanvasDimensions,
+  CanvasFrame,
+  CanvasStreamerOptions,
+  CellDelta,
+  FrameCompressionFormat,
+  FrameDelta,
+  FrameStats,
+  HistogramChartModel,
+  HudOverlayConfig,
+  HudSnapshot,
+  SparklineChartModel,
 } from "./types.js";
+import { styleToAnsi } from "./canvas-ansi.js";
 
 const DEFAULT_COLS = 80;
 const DEFAULT_ROWS = 24;
 const DEFAULT_FPS = 30;
 const SPARKLINE_BLOCKS = [" ", "▂", "▃", "▄", "▅", "▆", "▇", "█"] as const;
-
-function isRgbColor(color: AnsiColorValue): color is RgbColor {
-  if (typeof color !== "object") return false;
-  if (color === null) return false;
-  return "r" in color && "g" in color && "b" in color;
-}
-
-function colorToAnsiFg(color?: AnsiColorValue): string {
-  if (color === undefined) return "";
-  if (color === null) return "";
-  if (typeof color === "string") return color;
-  if (typeof color === "number") return `\x1b[38;5;${color}m`;
-  if (isRgbColor(color)) return `\x1b[38;2;${color.r};${color.g};${color.b}m`;
-  return "";
-}
-
-function colorToAnsiBg(color?: AnsiColorValue): string {
-  if (color === undefined) return "";
-  if (color === null) return "";
-  if (typeof color === "string") return color;
-  if (typeof color === "number") return `\x1b[48;5;${color}m`;
-  if (isRgbColor(color)) return `\x1b[48;2;${color.r};${color.g};${color.b}m`;
-  return "";
-}
-
-function styleToAnsi(style?: AnsiStyle): string {
-  if (style === undefined) return "";
-  if (style === null) return "";
-  let out = "";
-  if (style.bold) out += "\x1b[1m";
-  if (style.dim) out += "\x1b[2m";
-  if (style.italic) out += "\x1b[3m";
-  if (style.underline) out += "\x1b[4m";
-  if (style.blink) out += "\x1b[5m";
-  if (style.inverse) out += "\x1b[7m";
-  if (style.hidden) out += "\x1b[8m";
-  if (style.strikethrough) out += "\x1b[9m";
-  if (style.foregroundColor !== undefined) out += colorToAnsiFg(style.foregroundColor);
-  if (style.backgroundColor !== undefined) out += colorToAnsiBg(style.backgroundColor);
-  return out;
-}
 
 function computeFnv1a(str: string): string {
   let hash = 0x811c9dc5;
@@ -89,16 +59,23 @@ export class CanvasStreamer {
       this.targetFps = DEFAULT_FPS;
     }
 
-    this.compressionFormat = options !== undefined && options.compression !== undefined ? options.compression : "ansi-delta";
+    this.compressionFormat =
+      options !== undefined && options.compression !== undefined
+        ? options.compression
+        : "ansi-delta";
     this.hudConfig = {
       enabled: hud !== undefined && hud.enabled !== undefined ? hud.enabled : false,
       showFps: hud !== undefined && hud.showFps !== undefined ? hud.showFps : true,
       showLatency: hud !== undefined && hud.showLatency !== undefined ? hud.showLatency : true,
-      showResourceUsage: hud !== undefined && hud.showResourceUsage !== undefined ? hud.showResourceUsage : true,
-      showTimestamp: hud !== undefined && hud.showTimestamp !== undefined ? hud.showTimestamp : true,
-      showContainerId: hud !== undefined && hud.showContainerId !== undefined ? hud.showContainerId : true,
+      showResourceUsage:
+        hud !== undefined && hud.showResourceUsage !== undefined ? hud.showResourceUsage : true,
+      showTimestamp:
+        hud !== undefined && hud.showTimestamp !== undefined ? hud.showTimestamp : true,
+      showContainerId:
+        hud !== undefined && hud.showContainerId !== undefined ? hud.showContainerId : true,
       showTitle: hud !== undefined && hud.showTitle !== undefined ? hud.showTitle : true,
-      title: hud !== undefined && hud.title !== undefined ? hud.title : "Skill Benchmark Live Canvas",
+      title:
+        hud !== undefined && hud.title !== undefined ? hud.title : "Skill Benchmark Live Canvas",
       position: hud !== undefined && hud.position !== undefined ? hud.position : "top-right",
       customBadges: hud !== undefined && hud.customBadges !== undefined ? hud.customBadges : [],
     };
@@ -165,7 +142,14 @@ export class CanvasStreamer {
     }
   }
 
-  public drawBox(x: number, y: number, width: number, height: number, title?: string, style: AnsiStyle = {}): void {
+  public drawBox(
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    title?: string,
+    style: AnsiStyle = {},
+  ): void {
     if (width < 2) return;
     if (height < 2) return;
     const right = Math.min(x + width - 1, this.cols - 1);
@@ -263,7 +247,11 @@ export class CanvasStreamer {
     for (const badge of snapshot.badges) hudItems.push(`${badge.label}:${badge.value}`);
     const hudText = `[ ${hudItems.join(" | ")} ]`;
     const hudX = Math.max(0, this.cols - hudText.length - 1);
-    this.drawText(hudX, 0, hudText, { bold: true, foregroundColor: "\x1b[33m", backgroundColor: "\x1b[40m" });
+    this.drawText(hudX, 0, hudText, {
+      bold: true,
+      foregroundColor: "\x1b[33m",
+      backgroundColor: "\x1b[40m",
+    });
   }
 
   public renderToString(): string {
@@ -354,7 +342,7 @@ export class CanvasStreamer {
       dirtyCellCount: delta.changedCells.length,
       totalBytes: compressedBytes,
     };
-    const finalKeyframe = isKeyframe ? true : (this.frameSequence === 1);
+    const finalKeyframe = isKeyframe ? true : this.frameSequence === 1;
 
     return {
       frameId: this.frameSequence,

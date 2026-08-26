@@ -17,7 +17,7 @@
   },
   "limits": {
     "maxTurns": 10,
-    "maxCostUSD": 0.50,
+    "maxCostUSD": 0.5,
     "maxWallClockTimeMs": 180000
   },
   "evaluation": {

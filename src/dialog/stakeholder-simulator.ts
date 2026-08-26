@@ -26,7 +26,8 @@ export class StakeholderSimulator {
 
   constructor(config: StakeholderSimulatorConfig) {
     this.script = config.script;
-    this.conversationId = config.conversationId ?? `dialog-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+    this.conversationId =
+      config.conversationId ?? `dialog-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
     this.strictMode = config.strictMode ?? true;
     this.startTime = Date.now();
 
@@ -47,7 +48,7 @@ export class StakeholderSimulator {
 
     const initialContent = this.formatPersonaResponse(
       this.script.initialPrompt,
-      this.script.persona.tone
+      this.script.persona.tone,
     );
 
     const initialMessage: DialogMessage = {
@@ -90,7 +91,12 @@ export class StakeholderSimulator {
     if (turnConfig) {
       matchedResponse = this.findMatchingTrigger(agentMessageText, turnConfig.triggerResponses);
 
-      if (!matchedResponse && turnConfig.injectPushbackIfNoQuestion && !isQuestion && triggeredTopics.length === 0) {
+      if (
+        !matchedResponse &&
+        turnConfig.injectPushbackIfNoQuestion &&
+        !isQuestion &&
+        triggeredTopics.length === 0
+      ) {
         pushbackTriggered = true;
       }
     }
@@ -109,7 +115,10 @@ export class StakeholderSimulator {
       }
       if (matchedResponse.revealConstraintIndices) {
         for (const idx of matchedResponse.revealConstraintIndices) {
-          if (!this.revealedConstraintIndices.has(idx) && this.script.persona.hiddenConstraints[idx]) {
+          if (
+            !this.revealedConstraintIndices.has(idx) &&
+            this.script.persona.hiddenConstraints[idx]
+          ) {
             this.revealedConstraintIndices.add(idx);
             newlyRevealedConstraints.push(this.script.persona.hiddenConstraints[idx]!);
           }
@@ -126,15 +135,24 @@ export class StakeholderSimulator {
 
     let responseText = "";
     if (pushbackTriggered && turnConfig?.pushbackMessage) {
-      responseText = this.formatPersonaResponse(turnConfig.pushbackMessage, this.script.persona.tone);
+      responseText = this.formatPersonaResponse(
+        turnConfig.pushbackMessage,
+        this.script.persona.tone,
+      );
     } else if (matchedResponse) {
-      responseText = this.formatPersonaResponse(matchedResponse.responseText, matchedResponse.tone ?? this.script.persona.tone);
+      responseText = this.formatPersonaResponse(
+        matchedResponse.responseText,
+        matchedResponse.tone ?? this.script.persona.tone,
+      );
     } else if (turnConfig) {
-      responseText = this.formatPersonaResponse(turnConfig.defaultResponse, this.script.persona.tone);
+      responseText = this.formatPersonaResponse(
+        turnConfig.defaultResponse,
+        this.script.persona.tone,
+      );
     } else {
       responseText = this.formatPersonaResponse(
         this.generateFallbackResponse(triggeredTopics, isQuestion),
-        this.script.persona.tone
+        this.script.persona.tone,
       );
     }
 
@@ -202,9 +220,9 @@ export class StakeholderSimulator {
   }
 
   public getRevealedConstraints(): readonly string[] {
-    return Array.from(this.revealedConstraintIndices).map(
-      (idx) => this.script.persona.hiddenConstraints[idx] ?? ""
-    ).filter(Boolean);
+    return Array.from(this.revealedConstraintIndices)
+      .map((idx) => this.script.persona.hiddenConstraints[idx] ?? "")
+      .filter(Boolean);
   }
 
   public isCompleted(): boolean {
@@ -233,12 +251,17 @@ export class StakeholderSimulator {
     return questionStarters.some((starter) => lower.includes(starter));
   }
 
-  private evaluateClarificationTopics(text: string, currentTurn: number): readonly ClarificationTopic[] {
+  private evaluateClarificationTopics(
+    text: string,
+    currentTurn: number,
+  ): readonly ClarificationTopic[] {
     const lower = text.toLowerCase();
     const triggered: ClarificationTopic[] = [];
 
     for (const topic of this.script.clarificationTopics) {
-      const matched = topic.triggerKeywords.some((keyword) => lower.includes(keyword.toLowerCase()));
+      const matched = topic.triggerKeywords.some((keyword) =>
+        lower.includes(keyword.toLowerCase()),
+      );
 
       if (matched) {
         triggered.push(topic);
@@ -265,7 +288,7 @@ export class StakeholderSimulator {
 
   private findMatchingTrigger(
     text: string,
-    triggerResponses: readonly ScriptTriggerResponse[]
+    triggerResponses: readonly ScriptTriggerResponse[],
   ): ScriptTriggerResponse | undefined {
     const lower = text.toLowerCase();
 
@@ -331,7 +354,7 @@ export class StakeholderSimulator {
 
   private generateFallbackResponse(
     triggeredTopics: readonly ClarificationTopic[],
-    isQuestion: boolean
+    isQuestion: boolean,
   ): string {
     if (triggeredTopics.length > 0) {
       return "Thanks for asking about that specific constraint. Let me clarify the domain details.";
@@ -343,7 +366,8 @@ export class StakeholderSimulator {
   }
 }
 
-export function createStakeholderSimulator(config: StakeholderSimulatorConfig): StakeholderSimulator {
+export function createStakeholderSimulator(
+  config: StakeholderSimulatorConfig,
+): StakeholderSimulator {
   return new StakeholderSimulator(config);
 }
-

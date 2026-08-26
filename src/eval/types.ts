@@ -25,9 +25,7 @@ export interface DeterministicCheck {
   readonly maxInsertions?: number;
   readonly maxDeletions?: number;
   readonly astPattern?: string;
-  readonly customValidator?: (
-    workspacePath: string
-  ) => Promise<{
+  readonly customValidator?: (workspacePath: string) => Promise<{
     readonly passed: boolean;
     readonly details?: string;
     readonly score?: number;

@@ -23,17 +23,18 @@ function requireScenarioId(scenarioId: string): void {
   }
 }
 
-export function resolveDisposableWorkspacePath(
-  rootPath: string,
-  relativePath: string
-): string {
+export function resolveDisposableWorkspacePath(rootPath: string, relativePath: string): string {
   if (relativePath.trim().length === 0) {
     throw new TypeError("Fixture path must not be empty");
   }
   const resolvedRootPath = resolve(rootPath);
   const resolvedPath = resolve(resolvedRootPath, relativePath);
   const relativePathFromRoot = relative(resolvedRootPath, resolvedPath);
-  if (relativePathFromRoot === "" || relativePathFromRoot === ".." || relativePathFromRoot.startsWith("../")) {
+  if (
+    relativePathFromRoot === "" ||
+    relativePathFromRoot === ".." ||
+    relativePathFromRoot.startsWith("../")
+  ) {
     throw new Error(`Path traversal denied: '${relativePath}' escapes disposable workspace`);
   }
   return resolvedPath;
@@ -41,7 +42,7 @@ export function resolveDisposableWorkspacePath(
 
 function resolveFixturePaths(
   rootPath: string,
-  fixtures: Readonly<Record<string, string>>
+  fixtures: Readonly<Record<string, string>>,
 ): ReadonlyArray<FixtureWrite> {
   return Object.entries(fixtures).map(([relativePath, content]) => {
     if (typeof content !== "string") {
@@ -90,10 +91,7 @@ async function ensureSafeDirectory(path: string, recursive: boolean = false): Pr
   requireSafeDirectory(path, stats);
 }
 
-async function ensureSafeWorkspaceRoot(
-  outputRoot: string,
-  runId: string
-): Promise<string> {
+async function ensureSafeWorkspaceRoot(outputRoot: string, runId: string): Promise<string> {
   const resolvedOutputRoot = resolve(outputRoot);
   await ensureSafeDirectory(resolvedOutputRoot, true);
   const runsDirectory = resolve(resolvedOutputRoot, "runs");
@@ -107,7 +105,7 @@ async function ensureSafeWorkspaceRoot(
 
 async function ensureSafeFixtureParentDirectories(
   rootPath: string,
-  relativePath: string
+  relativePath: string,
 ): Promise<void> {
   const pathSegments = relativePath.split(/[\\/]+/).slice(0, -1);
   let directoryPath = rootPath;
@@ -125,7 +123,7 @@ async function ensureSafeFixtureDestination(path: string): Promise<void> {
 }
 
 export async function createDisposableWorkspace(
-  input: DisposableWorkspaceInput
+  input: DisposableWorkspaceInput,
 ): Promise<DisposableWorkspace> {
   requireScenarioId(input.scenarioId);
   const artifactLayout = createRunArtifactLayout(input.outputRoot, input.runId);

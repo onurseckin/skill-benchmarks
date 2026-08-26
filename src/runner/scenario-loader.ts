@@ -49,19 +49,23 @@ export class ScenarioLoader {
 
   loadAllScenarios(): readonly ScenarioDefinition[] {
     const catalog = this.loadCatalog();
-    return Object.freeze(catalog.scenarios.map((entry) => {
-      const scenario = this.cache.get(entry.id);
-      if (scenario === undefined) throw new ScenarioCatalogError("scenario_invalid");
-      return scenario;
-    }));
+    return Object.freeze(
+      catalog.scenarios.map((entry) => {
+        const scenario = this.cache.get(entry.id);
+        if (scenario === undefined) throw new ScenarioCatalogError("scenario_invalid");
+        return scenario;
+      }),
+    );
   }
 
   queryScenarios(filter: ScenarioQueryFilter): readonly ScenarioDefinition[] {
     return this.loadAllScenarios().filter((scenario) => {
       if (filter.id !== undefined && scenario.id !== filter.id) return false;
       if (filter.category !== undefined && scenario.category !== filter.category) return false;
-      if (filter.difficulty !== undefined && scenario.difficulty !== filter.difficulty) return false;
-      if (filter.targetSkill !== undefined && scenario.targetSkill !== filter.targetSkill) return false;
+      if (filter.difficulty !== undefined && scenario.difficulty !== filter.difficulty)
+        return false;
+      if (filter.targetSkill !== undefined && scenario.targetSkill !== filter.targetSkill)
+        return false;
       return true;
     });
   }
@@ -70,7 +74,9 @@ export class ScenarioLoader {
     if (this.catalog !== undefined) return this.catalog;
     let parsed: unknown;
     try {
-      parsed = JSON.parse(readFileSync(resolve(this.scenariosDir, "catalog.json"), "utf8")) as unknown;
+      parsed = JSON.parse(
+        readFileSync(resolve(this.scenariosDir, "catalog.json"), "utf8"),
+      ) as unknown;
     } catch {
       throw new ScenarioCatalogError("catalog_unavailable");
     }
@@ -88,8 +94,10 @@ export class ScenarioLoader {
       this.cache.set(entry.id, scenario);
     }
     const actualCategories = new Set(catalog.scenarios.map((entry) => entry.category));
-    if (catalog.categories.length !== actualCategories.size
-      || catalog.categories.some((category) => !actualCategories.has(category))) {
+    if (
+      catalog.categories.length !== actualCategories.size ||
+      catalog.categories.some((category) => !actualCategories.has(category))
+    ) {
       throw new ScenarioCatalogError("catalog_invalid");
     }
     this.catalog = Object.freeze({
@@ -101,12 +109,18 @@ export class ScenarioLoader {
   }
 
   private validateCatalogSchema(data: unknown): ScenarioCatalog {
-    if (typeof data !== "object" || data === null) throw new ScenarioCatalogError("catalog_invalid");
+    if (typeof data !== "object" || data === null)
+      throw new ScenarioCatalogError("catalog_invalid");
     const record = data as Record<string, unknown>;
-    if (typeof record.version !== "string" || typeof record.generatedAt !== "string"
-      || !Number.isSafeInteger(record.totalScenarios) || !Array.isArray(record.categories)
-      || record.categories.some((value) => typeof value !== "string" || value.trim().length === 0)
-      || !Array.isArray(record.scenarios) || record.totalScenarios !== record.scenarios.length) {
+    if (
+      typeof record.version !== "string" ||
+      typeof record.generatedAt !== "string" ||
+      !Number.isSafeInteger(record.totalScenarios) ||
+      !Array.isArray(record.categories) ||
+      record.categories.some((value) => typeof value !== "string" || value.trim().length === 0) ||
+      !Array.isArray(record.scenarios) ||
+      record.totalScenarios !== record.scenarios.length
+    ) {
       throw new ScenarioCatalogError("catalog_invalid");
     }
     for (const value of record.scenarios) this.validateCatalogEntry(value);
@@ -114,7 +128,8 @@ export class ScenarioLoader {
   }
 
   private validateCatalogEntry(data: unknown): asserts data is ScenarioCatalogEntry {
-    if (typeof data !== "object" || data === null) throw new ScenarioCatalogError("catalog_invalid");
+    if (typeof data !== "object" || data === null)
+      throw new ScenarioCatalogError("catalog_invalid");
     const record = data as Record<string, unknown>;
     for (const field of ["id", "name", "category", "path", "description"] as const) {
       if (typeof record[field] !== "string" || record[field].trim().length === 0) {
@@ -136,8 +151,13 @@ export class ScenarioLoader {
       : normalizedPath;
     const scenarioPath = resolve(this.scenariosDir, relativePath);
     const pathFromRoot = relative(this.scenariosDir, scenarioPath);
-    if (relativePath.length === 0 || isAbsolute(relativePath) || pathFromRoot === ".."
-      || pathFromRoot.startsWith(`..${sep}`) || isAbsolute(pathFromRoot)) {
+    if (
+      relativePath.length === 0 ||
+      isAbsolute(relativePath) ||
+      pathFromRoot === ".." ||
+      pathFromRoot.startsWith(`..${sep}`) ||
+      isAbsolute(pathFromRoot)
+    ) {
       throw new ScenarioCatalogError("scenario_invalid");
     }
     try {
@@ -159,22 +179,36 @@ export class ScenarioLoader {
   }
 
   private validateCatalogIdentity(entry: ScenarioCatalogEntry, scenario: ScenarioDefinition): void {
-    if (entry.id !== scenario.id || entry.category !== scenario.category
-      || (entry.difficulty !== undefined && entry.difficulty !== scenario.difficulty)
-      || (entry.targetSkill !== undefined && entry.targetSkill !== scenario.targetSkill)) {
+    if (
+      entry.id !== scenario.id ||
+      entry.category !== scenario.category ||
+      (entry.difficulty !== undefined && entry.difficulty !== scenario.difficulty) ||
+      (entry.targetSkill !== undefined && entry.targetSkill !== scenario.targetSkill)
+    ) {
       throw new ScenarioCatalogError("scenario_invalid");
     }
   }
 
   private validateScenarioSchema(data: unknown): ScenarioDefinition {
-    if (typeof data !== "object" || data === null) throw new ScenarioCatalogError("scenario_invalid");
+    if (typeof data !== "object" || data === null)
+      throw new ScenarioCatalogError("scenario_invalid");
     const record = data as Record<string, unknown>;
-    for (const field of ["id", "name", "category", "difficulty", "description", "instructions"] as const) {
+    for (const field of [
+      "id",
+      "name",
+      "category",
+      "difficulty",
+      "description",
+      "instructions",
+    ] as const) {
       if (typeof record[field] !== "string" || record[field].trim().length === 0) {
         throw new ScenarioCatalogError("scenario_invalid");
       }
     }
-    if (record.targetSkill !== undefined && (typeof record.targetSkill !== "string" || record.targetSkill.trim().length === 0)) {
+    if (
+      record.targetSkill !== undefined &&
+      (typeof record.targetSkill !== "string" || record.targetSkill.trim().length === 0)
+    ) {
       throw new ScenarioCatalogError("scenario_invalid");
     }
     return data as ScenarioDefinition;

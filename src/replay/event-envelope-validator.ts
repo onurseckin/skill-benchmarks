@@ -24,9 +24,12 @@ export function validateCanonicalEvents(values: readonly unknown[]): readonly Te
   const events = values.map((value) => validateEnvelope(value));
   const first = events[0];
   const last = events[events.length - 1];
-  if (first?.type !== "run:start" || last?.type !== "run:finish") throw new ReplayEvidenceInvalidError();
-  if (events.filter((event) => event.type === "run:start").length !== 1) throw new ReplayEvidenceInvalidError();
-  if (events.filter((event) => event.type === "run:finish").length !== 1) throw new ReplayEvidenceInvalidError();
+  if (first?.type !== "run:start" || last?.type !== "run:finish")
+    throw new ReplayEvidenceInvalidError();
+  if (events.filter((event) => event.type === "run:start").length !== 1)
+    throw new ReplayEvidenceInvalidError();
+  if (events.filter((event) => event.type === "run:finish").length !== 1)
+    throw new ReplayEvidenceInvalidError();
   const runId = first.runId;
   let previousTimestamp = 0n;
   for (let index = 0; index < events.length; index += 1) {
@@ -73,7 +76,8 @@ function validateKnownPayload(event: TelemetryEvent): void {
   else if (event.type === "tool:dispatch") validateToolDispatch(payload);
   else if (event.type === "tool:finish") validateToolFinish(payload);
   else if (event.type === "TOOL_CALL_STARTED") validateCommandStart(payload);
-  else if (event.type === "TOOL_STDOUT_CHUNK" || event.type === "TOOL_STDERR_CHUNK") validateCommandChunk(payload);
+  else if (event.type === "TOOL_STDOUT_CHUNK" || event.type === "TOOL_STDERR_CHUNK")
+    validateCommandChunk(payload);
   else if (event.type === "TOOL_CALL_COMPLETED") validateCommandComplete(payload);
   else if (event.type === "RESOURCE_SAMPLE") validateResourceSample(payload);
   else if (event.type === "GIT_DIFF_CAPTURED") validateGitDiff(payload);
@@ -81,11 +85,12 @@ function validateKnownPayload(event: TelemetryEvent): void {
 
 function validateRunStart(runId: string, payload: Readonly<Record<string, unknown>>): void {
   if (
-    requireNonemptyString(payload.runId) !== runId
-    || requireNonemptyString(payload.scenarioId).length === 0
-    || requireNonemptyString(payload.modelId).length === 0
-    || !isNonemptyStringArray(payload.skillIds)
-  ) throw new ReplayEvidenceInvalidError();
+    requireNonemptyString(payload.runId) !== runId ||
+    requireNonemptyString(payload.scenarioId).length === 0 ||
+    requireNonemptyString(payload.modelId).length === 0 ||
+    !isNonemptyStringArray(payload.skillIds)
+  )
+    throw new ReplayEvidenceInvalidError();
   requireRecord(payload.limits);
 }
 
@@ -146,7 +151,8 @@ function validateCommandChunk(payload: Readonly<Record<string, unknown>>): void 
   if (typeof payload.output_truncated !== "boolean") throw new ReplayEvidenceInvalidError();
   requireNonnegativeInteger(payload.bytesRecorded);
   requireNonnegativeInteger(payload.limitBytes);
-  if (payload.dropped !== undefined && typeof payload.dropped !== "boolean") throw new ReplayEvidenceInvalidError();
+  if (payload.dropped !== undefined && typeof payload.dropped !== "boolean")
+    throw new ReplayEvidenceInvalidError();
 }
 
 function validateCommandComplete(payload: Readonly<Record<string, unknown>>): void {
@@ -160,9 +166,19 @@ function validateCommandComplete(payload: Readonly<Record<string, unknown>>): vo
 function validateResourceSample(payload: Readonly<Record<string, unknown>>): void {
   const sample = requireRecord(payload.sample);
   const numericKeys = [
-    "timestampMs", "cpuPercent", "cpuUserUs", "cpuKernelUs", "memoryRssBytes",
-    "memoryCacheBytes", "memoryLimitBytes", "memoryPercent", "diskReadBytes",
-    "diskWriteBytes", "networkRxBytes", "networkTxBytes", "activePids",
+    "timestampMs",
+    "cpuPercent",
+    "cpuUserUs",
+    "cpuKernelUs",
+    "memoryRssBytes",
+    "memoryCacheBytes",
+    "memoryLimitBytes",
+    "memoryPercent",
+    "diskReadBytes",
+    "diskWriteBytes",
+    "networkRxBytes",
+    "networkTxBytes",
+    "activePids",
   ] as const;
   for (const key of numericKeys) requireNonnegativeNumber(sample[key]);
   requireNonnegativeInteger(sample.activePids);
@@ -173,7 +189,12 @@ function validateGitDiff(payload: Readonly<Record<string, unknown>>): void {
 }
 
 function requireRecord(value: unknown): Readonly<Record<string, unknown>> {
-  if (value === null || typeof value !== "object" || Array.isArray(value) || Object.getPrototypeOf(value) !== Object.prototype) {
+  if (
+    value === null ||
+    typeof value !== "object" ||
+    Array.isArray(value) ||
+    Object.getPrototypeOf(value) !== Object.prototype
+  ) {
     throw new ReplayEvidenceInvalidError();
   }
   return value as Readonly<Record<string, unknown>>;
@@ -197,7 +218,8 @@ function requirePositiveDecimal(value: unknown): string {
 }
 
 function requireInteger(value: unknown): number {
-  if (typeof value !== "number" || !Number.isSafeInteger(value)) throw new ReplayEvidenceInvalidError();
+  if (typeof value !== "number" || !Number.isSafeInteger(value))
+    throw new ReplayEvidenceInvalidError();
   return value;
 }
 
@@ -214,12 +236,17 @@ function requireNonnegativeInteger(value: unknown): number {
 }
 
 function requireNonnegativeNumber(value: unknown): number {
-  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) throw new ReplayEvidenceInvalidError();
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0)
+    throw new ReplayEvidenceInvalidError();
   return value;
 }
 
 function isNonemptyStringArray(value: unknown): value is readonly string[] {
-  return Array.isArray(value) && value.length > 0 && value.every((item) => typeof item === "string" && item.trim().length > 0);
+  return (
+    Array.isArray(value) &&
+    value.length > 0 &&
+    value.every((item) => typeof item === "string" && item.trim().length > 0)
+  );
 }
 
 function hasOnlyKeys(value: Readonly<Record<string, unknown>>, keys: readonly string[]): boolean {

@@ -1,6 +1,14 @@
 import { requireCondition } from "./assertions.js";
 
-const forbiddenClaimFragments = ["score", "actualcost", "rank", "winner", "champion", "significance", "regression"] as const;
+const forbiddenClaimFragments = [
+  "score",
+  "actualcost",
+  "rank",
+  "winner",
+  "champion",
+  "significance",
+  "regression",
+] as const;
 const forbiddenClaimValues = [
   "score",
   "compositescore",
@@ -25,23 +33,27 @@ function normalizeClaimText(value: string): string {
 function isForbiddenClaimKey(value: string): boolean {
   const normalized = normalizeClaimText(value);
   if (
-    forbiddenClaimFragments.some((fragment) => normalized.includes(fragment))
-    || /^(?:win|wins|winning|winner|winners)$/.test(normalized)
-    || normalized === "elo"
-    || normalized.includes("elorating")
-  ) return true;
+    forbiddenClaimFragments.some((fragment) => normalized.includes(fragment)) ||
+    /^(?:win|wins|winning|winner|winners)$/.test(normalized) ||
+    normalized === "elo" ||
+    normalized.includes("elorating")
+  )
+    return true;
   if (normalized === "requiredcheckspassed") return false;
-  return normalized === "pass"
-    || normalized === "passed"
-    || normalized.startsWith("pass")
-    || normalized.endsWith("passed")
-    || normalized.includes("passrate")
-    || normalized.includes("passedbenchmark")
-    || normalized.includes("benchmarkpass");
+  return (
+    normalized === "pass" ||
+    normalized === "passed" ||
+    normalized.startsWith("pass") ||
+    normalized.endsWith("passed") ||
+    normalized.includes("passrate") ||
+    normalized.includes("passedbenchmark") ||
+    normalized.includes("benchmarkpass")
+  );
 }
 
 function isForbiddenClaimValue(value: string): boolean {
-  const claimPhrase = /\b(?:composite[\s_-]*scores?|benchmark[\s_-]*(?:pass(?:es|ed)?|score(?:s|d)?|rank(?:s|ed|ing)?|win(?:s|ning|ners?)?)|pass(?:es|ed)?|score(?:s|d)?|rank(?:s|ed|ing)?|elo(?:[\s_-]*ratings?)?|win(?:s|ning|ners?)?|champions?|actual[\s_-]*costs?|significance|regressions?)\b/i;
+  const claimPhrase =
+    /\b(?:composite[\s_-]*scores?|benchmark[\s_-]*(?:pass(?:es|ed)?|score(?:s|d)?|rank(?:s|ed|ing)?|win(?:s|ning|ners?)?)|pass(?:es|ed)?|score(?:s|d)?|rank(?:s|ed|ing)?|elo(?:[\s_-]*ratings?)?|win(?:s|ning|ners?)?|champions?|actual[\s_-]*costs?|significance|regressions?)\b/i;
   if (claimPhrase.test(value)) return true;
   const normalized = normalizeClaimText(value);
   return forbiddenClaimValues.some((claim) => normalized === claim);

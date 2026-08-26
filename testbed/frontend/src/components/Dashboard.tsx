@@ -28,7 +28,7 @@ export function Dashboard(): ReactElement {
         ...item,
         value: Number((item.value + Math.random() * 5).toFixed(2)),
         timestamp: Date.now(),
-      }))
+      })),
     );
   };
 

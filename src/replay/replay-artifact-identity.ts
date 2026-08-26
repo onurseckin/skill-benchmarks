@@ -1,7 +1,12 @@
 import { ReplayEvidenceInvalidError } from "./errors.js";
 import type { ReplayEvidenceIdentity, ReplayExecutionStatus } from "./types.js";
 
-const terminalStatuses = new Set<ReplayExecutionStatus>(["completed", "failed", "timed_out", "aborted"]);
+const terminalStatuses = new Set<ReplayExecutionStatus>([
+  "completed",
+  "failed",
+  "timed_out",
+  "aborted",
+]);
 const benchmarkCohorts = new Set(["eligible", "validation", "operational"]);
 const eligibilityStatuses = new Set(["eligible", "ineligible", "unknown"]);
 const evaluationStatuses = new Set(["not_requested", "not_evaluated", "evaluated", "invalid"]);
@@ -9,16 +14,27 @@ const evaluationStatuses = new Set(["not_requested", "not_evaluated", "evaluated
 export function parseReplayArtifactIdentity(
   manifestContent: string,
   resultContent: string,
-  expected: ReplayEvidenceIdentity = {}
+  expected: ReplayEvidenceIdentity = {},
 ): ReplayEvidenceIdentity {
   const manifest = parseRecord(manifestContent);
   const result = parseRecord(resultContent);
   validateManifest(manifest);
   validateResult(result);
   const commonKeys = [
-    "runId", "sweepId", "cellId", "planFingerprint", "matrixOccurrenceIndex",
-    "scenarioId", "category", "skillId", "modelId", "providerId",
-    "executionMode", "simulated", "dryRun", "startedAt",
+    "runId",
+    "sweepId",
+    "cellId",
+    "planFingerprint",
+    "matrixOccurrenceIndex",
+    "scenarioId",
+    "category",
+    "skillId",
+    "modelId",
+    "providerId",
+    "executionMode",
+    "simulated",
+    "dryRun",
+    "startedAt",
   ] as const;
   for (const key of commonKeys) requireEqual(manifest[key], result[key]);
   requireExpected(expected.runId, manifest.runId);
@@ -75,7 +91,11 @@ export function parseReplayArtifactIdentity(
     benchmarkCohort: result.benchmarkCohort as "eligible" | "validation" | "operational",
     eligibilityStatus: eligibility.status as "eligible" | "ineligible" | "unknown",
     eligibilityReasons: Object.freeze([...(eligibility.reasons as string[])]),
-    evaluationStatus: evaluation.status as "not_requested" | "not_evaluated" | "evaluated" | "invalid",
+    evaluationStatus: evaluation.status as
+      | "not_requested"
+      | "not_evaluated"
+      | "evaluated"
+      | "invalid",
   };
 }
 
@@ -129,14 +149,18 @@ function requireIdentityFields(value: Readonly<Record<string, unknown>>): void {
   requireNonemptyString(value.skillId);
   requireNonemptyString(value.modelId);
   requireNonemptyString(value.providerId);
-  if (value.executionMode !== "fake" && value.executionMode !== "live") throw new ReplayEvidenceInvalidError();
+  if (value.executionMode !== "fake" && value.executionMode !== "live")
+    throw new ReplayEvidenceInvalidError();
   if (typeof value.simulated !== "boolean") throw new ReplayEvidenceInvalidError();
 }
 
 function readOperationalCost(value: unknown): number {
   const cost = requireRecord(value);
   const amountUSD = requireNonnegativeNumber(cost.amountUSD);
-  if (typeof cost.status !== "string" || !new Set(["simulated_zero", "unverified", "verified"]).has(cost.status)) {
+  if (
+    typeof cost.status !== "string" ||
+    !new Set(["simulated_zero", "unverified", "verified"]).has(cost.status)
+  ) {
     throw new ReplayEvidenceInvalidError();
   }
   return amountUSD;
@@ -152,24 +176,32 @@ function parseRecord(content: string): Readonly<Record<string, unknown>> {
 }
 
 function requireRecord(value: unknown): Readonly<Record<string, unknown>> {
-  if (value === null || typeof value !== "object" || Array.isArray(value) || Object.getPrototypeOf(value) !== Object.prototype) {
+  if (
+    value === null ||
+    typeof value !== "object" ||
+    Array.isArray(value) ||
+    Object.getPrototypeOf(value) !== Object.prototype
+  ) {
     throw new ReplayEvidenceInvalidError();
   }
   return value as Readonly<Record<string, unknown>>;
 }
 
 function requireNonemptyString(value: unknown): string {
-  if (typeof value !== "string" || value.trim().length === 0) throw new ReplayEvidenceInvalidError();
+  if (typeof value !== "string" || value.trim().length === 0)
+    throw new ReplayEvidenceInvalidError();
   return value;
 }
 
 function requireNonnegativeNumber(value: unknown): number {
-  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) throw new ReplayEvidenceInvalidError();
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0)
+    throw new ReplayEvidenceInvalidError();
   return value;
 }
 
 function requireNonnegativeInteger(value: unknown): number {
-  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) throw new ReplayEvidenceInvalidError();
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0)
+    throw new ReplayEvidenceInvalidError();
   return value;
 }
 
@@ -179,7 +211,11 @@ function requireExpected(expected: unknown, actual: unknown): void {
 
 function requireExpectedReasons(expected: readonly string[] | undefined, actual: unknown): void {
   if (expected === undefined) return;
-  if (!isStringArray(actual) || expected.length !== actual.length || expected.some((reason, index) => reason !== actual[index])) {
+  if (
+    !isStringArray(actual) ||
+    expected.length !== actual.length ||
+    expected.some((reason, index) => reason !== actual[index])
+  ) {
     throw new ReplayEvidenceInvalidError();
   }
 }

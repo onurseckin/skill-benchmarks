@@ -1,5 +1,9 @@
 import { createContentSecurityPolicyMeta } from "../shared/html-content-security.js";
-import { escapeHtmlAttribute, escapeHtmlText, serializeEmbeddedJson } from "../shared/html-escape.js";
+import {
+  escapeHtmlAttribute,
+  escapeHtmlText,
+  serializeEmbeddedJson,
+} from "../shared/html-escape.js";
 import {
   renderCostObservations,
   renderLatencyObservations,
@@ -24,7 +28,10 @@ const timestamp = new Intl.DateTimeFormat("en-US", {
 });
 const policyMarker = "<meta data-content-security-policy>";
 
-export function generateHtmlDashboard(snapshot: ReportSnapshot, metadata: DashboardMetadata = {}): string {
+export function generateHtmlDashboard(
+  snapshot: ReportSnapshot,
+  metadata: DashboardMetadata = {},
+): string {
   const title = escapeHtmlText(metadata.title ?? "Benchmark Evidence Dashboard");
   const hasEligibleEvidence = snapshot.eligibleRunCount > 0;
   const optionalClaims = hasEligibleEvidence ? renderOptionalClaims(snapshot) : "";
@@ -60,9 +67,10 @@ function renderCounts(snapshot: ReportSnapshot): string {
 
 function renderProvenance(snapshot: ReportSnapshot): string {
   const value = snapshot.provenance;
-  const reasons = value.eligibilityReasonCounts.length === 0
-    ? ""
-    : `<h3>Observed ineligibility reasons</h3><ul>${value.eligibilityReasonCounts.map((entry) => `<li>${escapeHtmlText(entry.reason)}: ${integer.format(entry.count)}</li>`).join("")}</ul>`;
+  const reasons =
+    value.eligibilityReasonCounts.length === 0
+      ? ""
+      : `<h3>Observed ineligibility reasons</h3><ul>${value.eligibilityReasonCounts.map((entry) => `<li>${escapeHtmlText(entry.reason)}: ${integer.format(entry.count)}</li>`).join("")}</ul>`;
   return `<section class="panel" aria-labelledby="provenance-heading"><h2 id="provenance-heading">EVIDENCE PROVENANCE</h2><dl><div><dt>LIVE</dt><dd>${integer.format(value.executionModeCounts.live)}</dd></div><div><dt>FAKE</dt><dd>${integer.format(value.executionModeCounts.fake)}</dd></div><div><dt>SIMULATED</dt><dd>${integer.format(value.simulatedRunCount)}</dd></div><div><dt>NON-SIMULATED</dt><dd>${integer.format(value.nonSimulatedRunCount)}</dd></div><div><dt>EVALUATED</dt><dd>${integer.format(value.evaluationStatusCounts.evaluated)}</dd></div><div><dt>NOT EVALUATED</dt><dd>${integer.format(value.evaluationStatusCounts.not_evaluated + value.evaluationStatusCounts.not_requested)}</dd></div></dl>${reasons}</section>`;
 }
 
@@ -100,15 +108,31 @@ function renderSortableHeading(key: string, label: string, active = false): stri
 }
 
 function renderSelect(key: string, label: string, values: readonly string[]): string {
-  const options = values.map((value) => `<option value="${escapeHtmlAttribute(value)}">${escapeHtmlText(value)}</option>`).join("");
+  const options = values
+    .map(
+      (value) => `<option value="${escapeHtmlAttribute(value)}">${escapeHtmlText(value)}</option>`,
+    )
+    .join("");
   return `<div class="field"><label for="filter-${key}">${label}</label><select id="filter-${key}" name="${key}" autocomplete="off" data-filter="${key}"><option value="">All observed</option>${options}</select></div>`;
 }
 
 function renderOptionalClaims(snapshot: ReportSnapshot): string {
-  const latency = snapshot.latencyPercentiles === undefined ? "" : renderLatencyObservations(snapshot.latencyPercentiles);
-  const trends = snapshot.trends === undefined || snapshot.trends.length === 0 ? "" : renderTrendObservations(snapshot.trends);
-  const velocity = snapshot.tokenVelocity === undefined || snapshot.tokenVelocity.length === 0 ? "" : renderVelocityObservations(snapshot.tokenVelocity);
-  const costs = snapshot.costEfficiency === undefined || snapshot.costEfficiency.length === 0 ? "" : renderCostObservations(snapshot.costEfficiency);
+  const latency =
+    snapshot.latencyPercentiles === undefined
+      ? ""
+      : renderLatencyObservations(snapshot.latencyPercentiles);
+  const trends =
+    snapshot.trends === undefined || snapshot.trends.length === 0
+      ? ""
+      : renderTrendObservations(snapshot.trends);
+  const velocity =
+    snapshot.tokenVelocity === undefined || snapshot.tokenVelocity.length === 0
+      ? ""
+      : renderVelocityObservations(snapshot.tokenVelocity);
+  const costs =
+    snapshot.costEfficiency === undefined || snapshot.costEfficiency.length === 0
+      ? ""
+      : renderCostObservations(snapshot.costEfficiency);
   return `${trends}${costs}${latency}${velocity}`;
 }
 
@@ -127,7 +151,9 @@ function renderTime(label: string, value: string): string {
 function renderActiveFilters(filter: ReportFilter): string {
   const entries = Object.entries(filter);
   if (entries.length === 0) return `<p class="muted">Cohort filter: all persisted records.</p>`;
-  const values = entries.map(([key, value]) => `${key}=${Array.isArray(value) ? value.join(",") : String(value)}`).join(" · ");
+  const values = entries
+    .map(([key, value]) => `${key}=${Array.isArray(value) ? value.join(",") : String(value)}`)
+    .join(" · ");
   return `<p class="muted">Cohort filter: ${escapeHtmlText(values)}</p>`;
 }
 

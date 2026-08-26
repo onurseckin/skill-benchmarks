@@ -48,7 +48,10 @@ export function requireFiniteNumber(value: unknown, code: string): number {
 export function requireCanonicalTimestamp(value: unknown, code: string): string {
   const timestamp = requireString(value, code);
   const milliseconds = Date.parse(timestamp);
-  requireCondition(Number.isFinite(milliseconds) && new Date(milliseconds).toISOString() === timestamp, code);
+  requireCondition(
+    Number.isFinite(milliseconds) && new Date(milliseconds).toISOString() === timestamp,
+    code,
+  );
   return timestamp;
 }
 
@@ -66,27 +69,51 @@ export function requireExactValue(actual: unknown, expected: unknown, code: stri
   requireCondition(Object.is(actual, expected), code);
 }
 
-export function requireExactKeys(record: JsonRecord, expected: readonly string[], code: string): void {
+export function requireExactKeys(
+  record: JsonRecord,
+  expected: readonly string[],
+  code: string,
+): void {
   const actual = Object.keys(record).sort();
   const sortedExpected = [...expected].sort();
-  requireCondition(actual.length === sortedExpected.length && actual.every((key, index) => key === sortedExpected[index]), code);
+  requireCondition(
+    actual.length === sortedExpected.length &&
+      actual.every((key, index) => key === sortedExpected[index]),
+    code,
+  );
 }
 
 export function requireStringArray(value: unknown, code: string): readonly string[] {
   const entries = requireArray(value, code);
-  requireCondition(entries.every((entry) => typeof entry === "string" && entry.length > 0), code);
+  requireCondition(
+    entries.every((entry) => typeof entry === "string" && entry.length > 0),
+    code,
+  );
   return entries as readonly string[];
 }
 
-export function requireEqualStringArrays(actual: unknown, expected: readonly string[], code: string): void {
+export function requireEqualStringArrays(
+  actual: unknown,
+  expected: readonly string[],
+  code: string,
+): void {
   const values = requireStringArray(actual, code);
-  requireCondition(values.length === expected.length && values.every((value, index) => value === expected[index]), code);
+  requireCondition(
+    values.length === expected.length && values.every((value, index) => value === expected[index]),
+    code,
+  );
 }
 
 export function requireAbsent(record: JsonRecord, keys: readonly string[], code: string): void {
-  requireCondition(keys.every((key) => !Object.hasOwn(record, key)), code);
+  requireCondition(
+    keys.every((key) => !Object.hasOwn(record, key)),
+    code,
+  );
 }
 
 export function requireNull(record: JsonRecord, keys: readonly string[], code: string): void {
-  requireCondition(keys.every((key) => Object.hasOwn(record, key) && record[key] === null), code);
+  requireCondition(
+    keys.every((key) => Object.hasOwn(record, key) && record[key] === null),
+    code,
+  );
 }

@@ -1,8 +1,4 @@
-import type {
-  RateLimitConfig,
-  ITokenBucketRateLimiter,
-  ProviderRateLimitPolicy,
-} from "./types.js";
+import type { RateLimitConfig, ITokenBucketRateLimiter, ProviderRateLimitPolicy } from "./types.js";
 
 interface QueuedTokenRequest {
   readonly estimatedTokens: number;
@@ -41,11 +37,7 @@ export class TokenBucketRateLimiter implements ITokenBucketRateLimiter {
   private readonly queue: QueuedTokenRequest[] = [];
   private drainScheduled = false;
 
-  constructor(
-    providerId: string,
-    config: RateLimitConfig,
-    modelId?: string
-  ) {
+  constructor(providerId: string, config: RateLimitConfig, modelId?: string) {
     this.providerId = providerId;
     this.modelId = modelId;
 
@@ -150,9 +142,11 @@ export class TokenBucketRateLimiter implements ITokenBucketRateLimiter {
       this.drainScheduled = true;
       const tpmRefillPerMs = this.maxTpm / 60000;
       const rpmRefillPerMs = this.maxRpm / 60000;
-      const timeForReqMs = rpmRefillPerMs > 0 ? Math.ceil((1.0 - this.availableRequests) / rpmRefillPerMs) : 100;
+      const timeForReqMs =
+        rpmRefillPerMs > 0 ? Math.ceil((1.0 - this.availableRequests) / rpmRefillPerMs) : 100;
       const nextEst = this.queue[0]?.estimatedTokens ?? 1000;
-      const timeForTokMs = tpmRefillPerMs > 0 ? Math.ceil((nextEst - this.availableTokens) / tpmRefillPerMs) : 100;
+      const timeForTokMs =
+        tpmRefillPerMs > 0 ? Math.ceil((nextEst - this.availableTokens) / tpmRefillPerMs) : 100;
       const delayMs = Math.max(20, Math.min(2000, Math.max(timeForReqMs, timeForTokMs)));
 
       setTimeout(() => {
@@ -180,7 +174,10 @@ export class TokenBucketRateLimiter implements ITokenBucketRateLimiter {
 
     if (hasCapacity) {
       this.availableRequests -= 1.0;
-      this.availableTokens = Math.max(0, this.availableTokens - Math.min(estimatedTokens, this.maxTpm));
+      this.availableTokens = Math.max(
+        0,
+        this.availableTokens - Math.min(estimatedTokens, this.maxTpm),
+      );
       this.inFlightRequests += 1;
       return;
     }
@@ -266,10 +263,7 @@ export class MultiProviderRateLimiter {
   constructor(policies: readonly ProviderRateLimitPolicy[] = []) {
     this.policies = policies;
     for (const policy of policies) {
-      const defaultLimiter = new TokenBucketRateLimiter(
-        policy.providerId,
-        policy.defaultRateLimit
-      );
+      const defaultLimiter = new TokenBucketRateLimiter(policy.providerId, policy.defaultRateLimit);
       this.limiters.set(policy.providerId, defaultLimiter);
 
       if (policy.modelOverrides) {
@@ -278,11 +272,7 @@ export class MultiProviderRateLimiter {
             ...policy.defaultRateLimit,
             ...overrideConfig,
           };
-          const modelLimiter = new TokenBucketRateLimiter(
-            policy.providerId,
-            merged,
-            modelId
-          );
+          const modelLimiter = new TokenBucketRateLimiter(policy.providerId, merged, modelId);
           this.limiters.set(`${policy.providerId}:${modelId}`, modelLimiter);
         }
       }
@@ -317,7 +307,10 @@ export class MultiProviderRateLimiter {
   }
 }
 
-export function createDefaultRateLimiter(providerId: string, modelId?: string): ITokenBucketRateLimiter {
+export function createDefaultRateLimiter(
+  providerId: string,
+  modelId?: string,
+): ITokenBucketRateLimiter {
   const defaultConfig: RateLimitConfig = {
     maxRequestsPerMinute: 60,
     maxTokensPerMinute: 100000,

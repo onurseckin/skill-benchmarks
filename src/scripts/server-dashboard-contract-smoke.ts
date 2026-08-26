@@ -6,7 +6,10 @@ import { verifyServerContract } from "./server-dashboard-contract/server.js";
 
 async function run(): Promise<void> {
   const fixture = createServerDashboardFixture();
-  requireCondition(fixture.root.includes("skill-benchmarks-server-dashboard-"), "fixture_root_invalid");
+  requireCondition(
+    fixture.root.includes("skill-benchmarks-server-dashboard-"),
+    "fixture_root_invalid",
+  );
   try {
     await verifyServerContract(fixture);
     await verifyHtmlSemantics(fixture);

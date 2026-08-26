@@ -1,4 +1,12 @@
-import { closeSync, existsSync, fsyncSync, lstatSync, openSync, readdirSync, unlinkSync } from "node:fs";
+import {
+  closeSync,
+  existsSync,
+  fsyncSync,
+  lstatSync,
+  openSync,
+  readdirSync,
+  unlinkSync,
+} from "node:fs";
 import { join } from "node:path";
 import type { RunArtifactLayout } from "../infrastructure/workspace/types.js";
 import type { RunRecord, RunStatus } from "../reporting/types.js";
@@ -38,8 +46,16 @@ export interface TerminalRunEvidence {
 
 export { EvidenceCommitError } from "./atomic-evidence-writer.js";
 
-export async function writeRunManifest(layout: RunArtifactLayout, context: RunEvidenceContext): Promise<void> {
-  await writeAtomicEvidenceJson(layout, layout.manifestPath, { schemaVersion: "1.0.0", artifactKind: "manifest", ...context, timestamp: context.startedAt });
+export async function writeRunManifest(
+  layout: RunArtifactLayout,
+  context: RunEvidenceContext,
+): Promise<void> {
+  await writeAtomicEvidenceJson(layout, layout.manifestPath, {
+    schemaVersion: "1.0.0",
+    artifactKind: "manifest",
+    ...context,
+    timestamp: context.startedAt,
+  });
 }
 
 export function commitRunResult(
@@ -48,12 +64,12 @@ export function commitRunResult(
   terminal: TerminalRunEvidence,
   result: ScenarioResult | undefined,
   attemptCount: number,
-  durationMs: number
+  durationMs: number,
 ): EvidenceArtifactIdentity {
   return commitAtomicEvidenceJson(
     layout,
     layout.resultPath,
-    createRunResultValue(context, terminal, result, attemptCount, durationMs, "result")
+    createRunResultValue(context, terminal, result, attemptCount, durationMs, "result"),
   );
 }
 
@@ -64,23 +80,31 @@ export function commitTerminalFailure(
   result: ScenarioResult | undefined,
   preferResultPath: boolean,
   attemptCount: number,
-  durationMs: number
+  durationMs: number,
 ): string {
   if (preferResultPath) {
     try {
-      commitAtomicEvidenceJson(layout, layout.resultPath, createRunResultValue(context, terminal, result, attemptCount, durationMs, "result"));
+      commitAtomicEvidenceJson(
+        layout,
+        layout.resultPath,
+        createRunResultValue(context, terminal, result, attemptCount, durationMs, "result"),
+      );
       return layout.resultPath;
     } catch (error) {
       if (error instanceof EvidenceCommitError && error.targetCommitted) throw error;
     }
   }
-  commitAtomicEvidenceJson(layout, layout.terminalFailurePath, createRunResultValue(context, terminal, result, attemptCount, durationMs, "terminal-failure"));
+  commitAtomicEvidenceJson(
+    layout,
+    layout.terminalFailurePath,
+    createRunResultValue(context, terminal, result, attemptCount, durationMs, "terminal-failure"),
+  );
   return layout.terminalFailurePath;
 }
 
 export function discardCommittedRunResult(
   layout: RunArtifactLayout,
-  expectedIdentity: EvidenceArtifactIdentity
+  expectedIdentity: EvidenceArtifactIdentity,
 ): void {
   removeAtomicEvidence(layout, layout.resultPath, expectedIdentity);
 }
@@ -91,7 +115,8 @@ export function removeStaleRunEvidenceTemporaryFiles(layout: RunArtifactLayout):
     if (!isRunEvidenceTemporaryName(entry)) continue;
     const path = join(layout.runDirectory, entry);
     const stats = lstatSync(path);
-    if (!stats.isFile() || stats.isSymbolicLink()) throw new TypeError("Terminal evidence temporary artifact is unsafe");
+    if (!stats.isFile() || stats.isSymbolicLink())
+      throw new TypeError("Terminal evidence temporary artifact is unsafe");
     unlinkSync(path);
     syncRunDirectory(layout.runDirectory);
   }
@@ -108,7 +133,9 @@ function syncRunDirectory(path: string): void {
 
 export function isRunEvidenceTemporaryName(name: string): boolean {
   const targets = ["manifest.json", "result.json", "terminal-failure.json"];
-  return targets.some((target) => new RegExp(`^\\.${target.replace(".", "\\.")}\\.[0-9a-f-]{36}\\.tmp$`).test(name));
+  return targets.some((target) =>
+    new RegExp(`^\\.${target.replace(".", "\\.")}\\.[0-9a-f-]{36}\\.tmp$`).test(name),
+  );
 }
 
 export function mapTerminalStatus(reason: RunTerminationReason): RunStatus {
@@ -123,7 +150,7 @@ export function createTerminalRunRecord(
   terminal: TerminalRunEvidence,
   result: ScenarioResult | undefined,
   attemptCount: number = 0,
-  durationMs: number = result?.totalDurationMs ?? 0
+  durationMs: number = result?.totalDurationMs ?? 0,
 ): RunRecord {
   const totalTokens = result?.totalTokens.totalTokens ?? 0;
   const cacheReadTokens = result?.totalTokens.cacheReadInputTokens ?? 0;
@@ -174,7 +201,7 @@ function createRunResultValue(
   result: ScenarioResult | undefined,
   attemptCount: number,
   durationMs: number,
-  artifactKind: "result" | "terminal-failure"
+  artifactKind: "result" | "terminal-failure",
 ): Readonly<Record<string, unknown>> {
   return {
     schemaVersion: "2.0.0",
@@ -184,10 +211,12 @@ function createRunResultValue(
     attemptCount,
     ...createTerminalAuthority(context, terminal, result),
     timestamp: terminal.completedAt,
-    ...(result === undefined ? {} : {
-      scenarioStartedAt: result.startedAt,
-      scenarioCompletedAt: result.finishedAt,
-    }),
+    ...(result === undefined
+      ? {}
+      : {
+          scenarioStartedAt: result.startedAt,
+          scenarioCompletedAt: result.finishedAt,
+        }),
     totalDurationMs: durationMs,
     totalTokens: result?.totalTokens.totalTokens ?? 0,
     usageBreakdown: result?.totalTokens ?? {
@@ -205,7 +234,7 @@ function createRunResultValue(
 function createTerminalAuthority(
   context: RunEvidenceContext,
   terminal: TerminalRunEvidence,
-  result: ScenarioResult | undefined
+  result: ScenarioResult | undefined,
 ) {
   const evidence = {
     status: "unavailable" as const,
@@ -230,8 +259,9 @@ function createTerminalAuthority(
     },
     evidence,
     evaluation: { status: "not_evaluated", reasons: ["evaluation_missing"] },
-    operationalCost: context.executionMode === "fake" || context.simulated || context.dryRun
-      ? { status: "simulated_zero", amountUSD: 0 }
-      : { status: "unverified", amountUSD: result?.totalCostUSD ?? 0 },
+    operationalCost:
+      context.executionMode === "fake" || context.simulated || context.dryRun
+        ? { status: "simulated_zero", amountUSD: 0 }
+        : { status: "unverified", amountUSD: result?.totalCostUSD ?? 0 },
   });
 }

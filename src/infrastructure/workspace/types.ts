@@ -1,9 +1,4 @@
-export type FileChangeType =
-  | "added"
-  | "modified"
-  | "deleted"
-  | "renamed"
-  | "permission_change";
+export type FileChangeType = "added" | "modified" | "deleted" | "renamed" | "permission_change";
 
 export interface FileModification {
   readonly path: string;

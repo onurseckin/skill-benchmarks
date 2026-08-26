@@ -21,7 +21,7 @@ const numericPattern = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/;
 
 export function validateCliInput(
   argv: readonly string[],
-  context: CliValidationContext = { stdoutIsTTY: process.stdout.isTTY === true }
+  context: CliValidationContext = { stdoutIsTTY: process.stdout.isTTY === true },
 ): ValidatedCliInput {
   const discovery = discoverCommand(argv);
   const specification = commandSpecificationByName[discovery.command];
@@ -38,7 +38,10 @@ export function validateCliInput(
   });
 }
 
-function discoverCommand(argv: readonly string[]): { readonly command: CliCommandName; readonly tokens: readonly string[] } {
+function discoverCommand(argv: readonly string[]): {
+  readonly command: CliCommandName;
+  readonly tokens: readonly string[];
+} {
   const first = argv[0];
   if (first === undefined) return { command: "help", tokens: [] };
   if (first === "--help") {
@@ -58,7 +61,10 @@ interface ConsumedInput {
   readonly positionals: string[];
 }
 
-function consumeTokens(specification: CliCommandSpecification, tokens: readonly string[]): ConsumedInput {
+function consumeTokens(
+  specification: CliCommandSpecification,
+  tokens: readonly string[],
+): ConsumedInput {
   const options: Record<string, CliNormalizedValue> = {};
   const positionals: string[] = [];
   let helpRequested = false;
@@ -85,10 +91,14 @@ function consumeTokens(specification: CliCommandSpecification, tokens: readonly 
     if (parsed.name === "version") throw new CliInputError("unsupported_argument");
     const flag = findFlagSpecification(specification, parsed.name);
     if (flag === undefined) {
-      throw new CliInputError(isKnownPublicFlagName(parsed.name) ? "unsupported_argument" : "unknown_flag");
+      throw new CliInputError(
+        isKnownPublicFlagName(parsed.name) ? "unsupported_argument" : "unknown_flag",
+      );
     }
-    if ((parsed.prefix === "long" && parsed.name !== flag.name)
-      || (parsed.prefix === "short" && !flag.aliases.includes(parsed.name))) {
+    if (
+      (parsed.prefix === "long" && parsed.name !== flag.name) ||
+      (parsed.prefix === "short" && !flag.aliases.includes(parsed.name))
+    ) {
       throw new CliInputError("unknown_flag");
     }
     const consumed = consumeFlagValue(flag, parsed.attachedValue, tokens, index);
@@ -98,7 +108,11 @@ function consumeTokens(specification: CliCommandSpecification, tokens: readonly 
   return { helpRequested, options, positionals };
 }
 
-function parseFlagToken(token: string): { readonly name: string; readonly prefix: "long" | "short"; readonly attachedValue?: string } {
+function parseFlagToken(token: string): {
+  readonly name: string;
+  readonly prefix: "long" | "short";
+  readonly attachedValue?: string;
+} {
   const prefix = token.startsWith("--") ? "long" : "short";
   const prefixLength = prefix === "long" ? 2 : 1;
   const body = token.slice(prefixLength);
@@ -114,7 +128,7 @@ function consumeFlagValue(
   specification: CliFlagSpecification,
   attachedValue: string | undefined,
   tokens: readonly string[],
-  index: number
+  index: number,
 ): { readonly value: CliNormalizedValue; readonly tokensConsumed: number } {
   if (specification.kind === "boolean") {
     if (attachedValue !== undefined) throw new CliInputError("invalid_value");
@@ -123,7 +137,8 @@ function consumeFlagValue(
     return { value: true, tokensConsumed: 0 };
   }
   const candidate = attachedValue ?? tokens[index + 1];
-  if (candidate === undefined || candidate.trim().length === 0) throw new CliInputError("missing_value");
+  if (candidate === undefined || candidate.trim().length === 0)
+    throw new CliInputError("missing_value");
   if (attachedValue === undefined && specification.kind !== "number" && candidate.startsWith("-")) {
     throw new CliInputError("missing_value");
   }
@@ -133,7 +148,8 @@ function consumeFlagValue(
   }
   if (specification.kind === "array") {
     const values = candidate.split(",").map((value) => value.trim());
-    if (values.length === 0 || values.some((value) => value.length === 0)) throw new CliInputError("invalid_value");
+    if (values.length === 0 || values.some((value) => value.length === 0))
+      throw new CliInputError("invalid_value");
     validateChoices(values, specification.choices);
     if (new Set(values).size !== values.length) throw new CliInputError("duplicate_selector");
     return { value: Object.freeze(values), tokensConsumed };
@@ -147,12 +163,15 @@ function parseNumber(value: string, specification: CliFlagSpecification): number
   if (!numericPattern.test(value)) throw new CliInputError("invalid_value");
   const number = Number(value);
   const constraint = specification.number ?? {};
-  if (!Number.isFinite(number)
-    || (constraint.integer === true && !Number.isSafeInteger(number))
-    || (constraint.safeIntegerScale !== undefined && !Number.isSafeInteger(number * constraint.safeIntegerScale))
-    || (constraint.minimum !== undefined && number < constraint.minimum)
-    || (constraint.exclusiveMinimum !== undefined && number <= constraint.exclusiveMinimum)
-    || (constraint.maximum !== undefined && number > constraint.maximum)) {
+  if (
+    !Number.isFinite(number) ||
+    (constraint.integer === true && !Number.isSafeInteger(number)) ||
+    (constraint.safeIntegerScale !== undefined &&
+      !Number.isSafeInteger(number * constraint.safeIntegerScale)) ||
+    (constraint.minimum !== undefined && number < constraint.minimum) ||
+    (constraint.exclusiveMinimum !== undefined && number <= constraint.exclusiveMinimum) ||
+    (constraint.maximum !== undefined && number > constraint.maximum)
+  ) {
     throw new CliInputError("invalid_value");
   }
   return number;
@@ -167,7 +186,7 @@ function validateChoices(values: readonly string[], choices: readonly string[] |
 function assignOption(
   options: Record<string, CliNormalizedValue>,
   specification: CliFlagSpecification,
-  value: CliNormalizedValue
+  value: CliNormalizedValue,
 ): void {
   const existing = options[specification.key];
   if (specification.kind !== "array") {
@@ -176,19 +195,25 @@ function assignOption(
     return;
   }
   const incoming = value as readonly string[];
-  const merged = existing === undefined ? [...incoming] : [...existing as readonly string[], ...incoming];
+  const merged =
+    existing === undefined ? [...incoming] : [...(existing as readonly string[]), ...incoming];
   if (new Set(merged).size !== merged.length) throw new CliInputError("duplicate_selector");
   options[specification.key] = Object.freeze(merged);
 }
 
-function validatePositionals(specification: CliCommandSpecification, positionals: readonly string[]): void {
+function validatePositionals(
+  specification: CliCommandSpecification,
+  positionals: readonly string[],
+): void {
   const positional = specification.positional;
   if (positional === undefined) {
     if (positionals.length > 0) throw new CliInputError("unexpected_argument");
     return;
   }
-  if (positionals.length < positional.minimum
-    || (positional.maximum !== undefined && positionals.length > positional.maximum)) {
+  if (
+    positionals.length < positional.minimum ||
+    (positional.maximum !== undefined && positionals.length > positional.maximum)
+  ) {
     throw new CliInputError("unexpected_argument");
   }
   validateChoices(positionals, positional.choices);
@@ -197,10 +222,12 @@ function validatePositionals(specification: CliCommandSpecification, positionals
 function validateRequiredOptions(
   specification: CliCommandSpecification,
   options: Readonly<Record<string, CliNormalizedValue>>,
-  helpRequested: boolean
+  helpRequested: boolean,
 ): void {
   if (helpRequested) return;
-  const missing = specification.requiredOptions.find((required) => options[required.key] === undefined);
+  const missing = specification.requiredOptions.find(
+    (required) => options[required.key] === undefined,
+  );
   if (missing !== undefined) {
     throw new CliInputError(missing.code);
   }
@@ -211,7 +238,7 @@ function validateRules(
   options: Readonly<Record<string, CliNormalizedValue>>,
   positionals: readonly string[],
   helpRequested: boolean,
-  context: CliValidationContext
+  context: CliValidationContext,
 ): void {
   for (const rule of specification.rules) {
     if (rule === "run") validateRun(options, positionals);
@@ -223,16 +250,23 @@ function validateRules(
 }
 
 function validateExecutionModes(options: Readonly<Record<string, CliNormalizedValue>>): void {
-  if (options.mock === true && options.live === true) throw new CliInputError("conflicting_arguments");
+  if (options.mock === true && options.live === true)
+    throw new CliInputError("conflicting_arguments");
 }
 
-function validateRun(options: Readonly<Record<string, CliNormalizedValue>>, positionals: readonly string[]): void {
+function validateRun(
+  options: Readonly<Record<string, CliNormalizedValue>>,
+  positionals: readonly string[],
+): void {
   validateExecutionModes(options);
   const scenarios = [...readArray(options.scenarioIds), ...positionals];
   if (new Set(scenarios).size !== scenarios.length) throw new CliInputError("duplicate_selector");
 }
 
-function validateArena(options: Readonly<Record<string, CliNormalizedValue>>, helpRequested: boolean): void {
+function validateArena(
+  options: Readonly<Record<string, CliNormalizedValue>>,
+  helpRequested: boolean,
+): void {
   validateExecutionModes(options);
   if (helpRequested) return;
   if (readArray(options.scenarioIds).length !== 1 || readArray(options.skillIds).length !== 1) {
@@ -241,7 +275,10 @@ function validateArena(options: Readonly<Record<string, CliNormalizedValue>>, he
   if (readArray(options.arenaModels).length !== 2) throw new CliInputError("empty_matrix");
 }
 
-function validateTournament(options: Readonly<Record<string, CliNormalizedValue>>, helpRequested: boolean): void {
+function validateTournament(
+  options: Readonly<Record<string, CliNormalizedValue>>,
+  helpRequested: boolean,
+): void {
   validateExecutionModes(options);
   if (helpRequested) return;
   const models = readArray(options.modelIds);
@@ -250,37 +287,47 @@ function validateTournament(options: Readonly<Record<string, CliNormalizedValue>
   }
   if (models.length < 2) throw new CliInputError("empty_matrix");
   const mode = readString(options.tournamentMode) ?? (models.length > 6 ? "swiss" : "round-robin");
-  const maximumRounds = mode === "round-robin"
-    ? models.length - 1 + models.length % 2
-    : Math.max(1, Math.ceil(Math.log2(models.length)) + 1);
+  const maximumRounds =
+    mode === "round-robin"
+      ? models.length - 1 + (models.length % 2)
+      : Math.max(1, Math.ceil(Math.log2(models.length)) + 1);
   const rounds = options.rounds;
-  if (typeof rounds === "number" && rounds > maximumRounds) throw new CliInputError("invalid_value");
+  if (typeof rounds === "number" && rounds > maximumRounds)
+    throw new CliInputError("invalid_value");
 }
 
-function validateReport(options: Readonly<Record<string, CliNormalizedValue>>, helpRequested: boolean): void {
+function validateReport(
+  options: Readonly<Record<string, CliNormalizedValue>>,
+  helpRequested: boolean,
+): void {
   const format = readString(options.format) ?? "console";
   const outputPath = readString(options.outputPath);
-  if (format === "console" && outputPath !== undefined) throw new CliInputError("unsupported_argument");
+  if (format === "console" && outputPath !== undefined)
+    throw new CliInputError("unsupported_argument");
   if (!helpRequested && (format === "markdown" || format === "html") && outputPath === undefined) {
     throw new CliInputError("invalid_configuration");
   }
   const exportCard = readString(options.exportCard);
   const cardOutput = readString(options.cardOutputPath);
-  if ((exportCard === undefined) !== (cardOutput === undefined)) throw new CliInputError("invalid_configuration");
+  if ((exportCard === undefined) !== (cardOutput === undefined))
+    throw new CliInputError("invalid_configuration");
 }
 
 function validateReplay(
   options: Readonly<Record<string, CliNormalizedValue>>,
   positionals: readonly string[],
   helpRequested: boolean,
-  context: CliValidationContext
+  context: CliValidationContext,
 ): void {
   const directSourceCount = positionals.length + (options.target === undefined ? 0 : 1);
-  const canonicalCount = [options.runId, options.dbPath, options.outputDir].filter((value) => value !== undefined).length;
+  const canonicalCount = [options.runId, options.dbPath, options.outputDir].filter(
+    (value) => value !== undefined,
+  ).length;
   if (directSourceCount > 1 || (directSourceCount > 0 && canonicalCount > 0)) {
     throw new CliInputError("conflicting_arguments");
   }
-  if (!helpRequested && directSourceCount === 0 && canonicalCount === 0) throw new CliInputError("replay_unavailable");
+  if (!helpRequested && directSourceCount === 0 && canonicalCount === 0)
+    throw new CliInputError("replay_unavailable");
   if (canonicalCount > 0 && canonicalCount !== 3) throw new CliInputError("replay_unavailable");
   const format = readString(options.format) ?? "tui";
   const output = readString(options.outputPath);
@@ -290,12 +337,13 @@ function validateReplay(
     if (!helpRequested && !context.stdoutIsTTY) throw new CliInputError("unsupported_argument");
   } else {
     if (speed !== undefined) throw new CliInputError("unsupported_argument");
-    if (!helpRequested && format === "html" && output === undefined) throw new CliInputError("invalid_configuration");
+    if (!helpRequested && format === "html" && output === undefined)
+      throw new CliInputError("invalid_configuration");
   }
 }
 
 function readArray(value: CliNormalizedValue | undefined): readonly string[] {
-  return Array.isArray(value) ? value as readonly string[] : [];
+  return Array.isArray(value) ? (value as readonly string[]) : [];
 }
 
 function readString(value: CliNormalizedValue | undefined): string | undefined {

@@ -9,18 +9,58 @@ import type {
 } from "./types.js";
 import { TrajectoryAnomalyDetector } from "./index.js";
 
-const ENV_PATTERNS: readonly { readonly pattern: RegExp; readonly subCategory: string; readonly factor: string }[] = [
-  { pattern: /ENOMEM|out of memory|killed: 9|SIGKILL|cgroup limit/i, subCategory: "resource_limit_exceeded", factor: "Process terminated due to memory or resource exhaustion" },
-  { pattern: /ETIMEDOUT|ECONNREFUSED|getaddrinfo ENOTFOUND|network unreachable/i, subCategory: "network_or_io_failure", factor: "Network connection failure or timeout" },
-  { pattern: /EACCES|EPERM|permission denied|operation not permitted/i, subCategory: "permission_denied", factor: "Filesystem or environment permission denied" },
-  { pattern: new RegExp("command not found|no such file or directory.*\\/bin\\/", "i"), subCategory: "missing_system_dependency", factor: "Required system binary or dependency is missing from environment" },
-  { pattern: /timed out after \d+ms|operation timed out/i, subCategory: "infrastructure_timeout", factor: "Execution exceeded environment wall-clock timeout" },
+const ENV_PATTERNS: readonly {
+  readonly pattern: RegExp;
+  readonly subCategory: string;
+  readonly factor: string;
+}[] = [
+  {
+    pattern: /ENOMEM|out of memory|killed: 9|SIGKILL|cgroup limit/i,
+    subCategory: "resource_limit_exceeded",
+    factor: "Process terminated due to memory or resource exhaustion",
+  },
+  {
+    pattern: /ETIMEDOUT|ECONNREFUSED|getaddrinfo ENOTFOUND|network unreachable/i,
+    subCategory: "network_or_io_failure",
+    factor: "Network connection failure or timeout",
+  },
+  {
+    pattern: /EACCES|EPERM|permission denied|operation not permitted/i,
+    subCategory: "permission_denied",
+    factor: "Filesystem or environment permission denied",
+  },
+  {
+    pattern: new RegExp("command not found|no such file or directory.*\\/bin\\/", "i"),
+    subCategory: "missing_system_dependency",
+    factor: "Required system binary or dependency is missing from environment",
+  },
+  {
+    pattern: /timed out after \d+ms|operation timed out/i,
+    subCategory: "infrastructure_timeout",
+    factor: "Execution exceeded environment wall-clock timeout",
+  },
 ];
 
-const MODEL_PATTERNS: readonly { readonly pattern: RegExp; readonly subCategory: string; readonly factor: string }[] = [
-  { pattern: /SyntaxError|ParseError|unexpected token/i, subCategory: "syntax_or_compile_error", factor: "Model generated code with syntax or compilation errors" },
-  { pattern: /TypeError:.*is not a function|ReferenceError/i, subCategory: "logic_or_reasoning_flaw", factor: "Model generated erroneous method invocation or missing reference" },
-  { pattern: /unrecognized argument|invalid choice/i, subCategory: "instruction_non_compliance", factor: "Model passed invalid CLI arguments or options" },
+const MODEL_PATTERNS: readonly {
+  readonly pattern: RegExp;
+  readonly subCategory: string;
+  readonly factor: string;
+}[] = [
+  {
+    pattern: /SyntaxError|ParseError|unexpected token/i,
+    subCategory: "syntax_or_compile_error",
+    factor: "Model generated code with syntax or compilation errors",
+  },
+  {
+    pattern: /TypeError:.*is not a function|ReferenceError/i,
+    subCategory: "logic_or_reasoning_flaw",
+    factor: "Model generated erroneous method invocation or missing reference",
+  },
+  {
+    pattern: /unrecognized argument|invalid choice/i,
+    subCategory: "instruction_non_compliance",
+    factor: "Model passed invalid CLI arguments or options",
+  },
 ];
 
 export class FailureModeClassifier {
@@ -32,11 +72,10 @@ export class FailureModeClassifier {
 
   public classifyFailure(
     trajectory: SemanticTrajectory,
-    providedAnomalies?: readonly TrajectoryAnomaly[]
+    providedAnomalies?: readonly TrajectoryAnomaly[],
   ): FailureClassificationResult {
     const anomalies =
-      providedAnomalies ??
-      this.anomalyDetector.detectAnomalies(trajectory).anomalies;
+      providedAnomalies ?? this.anomalyDetector.detectAnomalies(trajectory).anomalies;
 
     const isFailure = trajectory.outcome !== "success";
 
@@ -82,7 +121,7 @@ export class FailureModeClassifier {
 
   public generateDiagnosticSummary(
     trajectory: SemanticTrajectory,
-    providedAnomalies?: readonly TrajectoryAnomaly[]
+    providedAnomalies?: readonly TrajectoryAnomaly[],
   ): TrajectoryDiagnosticSummary {
     const detectionResult = providedAnomalies
       ? {
@@ -93,7 +132,7 @@ export class FailureModeClassifier {
           telemetry: this.anomalyDetector.calculateTelemetry(
             trajectory.steps,
             trajectory.totalTokens,
-            trajectory.totalDurationMs
+            trajectory.totalDurationMs,
           ),
           hasCriticalAnomalies: providedAnomalies.some((a) => a.severity === "critical"),
           analysisDurationMs: 0,
@@ -101,7 +140,11 @@ export class FailureModeClassifier {
       : this.anomalyDetector.detectAnomalies(trajectory);
 
     const classification = this.classifyFailure(trajectory, detectionResult.anomalies);
-    const healthScore = this.computeHealthScore(trajectory.outcome, detectionResult.anomalies, detectionResult.telemetry);
+    const healthScore = this.computeHealthScore(
+      trajectory.outcome,
+      detectionResult.anomalies,
+      detectionResult.telemetry,
+    );
     const recommendations = this.collectRecommendations(classification, detectionResult.anomalies);
 
     return {
@@ -122,7 +165,7 @@ export class FailureModeClassifier {
 
   private identifyCandidateCauses(
     trajectory: SemanticTrajectory,
-    anomalies: readonly TrajectoryAnomaly[]
+    anomalies: readonly TrajectoryAnomaly[],
   ): readonly FailureRootCause[] {
     const causes: FailureRootCause[] = [];
 
@@ -160,7 +203,9 @@ export class FailureModeClassifier {
       });
     }
 
-    const stallAnomaly = anomalies.find((a) => a.type === "stalled_execution" || a.type === "deadlock");
+    const stallAnomaly = anomalies.find(
+      (a) => a.type === "stalled_execution" || a.type === "deadlock",
+    );
     if (stallAnomaly) {
       causes.push({
         category: "deadlock_or_stall",
@@ -255,7 +300,7 @@ export class FailureModeClassifier {
   private computeHealthScore(
     outcome: TrajectoryOutcome,
     anomalies: readonly TrajectoryAnomaly[],
-    telemetry: { readonly errorCount: number; readonly retryRatio: number }
+    telemetry: { readonly errorCount: number; readonly retryRatio: number },
   ): number {
     let score = outcome === "success" ? 100 : 50;
 
@@ -287,7 +332,7 @@ export class FailureModeClassifier {
 
   private collectRecommendations(
     classification: FailureClassificationResult,
-    anomalies: readonly TrajectoryAnomaly[]
+    anomalies: readonly TrajectoryAnomaly[],
   ): readonly string[] {
     const recs = new Set<string>();
 

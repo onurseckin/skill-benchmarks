@@ -31,21 +31,25 @@ function resolveRequestedProviderId(providerId: string | undefined): ProviderId 
     return undefined;
   }
   if (
-    providerId === "anthropic"
-    || providerId === "openai"
-    || providerId === "google"
-    || providerId === "ollama"
-    || providerId === "custom"
+    providerId === "anthropic" ||
+    providerId === "openai" ||
+    providerId === "google" ||
+    providerId === "ollama" ||
+    providerId === "custom"
   ) {
     return providerId;
   }
   throw new BenchmarkRuntimeConfigurationError();
 }
 
-function resolveOutputRoot(input: BenchmarkRuntimeConfigInput, environment: NodeJS.ProcessEnv): string {
-  const configuredOutputRoot = input.outputDir
-    ?? environment[outputDirectoryEnvironmentVariable]
-    ?? resolve(process.cwd(), ".benchmarks");
+function resolveOutputRoot(
+  input: BenchmarkRuntimeConfigInput,
+  environment: NodeJS.ProcessEnv,
+): string {
+  const configuredOutputRoot =
+    input.outputDir ??
+    environment[outputDirectoryEnvironmentVariable] ??
+    resolve(process.cwd(), ".benchmarks");
   if (configuredOutputRoot.trim().length === 0) {
     throw new BenchmarkRuntimeConfigurationError();
   }
@@ -54,7 +58,7 @@ function resolveOutputRoot(input: BenchmarkRuntimeConfigInput, environment: Node
 
 export function resolveBenchmarkRuntimeConfig(
   input: BenchmarkRuntimeConfigInput,
-  environment: NodeJS.ProcessEnv = process.env
+  environment: NodeJS.ProcessEnv = process.env,
 ): BenchmarkRuntimeConfig {
   const requestedProviderId = resolveRequestedProviderId(input.providerId);
   const resolvedConfig: BenchmarkRuntimeConfig = {

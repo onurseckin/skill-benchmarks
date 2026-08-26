@@ -7,9 +7,18 @@ import type { ReplayEvidenceIdentity, ReplaySession } from "../replay/types.js";
 import { generateWebReplayHtml } from "../replay/web-player.js";
 import { registerReportRoutes } from "./report-routes.js";
 import { errorResponse, headResponse, htmlResponse, jsonResponse } from "./server-response.js";
-import type { HttpMethod, RouteContext, RouteDefinition, RouteHandler, ServerState } from "./types.js";
+import type {
+  HttpMethod,
+  RouteContext,
+  RouteDefinition,
+  RouteHandler,
+  ServerState,
+} from "./types.js";
 
-export function parsePattern(pattern: string): { readonly regex: RegExp; readonly paramNames: readonly string[] } {
+export function parsePattern(pattern: string): {
+  readonly regex: RegExp;
+  readonly paramNames: readonly string[];
+} {
   const paramNames: string[] = [];
   const regexValue = pattern.replace(/:([a-zA-Z0-9_]+)/g, (_, name: string) => {
     paramNames.push(name);
@@ -36,7 +45,7 @@ export class ApiRouter {
     request: Request,
     database: TelemetryDatabase,
     outputRoot: string,
-    serverState: ServerState
+    serverState: ServerState,
   ): Promise<Response> {
     let url: URL;
     try {
@@ -77,7 +86,10 @@ export class ApiRouter {
       return jsonResponse({
         status: "healthy",
         version: "0.1.0",
-        processUptimeSeconds: Math.max(0, Math.floor((Date.now() - Date.parse(context.serverState.startedAt)) / 1000)),
+        processUptimeSeconds: Math.max(
+          0,
+          Math.floor((Date.now() - Date.parse(context.serverState.startedAt)) / 1000),
+        ),
         processMemoryRssMb: roundMegabytes(memory.rss),
         processHeapUsedMb: roundMegabytes(memory.heapUsed),
         timestamp: new Date().toISOString(),
@@ -101,7 +113,11 @@ export class ApiRouter {
 function readParameters(route: RouteDefinition, path: string): Readonly<Record<string, string>> {
   const match = path.match(route.regex);
   if (match === null) return Object.freeze({});
-  return Object.freeze(Object.fromEntries(route.paramNames.map((name, index) => [name, decodeURIComponent(match[index + 1] ?? "")])));
+  return Object.freeze(
+    Object.fromEntries(
+      route.paramNames.map((name, index) => [name, decodeURIComponent(match[index + 1] ?? "")]),
+    ),
+  );
 }
 
 function loadPersistedReplay(context: RouteContext, runId: string): ReplaySession | Response {
@@ -122,14 +138,20 @@ function loadPersistedReplay(context: RouteContext, runId: string): ReplaySessio
       expectedIdentity: createExpectedReplayIdentity(record),
     });
   } catch (error) {
-    if (error instanceof ReplayEvidenceUnavailableError) return errorResponse("replay_unavailable", 409);
-    if (error instanceof ReplayEvidenceInvalidError || error instanceof TypeError) return errorResponse("replay_invalid", 422);
+    if (error instanceof ReplayEvidenceUnavailableError)
+      return errorResponse("replay_unavailable", 409);
+    if (error instanceof ReplayEvidenceInvalidError || error instanceof TypeError)
+      return errorResponse("replay_invalid", 422);
     return errorResponse("internal_error", 500);
   }
 }
 
 function createExpectedReplayIdentity(record: RunRecord): ReplayEvidenceIdentity {
-  if (record.matrixOccurrenceIndex === undefined || !Number.isSafeInteger(record.matrixOccurrenceIndex) || record.matrixOccurrenceIndex < 0) {
+  if (
+    record.matrixOccurrenceIndex === undefined ||
+    !Number.isSafeInteger(record.matrixOccurrenceIndex) ||
+    record.matrixOccurrenceIndex < 0
+  ) {
     throw new ReplayEvidenceInvalidError();
   }
   return {

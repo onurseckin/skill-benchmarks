@@ -1,6 +1,4 @@
-import {
-  BudgetController,
-} from "./budget-controller.js";
+import { BudgetController } from "./budget-controller.js";
 import {
   CostEfficiencyMetrics,
   LatencyOptimizationHeuristic,
@@ -18,7 +16,8 @@ export class OptimizerEngine {
   private readonly optimizationHistory: OptimizationReport[] = [];
 
   public constructor(budgetController?: BudgetController) {
-    this.budgetController = budgetController !== undefined ? budgetController : new BudgetController();
+    this.budgetController =
+      budgetController !== undefined ? budgetController : new BudgetController();
   }
 
   public getBudgetController(): BudgetController {
@@ -31,14 +30,16 @@ export class OptimizerEngine {
 
   public computeParetoFrontier(
     candidates: readonly ParetoCandidate[],
-    constraints: OptimizationConstraint = {}
+    constraints: OptimizationConstraint = {},
   ): ParetoFrontierPoint[] {
     const valid = candidates.filter((c) => this.satisfiesConstraints(c, constraints));
     if (valid.length === 0) return [];
 
     const sortedCost = [...valid].sort((a, b) => a.estimatedCostUSD - b.estimatedCostUSD);
     const sortedLatency = [...valid].sort((a, b) => a.estimatedLatencyMs - b.estimatedLatencyMs);
-    const sortedQuality = [...valid].sort((a, b) => b.expectedQualityScore - a.expectedQualityScore);
+    const sortedQuality = [...valid].sort(
+      (a, b) => b.expectedQualityScore - a.expectedQualityScore,
+    );
 
     const costRanks = new Map<string, number>();
     const latencyRanks = new Map<string, number>();
@@ -89,7 +90,7 @@ export class OptimizerEngine {
     scenarioId: string,
     candidates: readonly ParetoCandidate[],
     target: OptimizerTarget = "balanced",
-    constraints: OptimizationConstraint = {}
+    constraints: OptimizationConstraint = {},
   ): OptimizationReport {
     const frontier = this.computeParetoFrontier(candidates, constraints);
     if (frontier.length === 0) {
@@ -126,7 +127,8 @@ export class OptimizerEngine {
       recommendedModel: primary.candidate.modelId,
       recommendedProvider: primary.candidate.providerId,
       fallbackModel: firstFallback !== undefined ? firstFallback.candidate.modelId : undefined,
-      fallbackProvider: firstFallback !== undefined ? firstFallback.candidate.providerId : undefined,
+      fallbackProvider:
+        firstFallback !== undefined ? firstFallback.candidate.providerId : undefined,
       target,
       frontierPoint: primary,
       projectedCostUSD: primary.candidate.estimatedCostUSD,
@@ -140,7 +142,8 @@ export class OptimizerEngine {
         recommendedModel: pt.candidate.modelId,
         recommendedProvider: pt.candidate.providerId,
         fallbackModel: nextFallback !== undefined ? nextFallback.candidate.modelId : undefined,
-        fallbackProvider: nextFallback !== undefined ? nextFallback.candidate.providerId : undefined,
+        fallbackProvider:
+          nextFallback !== undefined ? nextFallback.candidate.providerId : undefined,
         target,
         frontierPoint: pt,
         projectedCostUSD: pt.candidate.estimatedCostUSD,
@@ -170,11 +173,15 @@ export class OptimizerEngine {
     completionTokens: number,
     totalCostUSD: number,
     cachedPromptTokens: number = 0,
-    qualityScore: number = 1.0
+    qualityScore: number = 1.0,
   ): CostEfficiencyMetrics {
     const costPerK = totalTokens > 0 ? (totalCostUSD / totalTokens) * 1000 : 0;
-    const promptK = promptTokens > 0 ? (totalCostUSD * (promptTokens / totalTokens) / promptTokens) * 1000 : 0;
-    const completionK = completionTokens > 0 ? (totalCostUSD * (completionTokens / totalTokens) / completionTokens) * 1000 : 0;
+    const promptK =
+      promptTokens > 0 ? ((totalCostUSD * (promptTokens / totalTokens)) / promptTokens) * 1000 : 0;
+    const completionK =
+      completionTokens > 0
+        ? ((totalCostUSD * (completionTokens / totalTokens)) / completionTokens) * 1000
+        : 0;
     const cacheRatio = promptTokens > 0 ? cachedPromptTokens / promptTokens : 0;
     const cpRatio = totalCostUSD > 0 ? qualityScore / totalCostUSD : 0;
 
@@ -200,23 +207,41 @@ export class OptimizerEngine {
     return `${c.providerId}:${c.modelId}`;
   }
 
-  private satisfiesConstraints(candidate: ParetoCandidate, constraints: OptimizationConstraint): boolean {
-    if (constraints.maxCostUSDPerExecution !== undefined && candidate.estimatedCostUSD > constraints.maxCostUSDPerExecution) {
+  private satisfiesConstraints(
+    candidate: ParetoCandidate,
+    constraints: OptimizationConstraint,
+  ): boolean {
+    if (
+      constraints.maxCostUSDPerExecution !== undefined &&
+      candidate.estimatedCostUSD > constraints.maxCostUSDPerExecution
+    ) {
       return false;
     }
-    if (constraints.maxTotalLatencyMs !== undefined && candidate.estimatedLatencyMs > constraints.maxTotalLatencyMs) {
+    if (
+      constraints.maxTotalLatencyMs !== undefined &&
+      candidate.estimatedLatencyMs > constraints.maxTotalLatencyMs
+    ) {
       return false;
     }
-    if (constraints.minQualityScore !== undefined && candidate.expectedQualityScore < constraints.minQualityScore) {
+    if (
+      constraints.minQualityScore !== undefined &&
+      candidate.expectedQualityScore < constraints.minQualityScore
+    ) {
       return false;
     }
-    if (constraints.minTokensPerSecond !== undefined && candidate.estimatedTPS < constraints.minTokensPerSecond) {
+    if (
+      constraints.minTokensPerSecond !== undefined &&
+      candidate.estimatedTPS < constraints.minTokensPerSecond
+    ) {
       return false;
     }
     if (constraints.maxTTFTMs !== undefined && candidate.estimatedTTFTMs > constraints.maxTTFTMs) {
       return false;
     }
-    if (constraints.allowedProviders !== undefined && !constraints.allowedProviders.includes(candidate.providerId)) {
+    if (
+      constraints.allowedProviders !== undefined &&
+      !constraints.allowedProviders.includes(candidate.providerId)
+    ) {
       return false;
     }
     return true;

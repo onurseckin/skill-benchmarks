@@ -1,9 +1,5 @@
 import { createContentSecurityPolicy } from "../shared/html-content-security.js";
-import type {
-  ApiSuccessResponse,
-  ServerErrorBody,
-  ServerErrorCode,
-} from "./types.js";
+import type { ApiSuccessResponse, ServerErrorBody, ServerErrorCode } from "./types.js";
 
 const errorMessages: Readonly<Record<ServerErrorCode, string>> = Object.freeze({
   invalid_request: "The request is invalid.",
@@ -22,7 +18,11 @@ const securityHeaders: Readonly<Record<string, string>> = Object.freeze({
   "Cross-Origin-Resource-Policy": "same-origin",
 });
 
-export function jsonResponse<T>(data: T, status = 200, headers?: Readonly<Record<string, string>>): Response {
+export function jsonResponse<T>(
+  data: T,
+  status = 200,
+  headers?: Readonly<Record<string, string>>,
+): Response {
   const body: ApiSuccessResponse<T> = {
     success: true,
     data,
@@ -37,7 +37,7 @@ export function jsonResponse<T>(data: T, status = 200, headers?: Readonly<Record
 export function errorResponse(
   code: ServerErrorCode,
   status: number,
-  headers?: Readonly<Record<string, string>>
+  headers?: Readonly<Record<string, string>>,
 ): Response {
   const body: ServerErrorBody = {
     success: false,
@@ -65,7 +65,7 @@ export function headResponse(response: Response): Response {
 
 function responseHeaders(
   contentType: string,
-  additional?: Readonly<Record<string, string>>
+  additional?: Readonly<Record<string, string>>,
 ): Headers {
   return new Headers({ "Content-Type": contentType, ...securityHeaders, ...additional });
 }

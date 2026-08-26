@@ -25,15 +25,11 @@ export function isBenchmarkError(error: unknown): error is BenchmarkError {
   return error instanceof BenchmarkError;
 }
 
-export function isInfrastructureFault(
-  error: unknown
-): error is InfrastructureFaultError {
+export function isInfrastructureFault(error: unknown): error is InfrastructureFaultError {
   return error instanceof InfrastructureFaultError;
 }
 
-export function isExecutionTimeout(
-  error: unknown
-): error is ExecutionTimeoutError {
+export function isExecutionTimeout(error: unknown): error is ExecutionTimeoutError {
   return error instanceof ExecutionTimeoutError;
 }
 
@@ -41,9 +37,7 @@ export function isAgentToolError(error: unknown): error is AgentToolError {
   return error instanceof AgentToolError;
 }
 
-export function isStateIntegrityError(
-  error: unknown
-): error is StateIntegrityError {
+export function isStateIntegrityError(error: unknown): error is StateIntegrityError {
   return error instanceof StateIntegrityError;
 }
 
@@ -57,7 +51,10 @@ export function classifyError(error: unknown): BenchmarkError {
 
   if (
     /oom|out of memory|137/i.test(message) ||
-    (typeof error === "object" && error !== null && "exitCode" in error && (error as { exitCode?: unknown }).exitCode === 137)
+    (typeof error === "object" &&
+      error !== null &&
+      "exitCode" in error &&
+      (error as { exitCode?: unknown }).exitCode === 137)
   ) {
     return new OomKilledError("unknown", {
       details: { originalMessage: message, stack },

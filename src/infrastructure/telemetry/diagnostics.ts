@@ -1,25 +1,14 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import type {
-  ContainerInspectDiagnostic,
-  DiagnosticRecord,
-  InfrastructureError,
-} from "./types.js";
-import {
-  BenchmarkError,
-  classifyError,
-} from "./error-taxonomy.js";
+import type { ContainerInspectDiagnostic, DiagnosticRecord, InfrastructureError } from "./types.js";
+import { BenchmarkError, classifyError } from "./error-taxonomy.js";
 
 export interface DiagnosticsCaptureOptions {
   readonly runId: string;
   readonly containerId?: string;
   readonly error?: unknown;
-  readonly containerInspector?: (
-    containerId: string
-  ) => Promise<ContainerInspectDiagnostic | null>;
-  readonly dmesgExtractor?: (
-    containerId: string
-  ) => Promise<ReadonlyArray<string>>;
+  readonly containerInspector?: (containerId: string) => Promise<ContainerInspectDiagnostic | null>;
+  readonly dmesgExtractor?: (containerId: string) => Promise<ReadonlyArray<string>>;
   readonly scribe?: {
     readonly getRecentStdoutLines: () => ReadonlyArray<string>;
     readonly getRecentStderrLines: () => ReadonlyArray<string>;
@@ -30,7 +19,7 @@ export interface DiagnosticsCaptureOptions {
 }
 
 export async function captureDiagnostics(
-  options: DiagnosticsCaptureOptions
+  options: DiagnosticsCaptureOptions,
 ): Promise<DiagnosticRecord> {
   const capturedAt = new Date().toISOString();
 
@@ -58,10 +47,7 @@ export async function captureDiagnostics(
         oomKilled: false,
         startedAt: "",
         finishedAt: capturedAt,
-        error:
-          inspectError instanceof Error
-            ? inspectError.message
-            : String(inspectError),
+        error: inspectError instanceof Error ? inspectError.message : String(inspectError),
       };
     }
   }
@@ -76,14 +62,10 @@ export async function captureDiagnostics(
   }
 
   const lastStdoutLines: ReadonlyArray<string> =
-    options.recentStdoutLines ??
-    options.scribe?.getRecentStdoutLines() ??
-    [];
+    options.recentStdoutLines ?? options.scribe?.getRecentStdoutLines() ?? [];
 
   const lastStderrLines: ReadonlyArray<string> =
-    options.recentStderrLines ??
-    options.scribe?.getRecentStderrLines() ??
-    [];
+    options.recentStderrLines ?? options.scribe?.getRecentStderrLines() ?? [];
 
   const record: DiagnosticRecord = {
     runId: options.runId,
@@ -100,13 +82,8 @@ export async function captureDiagnostics(
     try {
       await fs.promises.mkdir(options.outputDir, { recursive: true });
       const filePath = path.join(options.outputDir, "diagnostics.json");
-      await fs.promises.writeFile(
-        filePath,
-        JSON.stringify(record, null, 2),
-        "utf-8"
-      );
-    } catch {
-    }
+      await fs.promises.writeFile(filePath, JSON.stringify(record, null, 2), "utf-8");
+    } catch {}
   }
 
   return record;
@@ -122,7 +99,7 @@ export class DiagnosticsEngine {
   }
 
   public async capture(
-    options: Omit<DiagnosticsCaptureOptions, "runId" | "outputDir">
+    options: Omit<DiagnosticsCaptureOptions, "runId" | "outputDir">,
   ): Promise<DiagnosticRecord> {
     return captureDiagnostics({
       runId: this.runId,

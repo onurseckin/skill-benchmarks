@@ -159,9 +159,13 @@ export class ContainerFaultInjector implements IFaultInjector {
       case "disk_pressure": {
         const target = `${fault.targetPath.replace(/\/$/, "")}/.chaos_fill_${fault.id}.tmp`;
         if (fault.fillStrategy === "random_fill") {
-          return [`dd if=/dev/urandom of="${target}" bs=1M count=${fault.fillBytesMb} 2>/dev/null || true`];
+          return [
+            `dd if=/dev/urandom of="${target}" bs=1M count=${fault.fillBytesMb} 2>/dev/null || true`,
+          ];
         }
-        return [`dd if=/dev/zero of="${target}" bs=1M count=${fault.fillBytesMb} 2>/dev/null || true`];
+        return [
+          `dd if=/dev/zero of="${target}" bs=1M count=${fault.fillBytesMb} 2>/dev/null || true`,
+        ];
       }
       case "cpu_throttle": {
         const cores = fault.coresToStress ?? 1;

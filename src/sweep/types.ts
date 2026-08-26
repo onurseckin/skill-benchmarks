@@ -7,18 +7,10 @@ import type {
   DetailedTokenTelemetry,
   RunTerminationReason,
 } from "../runner/types.js";
-import type {
-  IContainerPoolManager,
-} from "../infrastructure/container/types.js";
-import type {
-  RunRecord,
-} from "../reporting/types.js";
-import type {
-  BenchmarkRuntimeConfig,
-} from "../shared/benchmark-runtime-config.js";
-import type {
-  ExecutionMode,
-} from "../shared/execution-mode.js";
+import type { IContainerPoolManager } from "../infrastructure/container/types.js";
+import type { RunRecord } from "../reporting/types.js";
+import type { BenchmarkRuntimeConfig } from "../shared/benchmark-runtime-config.js";
+import type { ExecutionMode } from "../shared/execution-mode.js";
 
 export type SweepExecutionStatus =
   | "pending"

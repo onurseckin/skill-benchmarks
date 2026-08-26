@@ -22,7 +22,7 @@ export interface ContextManagerOptions {
 export function buildSystemPrompt(
   baseSystemPrompt?: string,
   skillContent?: string,
-  template?: string
+  template?: string,
 ): string {
   const effectiveBase =
     baseSystemPrompt !== undefined && baseSystemPrompt.trim().length > 0
@@ -72,7 +72,8 @@ export function estimateMessageTokens(message: AgentMessage): number {
       let count = estimateTokens(message.content) + 4;
       if (message.toolCalls !== undefined && message.toolCalls.length > 0) {
         for (const tc of message.toolCalls) {
-          const argsStr = tc.rawArguments.length > 0 ? tc.rawArguments : JSON.stringify(tc.arguments);
+          const argsStr =
+            tc.rawArguments.length > 0 ? tc.rawArguments : JSON.stringify(tc.arguments);
           count += estimateTokens(tc.name) + estimateTokens(argsStr) + estimateTokens(tc.id) + 8;
         }
       }
@@ -123,7 +124,7 @@ export class AgentContextManager {
   initialize(
     scenarioPrompt: string,
     skillIds?: ReadonlyArray<string | SkillManifest>,
-    baseSystemPrompt?: string
+    baseSystemPrompt?: string,
   ): ReadonlyArray<AgentMessage> {
     this.messages.length = 0;
     this.activeSkillManifests = [];
@@ -146,7 +147,11 @@ export class AgentContextManager {
       this.activeSkillsContent = "";
     }
 
-    const systemContent = buildSystemPrompt(effectiveBasePrompt, this.activeSkillsContent, this.systemPromptTemplate);
+    const systemContent = buildSystemPrompt(
+      effectiveBasePrompt,
+      this.activeSkillsContent,
+      this.systemPromptTemplate,
+    );
     this.messages.push({ role: "system", content: systemContent });
     this.messages.push({ role: "user", content: scenarioPrompt });
     return this.getMessages();

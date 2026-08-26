@@ -24,7 +24,9 @@ export interface LiveStreamingEngineOptions {
   readonly broadcaster?: BroadcasterOptions;
 }
 
-export function createLiveStreamingEngine(options?: LiveStreamingEngineOptions): LiveStreamingEngine {
+export function createLiveStreamingEngine(
+  options?: LiveStreamingEngineOptions,
+): LiveStreamingEngine {
   const streamerOptions = options !== undefined ? options.streamer : undefined;
   const broadcasterOptions = options !== undefined ? options.broadcaster : undefined;
   const streamer = new CanvasStreamer(streamerOptions);

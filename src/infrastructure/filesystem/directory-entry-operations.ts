@@ -25,7 +25,7 @@ export function openDirectoryEntry(
   directoryDescriptor: number,
   entryName: string,
   flags: number,
-  mode: number = 0
+  mode: number = 0,
 ): number {
   const descriptor = tryOpenDirectoryEntry(directoryDescriptor, entryName, flags, mode);
   if (descriptor === undefined) throw new TypeError("Owned directory entry open failed");
@@ -36,17 +36,22 @@ export function tryOpenDirectoryEntry(
   directoryDescriptor: number,
   entryName: string,
   flags: number,
-  mode: number = 0
+  mode: number = 0,
 ): number | undefined {
   const entry = createEntryName(entryName);
-  const descriptor = directoryEntryLibrary.symbols.openat(directoryDescriptor, ptr(entry), flags, mode);
+  const descriptor = directoryEntryLibrary.symbols.openat(
+    directoryDescriptor,
+    ptr(entry),
+    flags,
+    mode,
+  );
   return descriptor < 0 ? undefined : descriptor;
 }
 
 export function linkDirectoryEntry(
   directoryDescriptor: number,
   sourceName: string,
-  targetName: string
+  targetName: string,
 ): void {
   const source = createEntryName(sourceName);
   const target = createEntryName(targetName);
@@ -55,7 +60,7 @@ export function linkDirectoryEntry(
     ptr(source),
     directoryDescriptor,
     ptr(target),
-    0
+    0,
   );
   if (result !== 0) throw new TypeError("Owned directory entry publication failed");
 }
@@ -69,7 +74,7 @@ export function unlinkDirectoryEntry(directoryDescriptor: number, entryName: str
 export function renameDirectoryEntryNoReplace(
   directoryDescriptor: number,
   sourceName: string,
-  targetName: string
+  targetName: string,
 ): void {
   const source = createEntryName(sourceName);
   const target = createEntryName(targetName);
@@ -80,7 +85,7 @@ export function renameDirectoryEntryNoReplace(
 export function replaceDirectoryEntry(
   directoryDescriptor: number,
   sourceName: string,
-  targetName: string
+  targetName: string,
 ): void {
   const source = createEntryName(sourceName);
   const target = createEntryName(targetName);
@@ -88,12 +93,16 @@ export function replaceDirectoryEntry(
     directoryDescriptor,
     ptr(source),
     directoryDescriptor,
-    ptr(target)
+    ptr(target),
   );
   if (result !== 0) throw new TypeError("Owned directory entry replacement failed");
 }
 
-function createRenameDirectoryEntry(): (descriptor: number, source: Buffer, target: Buffer) => number {
+function createRenameDirectoryEntry(): (
+  descriptor: number,
+  source: Buffer,
+  target: Buffer,
+) => number {
   if (process.platform === "darwin") {
     const library = dlopen(libraryPath, {
       renameatx_np: {
@@ -101,13 +110,8 @@ function createRenameDirectoryEntry(): (descriptor: number, source: Buffer, targ
         returns: FFIType.i32,
       },
     });
-    return (descriptor, source, target) => library.symbols.renameatx_np(
-      descriptor,
-      ptr(source),
-      descriptor,
-      ptr(target),
-      4
-    );
+    return (descriptor, source, target) =>
+      library.symbols.renameatx_np(descriptor, ptr(source), descriptor, ptr(target), 4);
   }
   const library = dlopen(libraryPath, {
     renameat2: {
@@ -115,17 +119,18 @@ function createRenameDirectoryEntry(): (descriptor: number, source: Buffer, targ
       returns: FFIType.i32,
     },
   });
-  return (descriptor, source, target) => library.symbols.renameat2(
-    descriptor,
-    ptr(source),
-    descriptor,
-    ptr(target),
-    1
-  );
+  return (descriptor, source, target) =>
+    library.symbols.renameat2(descriptor, ptr(source), descriptor, ptr(target), 1);
 }
 
 function createEntryName(value: string): Buffer {
-  if (value.length === 0 || value === "." || value === ".." || value.includes("/") || value.includes("\0")) {
+  if (
+    value.length === 0 ||
+    value === "." ||
+    value === ".." ||
+    value.includes("/") ||
+    value.includes("\0")
+  ) {
     throw new TypeError("Owned directory entry name is unsafe");
   }
   return Buffer.from(`${value}\0`);

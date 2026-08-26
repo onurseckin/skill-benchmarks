@@ -23,7 +23,7 @@ export class InteractiveDialogRunner {
   public async runScenario(
     scenario: InteractiveBenchmarkScenario,
     candidateCallback: (messages: readonly DialogMessage[], turn: number) => Promise<string>,
-    artifacts: Readonly<Record<string, string>> = {}
+    artifacts: Readonly<Record<string, string>> = {},
   ): Promise<InteractiveBenchmarkResult> {
     const simConfig: StakeholderSimulatorConfig = {
       script: scenario.script,
@@ -48,10 +48,11 @@ export class InteractiveDialogRunner {
       scenario.script,
       assertions,
       artifacts,
-      scenario.id
+      scenario.id,
     );
 
-    const minPass = scenario.graderConfig?.minPassingScore ?? this.graderConfig.minPassingScore ?? 70;
+    const minPass =
+      scenario.graderConfig?.minPassingScore ?? this.graderConfig.minPassingScore ?? 70;
     const passed = evaluation.scoreBreakdown.overallScore >= minPass;
 
     return {
@@ -67,9 +68,11 @@ export class InteractiveDialogRunner {
 export async function runInteractiveDialogTest(
   scenario: InteractiveBenchmarkScenario,
   candidateCallback: (messages: readonly DialogMessage[], turn: number) => Promise<string>,
-  options: { graderConfig?: InterviewGraderConfig; artifacts?: Readonly<Record<string, string>> } = {}
+  options: {
+    graderConfig?: InterviewGraderConfig;
+    artifacts?: Readonly<Record<string, string>>;
+  } = {},
 ): Promise<InteractiveBenchmarkResult> {
   const runner = new InteractiveDialogRunner(options.graderConfig);
   return runner.runScenario(scenario, candidateCallback, options.artifacts ?? {});
 }
-

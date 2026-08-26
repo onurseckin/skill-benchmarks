@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
 
 const redactedSensitiveContent = "redacted sensitive content";
-const credentialPattern = /(?:authorization\s*:\s*bearer\s+\S+|bearer\s+[a-zA-Z0-9_.-]{12,}|(?:api[_-]?key|token|secret|password)\s*[=:]\s*\S+|["']?[a-z0-9_-]*(?:key|token)["']?\s*[=:]\s*\S+|sk-[a-zA-Z0-9_-]+)/i;
+const credentialPattern =
+  /(?:authorization\s*:\s*bearer\s+\S+|bearer\s+[a-zA-Z0-9_.-]{12,}|(?:api[_-]?key|token|secret|password)\s*[=:]\s*\S+|["']?[a-z0-9_-]*(?:key|token)["']?\s*[=:]\s*\S+|sk-[a-zA-Z0-9_-]+)/i;
 const completeBasicAuthorizationPattern = /authorization\s*:\s*basic\s+\S+/gi;
 const completeBasicAuthorizationAtEndPattern = /authorization\s*:\s*basic\s+\S+$/i;
 const standaloneBasicTokenPattern = /(^|[\r\n])([ \t]*basic[ \t]+)(\S+)/gi;
@@ -20,14 +21,20 @@ class BasicAuthorizationSequenceNormalizer {
   private credentialMayContinue = false;
 
   public sanitizeValue(value: unknown, propertyKey?: string): unknown {
-    if (typeof value === "string") return this.sanitizeText(value, classifyArtifactStringRole(propertyKey));
+    if (typeof value === "string")
+      return this.sanitizeText(value, classifyArtifactStringRole(propertyKey));
     if (Array.isArray(value)) return value.map((child) => this.sanitizeValue(child));
     if (value === null || typeof value !== "object") return value;
-    return Object.fromEntries(Object.entries(value).map(([key, child]) => [key, this.sanitizeValue(child, key)]));
+    return Object.fromEntries(
+      Object.entries(value).map(([key, child]) => [key, this.sanitizeValue(child, key)]),
+    );
   }
 
   public sanitizeText(value: string, role: ArtifactStringRole = "sequence"): string {
-    const completeRedaction = value.replace(completeBasicAuthorizationPattern, redactedSensitiveContent);
+    const completeRedaction = value.replace(
+      completeBasicAuthorizationPattern,
+      redactedSensitiveContent,
+    );
     if (completeRedaction !== value) {
       this.credentialMayContinue = completeBasicAuthorizationAtEndPattern.test(value);
       this.reset();
@@ -62,7 +69,11 @@ class BasicAuthorizationSequenceNormalizer {
     return value;
   }
 
-  private sanitizeExpectedScheme(value: string, normalized: string, role: ArtifactStringRole): string {
+  private sanitizeExpectedScheme(
+    value: string,
+    normalized: string,
+    role: ArtifactStringRole,
+  ): string {
     if (/^basic\s+\S+$/i.test(value.trim())) {
       this.reset();
       return redactedSensitiveContent;
@@ -152,8 +163,12 @@ export function sanitizeBenchmarkArtifactText(value: string): string {
 
 export function createSafeArtifactPathSegment(value: string, fallback: string): string {
   const normalized = value.trim();
-  if (safePathSegmentPattern.test(normalized) && normalized !== "." && normalized !== "..") return normalized;
-  const prefix = normalized.replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 48);
+  if (safePathSegmentPattern.test(normalized) && normalized !== "." && normalized !== "..")
+    return normalized;
+  const prefix = normalized
+    .replace(/[^a-zA-Z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48);
   const digest = createHash("sha256").update(value).digest("hex").slice(0, 12);
   return `${prefix.length > 0 ? prefix : fallback}-${digest}`;
 }
@@ -162,9 +177,11 @@ function sanitizeNormalizedArtifactValue(value: unknown): unknown {
   if (typeof value === "string") return sanitizeNormalizedArtifactText(value);
   if (Array.isArray(value)) return value.map(sanitizeNormalizedArtifactValue);
   if (value === null || typeof value !== "object") return value;
-  return Object.fromEntries(Object.entries(value)
-    .filter(([key]) => !isSensitiveArtifactPropertyKey(key))
-    .map(([key, child]) => [key, sanitizeArtifactProperty(key, child)]));
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([key]) => !isSensitiveArtifactPropertyKey(key))
+      .map(([key, child]) => [key, sanitizeArtifactProperty(key, child)]),
+  );
 }
 
 function sanitizeNormalizedArtifactText(value: string): string {
@@ -181,47 +198,64 @@ function sanitizeArtifactProperty(key: string, value: unknown): unknown {
 function sanitizeJsonArtifactText(value: string): string | undefined {
   try {
     const parsed = JSON.parse(value) as unknown;
-    if (parsed !== null && typeof parsed === "object") return JSON.stringify(sanitizeBenchmarkArtifactValue(parsed));
-  } catch {
-  }
+    if (parsed !== null && typeof parsed === "object")
+      return JSON.stringify(sanitizeBenchmarkArtifactValue(parsed));
+  } catch {}
   return undefined;
 }
 
 function classifyArtifactStringRole(propertyKey?: string): ArtifactStringRole {
   if (propertyKey === undefined) return "sequence";
   const normalized = normalizeArtifactKey(propertyKey);
-  if (["content", "credential", "data", "message", "output", "text", "value", "chunk"].includes(normalized)) return "content";
-  if (["header", "headers", "key", "label", "name", "role", "scheme", "type"].includes(normalized)) return "descriptor";
+  if (
+    ["content", "credential", "data", "message", "output", "text", "value", "chunk"].includes(
+      normalized,
+    )
+  )
+    return "content";
+  if (["header", "headers", "key", "label", "name", "role", "scheme", "type"].includes(normalized))
+    return "descriptor";
   return "neutral";
 }
 
 function isSensitiveArtifactPropertyKey(key: string): boolean {
-  const keyTokens = key.replace(/([a-z0-9])([A-Z])/g, "$1 $2").toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
-  return keyTokens.some((token) => (
-    token === "authorization"
-    || token === "cookie"
-    || token === "secret"
-    || token === "password"
-    || token === "credential"
-    || token === "private"
-    || token === "api"
-    || token === "key"
-    || token === "token"
-  ));
+  const keyTokens = key
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
+  return keyTokens.some(
+    (token) =>
+      token === "authorization" ||
+      token === "cookie" ||
+      token === "secret" ||
+      token === "password" ||
+      token === "credential" ||
+      token === "private" ||
+      token === "api" ||
+      token === "key" ||
+      token === "token",
+  );
 }
 
 function normalizeArtifactKey(key: string): string {
   return key.replace(/[^a-z0-9]+/gi, "").toLowerCase();
 }
 
-function redactStandaloneBasicCredentials(value: string): { readonly value: string; readonly continues: boolean } {
+function redactStandaloneBasicCredentials(value: string): {
+  readonly value: string;
+  readonly continues: boolean;
+} {
   let continues = false;
-  const sanitized = value.replace(standaloneBasicTokenPattern, (match, boundary: string, prefix: string, token: string) => {
-    if (!isCredentialShapedBasicToken(token)) return match;
-    const tokenEnd = (match.indexOf(token) + token.length);
-    continues ||= value.endsWith(match) && tokenEnd === match.length;
-    return `${boundary}${prefix}${redactedSensitiveContent}`;
-  });
+  const sanitized = value.replace(
+    standaloneBasicTokenPattern,
+    (match, boundary: string, prefix: string, token: string) => {
+      if (!isCredentialShapedBasicToken(token)) return match;
+      const tokenEnd = match.indexOf(token) + token.length;
+      continues ||= value.endsWith(match) && tokenEnd === match.length;
+      return `${boundary}${prefix}${redactedSensitiveContent}`;
+    },
+  );
   return { value: sanitized, continues };
 }
 

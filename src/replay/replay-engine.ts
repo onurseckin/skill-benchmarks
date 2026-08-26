@@ -27,7 +27,9 @@ export class ReplayEngine {
   }
 
   public getTelemetryWindow(startMs: number, endMs: number): readonly CgroupTelemetryPoint[] {
-    return this.session.telemetrySeries.filter((point) => point.timestampMs >= startMs && point.timestampMs <= endMs);
+    return this.session.telemetrySeries.filter(
+      (point) => point.timestampMs >= startMs && point.timestampMs <= endMs,
+    );
   }
 
   public getSession(): ReplaySession {

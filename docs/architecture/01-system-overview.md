@@ -98,7 +98,7 @@ Skill-Benchmarks models benchmark matrix execution as a Directed Acyclic Graph (
 
 ```
           TASK DEPENDENCY & WORK-SPAN DECOMPOSITION GRAPH
-          
+
           [Init Warm Pool] (Serial Overhead S_0)
                  │
         ┌────────┼────────┬────────────────┐
@@ -109,7 +109,7 @@ Skill-Benchmarks models benchmark matrix execution as a Directed Acyclic Graph (
         └────────┼────────┴────────────────┘
                  ▼
         [Evidence Validation & Report Gen] (Serial Span S_end)
-        
+
         Total Work W = S_0 + \sum(t_i) + S_end
         Total Span S = S_0 + max(t_i) + S_end
         Parallelism  P = W / S
@@ -149,17 +149,17 @@ The execution of a benchmark run progresses through eight discrete phases:
 
 ## 4. Key Subsystem Source Code References
 
-| Subsystem Component | Primary Implementation | Architectural Contract |
-| :--- | :--- | :--- |
-| **Matrix Orchestration** | [`src/runner/matrix-runner.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/runner/matrix-runner.ts) | Manages concurrent task matrix dispatch and worker allocation. |
-| **Agentic Runner Engine** | [`src/runner/runner-engine.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/runner/runner-engine.ts) | Implements multi-turn prompt-response-tool cycles. |
-| **Container Sandbox Pool** | [`src/infrastructure/container/pool.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/infrastructure/container/pool.ts) | Controls Docker container lifecycle, warm pooling, and cgroup metrics. |
-| **Workspace Hydration** | [`src/infrastructure/workspace/hydration.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/infrastructure/workspace/hydration.ts) | Manages copy-on-write workspace directories and SHA-256 diffing. |
-| **Frontier Provider Adapters** | [`src/providers/factory.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/providers/factory.ts) | Factory layer normalizing Anthropic, Gemini, and OpenAI APIs. |
-| **Deterministic AST Evaluator**| [`src/eval/deterministic.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/eval/deterministic.ts) | Performs static AST inspection and test suite execution. |
-| **Benchmark Authority** | [`src/shared/benchmark-authority.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/shared/benchmark-authority.ts) | Validates evidence, provenance, identity, and persisted claim consistency. |
-| **Telemetry Database Engine** | [`src/reporting/db.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/reporting/db.ts) | SQLite database layer running in Write-Ahead-Logging (WAL) mode. |
-| **Binary Stream Multiplexer** | [`src/tunnel/stream-tunnel.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/tunnel/stream-tunnel.ts) | Multiplexes 16-byte framed binary PTY streams over WebSockets. |
+| Subsystem Component             | Primary Implementation                                                                                                                          | Architectural Contract                                                     |
+| :------------------------------ | :---------------------------------------------------------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------- |
+| **Matrix Orchestration**        | [`src/runner/matrix-runner.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/runner/matrix-runner.ts)                             | Manages concurrent task matrix dispatch and worker allocation.             |
+| **Agentic Runner Engine**       | [`src/runner/runner-engine.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/runner/runner-engine.ts)                             | Implements multi-turn prompt-response-tool cycles.                         |
+| **Container Sandbox Pool**      | [`src/infrastructure/container/pool.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/infrastructure/container/pool.ts)           | Controls Docker container lifecycle, warm pooling, and cgroup metrics.     |
+| **Workspace Hydration**         | [`src/infrastructure/workspace/hydration.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/infrastructure/workspace/hydration.ts) | Manages copy-on-write workspace directories and SHA-256 diffing.           |
+| **Frontier Provider Adapters**  | [`src/providers/factory.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/providers/factory.ts)                                   | Factory layer normalizing Anthropic, Gemini, and OpenAI APIs.              |
+| **Deterministic AST Evaluator** | [`src/eval/deterministic.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/eval/deterministic.ts)                                 | Performs static AST inspection and test suite execution.                   |
+| **Benchmark Authority**         | [`src/shared/benchmark-authority.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/shared/benchmark-authority.ts)                 | Validates evidence, provenance, identity, and persisted claim consistency. |
+| **Telemetry Database Engine**   | [`src/reporting/db.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/reporting/db.ts)                                             | SQLite database layer running in Write-Ahead-Logging (WAL) mode.           |
+| **Binary Stream Multiplexer**   | [`src/tunnel/stream-tunnel.ts`](file:///Users/onurseckinsenoglu/repos/skill-benchmarks/src/tunnel/stream-tunnel.ts)                             | Multiplexes 16-byte framed binary PTY streams over WebSockets.             |
 
 ---
 

@@ -91,6 +91,9 @@ export class ContainerStateMachine {
   }
 
   isTerminal(): boolean {
-    return this._state === "TERMINATED" || (this._state === "ERRORED" && this._history.some(h => h.from === "TEARDOWN"));
+    return (
+      this._state === "TERMINATED" ||
+      (this._state === "ERRORED" && this._history.some((h) => h.from === "TEARDOWN"))
+    );
   }
 }

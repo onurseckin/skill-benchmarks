@@ -1,7 +1,13 @@
 import { join, relative, resolve, sep } from "node:path";
 import { getModelDefinition } from "../../models/model-registry.js";
-import { resolveBenchmarkRuntimeConfig, type BenchmarkRuntimeConfig } from "../../shared/benchmark-runtime-config.js";
-import { BenchmarkAdmissionError, validateMatrixSweepConfig } from "../../sweep/sweep-config-validation.js";
+import {
+  resolveBenchmarkRuntimeConfig,
+  type BenchmarkRuntimeConfig,
+} from "../../shared/benchmark-runtime-config.js";
+import {
+  BenchmarkAdmissionError,
+  validateMatrixSweepConfig,
+} from "../../sweep/sweep-config-validation.js";
 import type { MatrixSweepConfig, ModelMatrixEntry } from "../../sweep/types.js";
 
 export interface CompetitionAdmissionInput {
@@ -34,14 +40,16 @@ export function admitCompetition(input: CompetitionAdmissionInput): CompetitionA
   });
   if (input.scenarioIds.length === 0) throw new BenchmarkAdmissionError("scenario_unresolved");
   if (input.skillIds.length !== 1) throw new BenchmarkAdmissionError("skill_unresolved");
-  if (input.modelIds.length < input.minimumModels
-    || (input.maximumModels !== undefined && input.modelIds.length > input.maximumModels)) {
+  if (
+    input.modelIds.length < input.minimumModels ||
+    (input.maximumModels !== undefined && input.modelIds.length > input.maximumModels)
+  ) {
     throw new BenchmarkAdmissionError("empty_matrix");
   }
   const models = input.modelIds.map(resolveModelEntry);
   const telemetryDbPath = requirePathInsideRoot(
     input.dbPath ?? join(runtimeConfig.outputRoot, "db", "benchmarks.sqlite"),
-    runtimeConfig.outputRoot
+    runtimeConfig.outputRoot,
   );
   const matrixConfig: MatrixSweepConfig = {
     runtimeConfig,
@@ -66,7 +74,7 @@ export function admitCompetition(input: CompetitionAdmissionInput): CompetitionA
 export function toCompetitionSweepConfig(
   admission: CompetitionAdmission,
   scenarioIds: readonly string[],
-  models: readonly ModelMatrixEntry[]
+  models: readonly ModelMatrixEntry[],
 ): MatrixSweepConfig {
   const config: MatrixSweepConfig = {
     runtimeConfig: admission.runtimeConfig,

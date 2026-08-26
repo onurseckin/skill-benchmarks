@@ -19,14 +19,25 @@ export function validateDiagnosticReport(path: string, artifacts: DiagnosticArti
   const report = readJsonRecord(path, "report_json_invalid");
   requireExactValue(report.schemaVersion, "1.0.0", "report_schema_invalid");
   const generatedAt = requireCanonicalTimestamp(report.generatedAt, "report_timestamp_invalid");
-  requireCondition(Date.parse(generatedAt) >= Date.parse(artifacts.completedAt), "report_timestamp_invalid");
+  requireCondition(
+    Date.parse(generatedAt) >= Date.parse(artifacts.completedAt),
+    "report_timestamp_invalid",
+  );
   const filter = requireRecord(report.filter, "report_filter_invalid");
   requireExactValue(Object.keys(filter).length, 0, "report_filter_invalid");
   requireExactValue(report.matchedRunCount, 1, "report_cohort_invalid");
   requireExactValue(report.eligibleRunCount, 0, "report_cohort_invalid");
   requireExactValue(report.diagnosticRunCount, 1, "report_cohort_invalid");
-  requireExactValue(requireArray(report.leaderboard, "report_leaderboard_invalid").length, 0, "report_leaderboard_invalid");
-  requireExactValue(requireArray(report.categoryLeaderboards, "report_leaderboard_invalid").length, 0, "report_leaderboard_invalid");
+  requireExactValue(
+    requireArray(report.leaderboard, "report_leaderboard_invalid").length,
+    0,
+    "report_leaderboard_invalid",
+  );
+  requireExactValue(
+    requireArray(report.categoryLeaderboards, "report_leaderboard_invalid").length,
+    0,
+    "report_leaderboard_invalid",
+  );
   const provenance = requireRecord(report.provenance, "report_provenance_invalid");
   const executionModes = requireRecord(provenance.executionModeCounts, "report_provenance_invalid");
   requireCount(executionModes, "fake", 1);
@@ -56,10 +67,18 @@ export function validateDiagnosticReport(path: string, artifacts: DiagnosticArti
   requireCount(lifecycle, "failed", 0);
   requireCount(lifecycle, "timed_out", 0);
   requireCount(lifecycle, "aborted", 0);
-  requireExactValue(provenance.evidenceThrough, artifacts.completedAt, "report_evidence_timestamp_invalid");
+  requireExactValue(
+    provenance.evidenceThrough,
+    artifacts.completedAt,
+    "report_evidence_timestamp_invalid",
+  );
   const resultEligibility = requireRecord(artifacts.result.eligibility, "report_reason_invalid");
   const expectedReasons = requireStringArray(resultEligibility.reasons, "report_reason_invalid");
-  requireExactValue(expectedReasons.length, canonicalDiagnosticReasons.length, "report_reason_invalid");
+  requireExactValue(
+    expectedReasons.length,
+    canonicalDiagnosticReasons.length,
+    "report_reason_invalid",
+  );
   const reasonRows = requireArray(provenance.eligibilityReasonCounts, "report_reason_invalid");
   requireExactValue(reasonRows.length, expectedReasons.length, "report_reason_invalid");
   for (const [index, reason] of expectedReasons.entries()) {

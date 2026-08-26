@@ -1,5 +1,13 @@
 import { randomUUID } from "node:crypto";
-import { closeSync, existsSync, fsyncSync, linkSync, openSync, unlinkSync, writeFileSync } from "node:fs";
+import {
+  closeSync,
+  existsSync,
+  fsyncSync,
+  linkSync,
+  openSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { basename, dirname, join } from "node:path";
 import type { RunRecord } from "../reporting/types.js";
 import { sanitizeBenchmarkArtifactValue } from "../shared/artifact-sanitization.js";
@@ -15,7 +23,10 @@ export interface SweepOutcomeInput {
   readonly cells: readonly MatrixCellDescriptor[];
   readonly results: readonly MatrixCellResult[];
   readonly durableRecords: ReadonlyMap<string, RunRecord>;
-  readonly orchestrationFailure?: "checkpoint_persistence_failed" | "terminal_identity_conflict" | "database_preflight_failed";
+  readonly orchestrationFailure?:
+    | "checkpoint_persistence_failed"
+    | "terminal_identity_conflict"
+    | "database_preflight_failed";
 }
 
 export function createSweepOutcomePath(outputRoot: string, sweepId: string): string {
@@ -27,7 +38,7 @@ export function writeDatabasePreflightFailureOutcome(
   sweepId: string,
   planFingerprint: string,
   startedAt: string,
-  cells: readonly MatrixCellDescriptor[]
+  cells: readonly MatrixCellDescriptor[],
 ): void {
   writeSweepOutcome({
     outputRoot,
@@ -71,11 +82,17 @@ export function writeSweepOutcome(input: SweepOutcomeInput): void {
   const abortedCount = terminalCells.filter((cell) => cell.status === "aborted").length;
   const skippedCount = terminalCells.filter((cell) => cell.status === "skipped").length;
   const failedCount = terminalCells.length - completedCount - abortedCount - skippedCount;
-  const terminationReason = input.orchestrationFailure
-    ?? (input.status === "completed" ? "success" : input.status === "aborted" ? "aborted" : "cell_failure");
-  const affectedCells = input.orchestrationFailure === "database_preflight_failed"
-    ? terminalCells
-    : terminalCells.filter((cell) => cell.publicStatus === "failed");
+  const terminationReason =
+    input.orchestrationFailure ??
+    (input.status === "completed"
+      ? "success"
+      : input.status === "aborted"
+        ? "aborted"
+        : "cell_failure");
+  const affectedCells =
+    input.orchestrationFailure === "database_preflight_failed"
+      ? terminalCells
+      : terminalCells.filter((cell) => cell.publicStatus === "failed");
   commitImmutableJson(createSweepOutcomePath(input.outputRoot, input.sweepId), {
     schemaVersion: "1.0.0",
     artifactKind: "sweep-outcome",
@@ -91,13 +108,15 @@ export function writeSweepOutcome(input: SweepOutcomeInput): void {
     failedCount,
     abortedCount,
     skippedCount,
-    ...(input.orchestrationFailure === undefined ? {} : {
-      orchestrationFailure: {
-        reason: input.orchestrationFailure,
-        affectedCellIds: affectedCells.map((cell) => cell.cellId),
-        affectedRunIds: affectedCells.map((cell) => cell.runId),
-      },
-    }),
+    ...(input.orchestrationFailure === undefined
+      ? {}
+      : {
+          orchestrationFailure: {
+            reason: input.orchestrationFailure,
+            affectedCellIds: affectedCells.map((cell) => cell.cellId),
+            affectedRunIds: affectedCells.map((cell) => cell.runId),
+          },
+        }),
   });
 }
 
@@ -106,7 +125,11 @@ function commitImmutableJson(path: string, value: unknown): void {
   try {
     const descriptor = openSync(temporaryPath, "wx", 0o600);
     try {
-      writeFileSync(descriptor, JSON.stringify(sanitizeBenchmarkArtifactValue(value), null, 2), "utf8");
+      writeFileSync(
+        descriptor,
+        JSON.stringify(sanitizeBenchmarkArtifactValue(value), null, 2),
+        "utf8",
+      );
       fsyncSync(descriptor);
     } finally {
       closeSync(descriptor);

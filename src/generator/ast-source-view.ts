@@ -10,7 +10,7 @@ export class AstSourceView {
 
   public constructor(
     public readonly filePath: string,
-    private readonly sourceCode: string
+    private readonly sourceCode: string,
   ) {
     const lineStarts = [0];
     for (let index = 0; index < sourceCode.length; index++) {

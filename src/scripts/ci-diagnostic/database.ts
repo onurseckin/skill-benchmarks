@@ -99,7 +99,11 @@ function validateRunRow(row: DatabaseRunRow, artifacts: DiagnosticArtifacts): vo
   const identity = artifacts.identity;
   requireExactValue(row.run_id, identity.runId, "database_run_identity_invalid");
   requireExactValue(row.sweep_id, identity.sweepId, "database_run_identity_invalid");
-  requireExactValue(row.plan_fingerprint, identity.planFingerprint, "database_run_identity_invalid");
+  requireExactValue(
+    row.plan_fingerprint,
+    identity.planFingerprint,
+    "database_run_identity_invalid",
+  );
   requireExactValue(row.cell_id, identity.cellId, "database_run_identity_invalid");
   requireExactValue(row.matrix_occurrence_index, 0, "database_run_identity_invalid");
   requireExactValue(row.scenario_id, identity.scenarioId, "database_run_identity_invalid");
@@ -123,35 +127,75 @@ function validateRunRow(row: DatabaseRunRow, artifacts: DiagnosticArtifacts): vo
   requireExactValue(row.operational_cost_usd, 0, "database_cost_invalid");
   requireExactValue(row.cost_evidence_status, "simulated_zero", "database_cost_invalid");
   requireExactValue(row.attempt_count, 1, "database_lifecycle_invalid");
-  requireExactValue(row.wall_clock_ms, artifacts.result.totalDurationMs, "database_metric_reconciliation_invalid");
-  requireExactValue(row.total_tokens, artifacts.result.totalTokens, "database_metric_reconciliation_invalid");
-  requireExactValue(row.total_turns, artifacts.result.totalTurns, "database_metric_reconciliation_invalid");
-  requireExactValue(row.error_count, artifacts.result.toolErrorCount, "database_metric_reconciliation_invalid");
-  const usage = requireRecord(artifacts.result.usageBreakdown, "database_metric_reconciliation_invalid");
-  const cacheReadTokens = requireInteger(usage.cacheReadInputTokens, "database_metric_reconciliation_invalid");
+  requireExactValue(
+    row.wall_clock_ms,
+    artifacts.result.totalDurationMs,
+    "database_metric_reconciliation_invalid",
+  );
+  requireExactValue(
+    row.total_tokens,
+    artifacts.result.totalTokens,
+    "database_metric_reconciliation_invalid",
+  );
+  requireExactValue(
+    row.total_turns,
+    artifacts.result.totalTurns,
+    "database_metric_reconciliation_invalid",
+  );
+  requireExactValue(
+    row.error_count,
+    artifacts.result.toolErrorCount,
+    "database_metric_reconciliation_invalid",
+  );
+  const usage = requireRecord(
+    artifacts.result.usageBreakdown,
+    "database_metric_reconciliation_invalid",
+  );
+  const cacheReadTokens = requireInteger(
+    usage.cacheReadInputTokens,
+    "database_metric_reconciliation_invalid",
+  );
   const totalTokens = requireInteger(usage.totalTokens, "database_metric_reconciliation_invalid");
-  requireCondition(totalTokens > 0 && cacheReadTokens >= 0 && row.cache_hit_ratio >= 0 && row.cache_hit_ratio <= 1, "database_metric_reconciliation_invalid");
-  requireExactValue(row.cache_hit_ratio, cacheReadTokens / totalTokens, "database_metric_reconciliation_invalid");
+  requireCondition(
+    totalTokens > 0 && cacheReadTokens >= 0 && row.cache_hit_ratio >= 0 && row.cache_hit_ratio <= 1,
+    "database_metric_reconciliation_invalid",
+  );
+  requireExactValue(
+    row.cache_hit_ratio,
+    cacheReadTokens / totalTokens,
+    "database_metric_reconciliation_invalid",
+  );
   requireExactValue(row.started_at, artifacts.startedAt, "database_timestamp_invalid");
   requireExactValue(row.completed_at, artifacts.completedAt, "database_timestamp_invalid");
-  requireNull(row, [
-    "evaluator_id",
-    "evaluator_version",
-    "evidence_digest",
-    "evidence_identity_json",
-    "composite_score",
-    "passed_benchmark",
-    "actual_cost_usd",
-    "cost_pricing_identity",
-    "cost_usage_digest",
-    "manifest_json",
-    "metrics_json",
-  ], "database_claim_absence_invalid");
+  requireNull(
+    row,
+    [
+      "evaluator_id",
+      "evaluator_version",
+      "evidence_digest",
+      "evidence_identity_json",
+      "composite_score",
+      "passed_benchmark",
+      "actual_cost_usd",
+      "cost_pricing_identity",
+      "cost_usage_digest",
+      "manifest_json",
+      "metrics_json",
+    ],
+    "database_claim_absence_invalid",
+  );
   const eligibility = requireRecord(artifacts.result.eligibility, "database_authority_invalid");
   requireStringArray(eligibility.reasons, "database_authority_invalid");
-  requireEqualStringArrays(parseJson(row.eligibility_reasons_json, "database_authority_invalid"), canonicalDiagnosticReasons, "database_authority_invalid");
+  requireEqualStringArrays(
+    parseJson(row.eligibility_reasons_json, "database_authority_invalid"),
+    canonicalDiagnosticReasons,
+    "database_authority_invalid",
+  );
   const evaluation = parseJson(row.evaluation_json, "database_evaluation_invalid");
-  requireCondition(isDeepStrictEqual(evaluation, artifacts.result.evaluation), "database_evaluation_invalid");
+  requireCondition(
+    isDeepStrictEqual(evaluation, artifacts.result.evaluation),
+    "database_evaluation_invalid",
+  );
 }
 
 export function validateDiagnosticDatabase(path: string, artifacts: DiagnosticArtifacts): void {
@@ -166,11 +210,24 @@ export function validateDiagnosticDatabase(path: string, artifacts: DiagnosticAr
     validateReportingSchema(database);
     const version = database.query("PRAGMA user_version").get() as JsonRecord | null;
     requireCondition(version !== null, "database_schema_version_invalid");
-    requireExactValue(version.user_version, reportingSchemaVersion, "database_schema_version_invalid");
-    const schemaObjects = database.query("SELECT type, name, tbl_name FROM sqlite_master ORDER BY type, name").all() as readonly JsonRecord[];
-    const schemaIdentities = schemaObjects.map((row) => `${String(row.type)}:${String(row.name)}:${String(row.tbl_name)}`);
-    requireEqualStringArrays(schemaIdentities, canonicalSchemaObjects, "database_schema_shape_invalid");
-    const runs = database.query(`SELECT
+    requireExactValue(
+      version.user_version,
+      reportingSchemaVersion,
+      "database_schema_version_invalid",
+    );
+    const schemaObjects = database
+      .query("SELECT type, name, tbl_name FROM sqlite_master ORDER BY type, name")
+      .all() as readonly JsonRecord[];
+    const schemaIdentities = schemaObjects.map(
+      (row) => `${String(row.type)}:${String(row.name)}:${String(row.tbl_name)}`,
+    );
+    requireEqualStringArrays(
+      schemaIdentities,
+      canonicalSchemaObjects,
+      "database_schema_shape_invalid",
+    );
+    const runs = database
+      .query(`SELECT
       run_id, sweep_id, plan_fingerprint, cell_id, matrix_occurrence_index,
       scenario_id, category, skill_id, model_id, provider_id, execution_mode,
       simulated, dry_run, status, termination_reason, benchmark_cohort,
@@ -181,17 +238,24 @@ export function validateDiagnosticDatabase(path: string, artifacts: DiagnosticAr
       cost_evidence_status, actual_cost_usd, cost_pricing_identity, cost_usage_digest,
       attempt_count, wall_clock_ms, total_tokens, cache_hit_ratio, total_turns, error_count,
       started_at, completed_at, manifest_json, metrics_json, evaluation_json
-      FROM runs`).all() as readonly DatabaseRunRow[];
+      FROM runs`)
+      .all() as readonly DatabaseRunRow[];
     requireExactValue(runs.length, 1, "database_run_count_invalid");
     const run = runs[0];
     requireCondition(run !== undefined, "database_run_count_invalid");
     validateRunRow(run, artifacts);
-    const eligibleCount = database.query("SELECT COUNT(*) AS count FROM runs WHERE eligibility_status = 'eligible'").get() as JsonRecord | null;
+    const eligibleCount = database
+      .query("SELECT COUNT(*) AS count FROM runs WHERE eligibility_status = 'eligible'")
+      .get() as JsonRecord | null;
     requireCondition(eligibleCount !== null, "database_eligibility_count_invalid");
     requireExactValue(eligibleCount.count, 0, "database_eligibility_count_invalid");
-    const claims = database.query("SELECT run_id, sweep_id, cell_id FROM run_claims").all() as readonly JsonRecord[];
+    const claims = database
+      .query("SELECT run_id, sweep_id, cell_id FROM run_claims")
+      .all() as readonly JsonRecord[];
     requireExactValue(claims.length, 0, "database_claim_count_invalid");
-    const telemetryCount = database.query("SELECT COUNT(*) AS count FROM telemetry_events").get() as JsonRecord | null;
+    const telemetryCount = database
+      .query("SELECT COUNT(*) AS count FROM telemetry_events")
+      .get() as JsonRecord | null;
     requireCondition(telemetryCount !== null, "database_event_count_invalid");
     requireExactValue(telemetryCount.count, 0, "database_event_count_invalid");
   } catch (error) {
@@ -202,12 +266,12 @@ export function validateDiagnosticDatabase(path: string, artifacts: DiagnosticAr
   }
   const after = lstatSync(path);
   requireCondition(
-    before.dev === after.dev
-      && before.ino === after.ino
-      && before.size === after.size
-      && before.mtimeMs === after.mtimeMs
-      && before.ctimeMs === after.ctimeMs
-      && before.nlink === after.nlink,
-    "database_readonly_mutation_detected"
+    before.dev === after.dev &&
+      before.ino === after.ino &&
+      before.size === after.size &&
+      before.mtimeMs === after.mtimeMs &&
+      before.ctimeMs === after.ctimeMs &&
+      before.nlink === after.nlink,
+    "database_readonly_mutation_detected",
   );
 }

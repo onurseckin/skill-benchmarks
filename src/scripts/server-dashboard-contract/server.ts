@@ -29,12 +29,21 @@ export async function verifyServerContract(fixture: ServerDashboardFixture): Pro
   await server.start();
   requireCondition(server.port === initialPort, "server_duplicate_start_invalid");
   try {
-    const listener = Bun.spawnSync(["lsof", "-nP", `-iTCP:${server.port}`, "-sTCP:LISTEN"], { stdout: "pipe" });
+    const listener = Bun.spawnSync(["lsof", "-nP", `-iTCP:${server.port}`, "-sTCP:LISTEN"], {
+      stdout: "pipe",
+    });
     const listenerText = new TextDecoder().decode(listener.stdout);
-    requireCondition(listenerText.includes(`127.0.0.1:${server.port}`) && !listenerText.includes(`*:${server.port}`), "server_bind_invalid");
+    requireCondition(
+      listenerText.includes(`127.0.0.1:${server.port}`) &&
+        !listenerText.includes(`*:${server.port}`),
+      "server_bind_invalid",
+    );
     await verifyReadRoutes(server.url, fixture.runId);
     await verifyRejectedRoutes(server.url);
-    requireCondition(equalCounts(before, readDatabaseCounts(fixture.dbPath)), "server_database_mutated");
+    requireCondition(
+      equalCounts(before, readDatabaseCounts(fixture.dbPath)),
+      "server_database_mutated",
+    );
   } finally {
     await server.stop();
   }
@@ -44,7 +53,14 @@ export async function verifyServerContract(fixture: ServerDashboardFixture): Pro
 }
 
 async function verifyReadRoutes(origin: string, runId: string): Promise<void> {
-  for (const resource of ["/api/health", "/api/runs", "/api/leaderboard", "/api/trends", "/api/summary", "/"]) {
+  for (const resource of [
+    "/api/health",
+    "/api/runs",
+    "/api/leaderboard",
+    "/api/trends",
+    "/api/summary",
+    "/",
+  ]) {
     const response = await fetch(`${origin}${resource}`);
     requireCondition(response.status === 200, "server_read_route_failed");
     requireSecureHeaders(response);
@@ -55,10 +71,16 @@ async function verifyReadRoutes(origin: string, runId: string): Promise<void> {
   requireCondition(replayResponse.status === 200, "server_replay_route_failed");
   const replayHtml = await fetch(`${origin}/replay/${encodeURIComponent(runId)}`);
   requireCondition(replayHtml.status === 200, "server_replay_html_failed");
-  requireCondition(replayHtml.headers.get("content-security-policy")?.includes("default-src 'none'") === true, "server_csp_missing");
+  requireCondition(
+    replayHtml.headers.get("content-security-policy")?.includes("default-src 'none'") === true,
+    "server_csp_missing",
+  );
   const leaderboard = await readJson(await fetch(`${origin}/api/leaderboard`));
   const data = leaderboard.data as Record<string, unknown>;
-  requireCondition(data.eligibleRunCount === 0 && Array.isArray(data.leaderboard) && data.leaderboard.length === 0, "server_leaderboard_claim_invalid");
+  requireCondition(
+    data.eligibleRunCount === 0 && Array.isArray(data.leaderboard) && data.leaderboard.length === 0,
+    "server_leaderboard_claim_invalid",
+  );
 }
 
 async function verifyRejectedRoutes(origin: string): Promise<void> {
@@ -101,17 +123,26 @@ function readDatabaseCounts(path: string): DatabaseCounts {
 }
 
 function readCount(database: Database, table: string): number {
-  const row = database.query(`SELECT COUNT(*) AS count FROM ${table}`).get() as { readonly count: number };
+  const row = database.query(`SELECT COUNT(*) AS count FROM ${table}`).get() as {
+    readonly count: number;
+  };
   return row.count;
 }
 
 function equalCounts(left: DatabaseCounts, right: DatabaseCounts): boolean {
-  return left.runs === right.runs && left.claims === right.claims && left.telemetry === right.telemetry
-    && left.rankedHistoryObjects === 0 && right.rankedHistoryObjects === 0;
+  return (
+    left.runs === right.runs &&
+    left.claims === right.claims &&
+    left.telemetry === right.telemetry &&
+    left.rankedHistoryObjects === 0 &&
+    right.rankedHistoryObjects === 0
+  );
 }
 
 function readRankedHistoryObjects(database: Database): number {
-  const row = database.query("SELECT COUNT(*) AS count FROM sqlite_master WHERE name = 'elo_ratings'").get() as { readonly count: number };
+  const row = database
+    .query("SELECT COUNT(*) AS count FROM sqlite_master WHERE name = 'elo_ratings'")
+    .get() as { readonly count: number };
   return row.count;
 }
 
@@ -122,7 +153,10 @@ async function requireListenerClosed(origin: string): Promise<void> {
     await fetch(origin, { signal: controller.signal });
     throw new TypeError("server_listener_survived");
   } catch (error) {
-    requireCondition(error instanceof Error && error.message !== "server_listener_survived", "server_listener_survived");
+    requireCondition(
+      error instanceof Error && error.message !== "server_listener_survived",
+      "server_listener_survived",
+    );
   } finally {
     clearTimeout(timeout);
   }
@@ -150,13 +184,23 @@ async function verifyInvalidConstruction(fixture: ServerDashboardFixture): Promi
   for (const value of cases) {
     let rejected = false;
     try {
-      const server = await startServer({ port: 0, quiet: true, ...value } as unknown as ServerOptions);
+      const server = await startServer({
+        port: 0,
+        quiet: true,
+        ...value,
+      } as unknown as ServerOptions);
       await server.stop();
     } catch {
       rejected = true;
     }
     requireCondition(rejected, "server_invalid_construction_accepted");
   }
-  requireCondition(!lstatSync(dbLink).isFile() && readlinkSync(dbLink) === fixture.dbPath, "server_db_link_mutated");
-  requireCondition(!lstatSync(outputLink).isDirectory() && readlinkSync(outputLink) === fixture.outputRoot, "server_output_link_mutated");
+  requireCondition(
+    !lstatSync(dbLink).isFile() && readlinkSync(dbLink) === fixture.dbPath,
+    "server_db_link_mutated",
+  );
+  requireCondition(
+    !lstatSync(outputLink).isDirectory() && readlinkSync(outputLink) === fixture.outputRoot,
+    "server_output_link_mutated",
+  );
 }

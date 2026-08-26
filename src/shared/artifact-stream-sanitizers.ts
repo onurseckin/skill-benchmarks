@@ -33,7 +33,7 @@ export function sanitizeBenchmarkArtifactStreamValue(value: unknown): unknown {
 function normalizeStreamRecords(
   value: unknown,
   streams: ArtifactTextStreamSanitizers,
-  inheritedRunId: string
+  inheritedRunId: string,
 ): unknown {
   if (Array.isArray(value)) {
     return value.map((child) => normalizeStreamRecords(child, streams, inheritedRunId));
@@ -42,7 +42,10 @@ function normalizeStreamRecords(
   const record = value as Readonly<Record<string, unknown>>;
   const runId = resolveRunId(record, inheritedRunId);
   const normalized = Object.fromEntries(
-    Object.entries(record).map(([key, child]) => [key, normalizeStreamRecords(child, streams, runId)])
+    Object.entries(record).map(([key, child]) => [
+      key,
+      normalizeStreamRecords(child, streams, runId),
+    ]),
   );
   const commandId = resolveCommandId(record);
   if (commandId === undefined) return normalized;
@@ -67,7 +70,12 @@ function resolveRunId(record: Readonly<Record<string, unknown>>, inheritedRunId:
   if (typeof record.runId === "string") return record.runId;
   for (const field of ["cell", "scenarioResult", "runRecord"] as const) {
     const nested = record[field];
-    if (nested !== null && typeof nested === "object" && "runId" in nested && typeof nested.runId === "string") {
+    if (
+      nested !== null &&
+      typeof nested === "object" &&
+      "runId" in nested &&
+      typeof nested.runId === "string"
+    ) {
       return nested.runId;
     }
   }
@@ -81,12 +89,19 @@ function resolveCommandId(record: Readonly<Record<string, unknown>>): string | u
 }
 
 function resolveEventType(record: Readonly<Record<string, unknown>>): string {
-  const value = typeof record.eventType === "string" ? record.eventType
-    : typeof record.type === "string" ? record.type : "";
+  const value =
+    typeof record.eventType === "string"
+      ? record.eventType
+      : typeof record.type === "string"
+        ? record.type
+        : "";
   return value.toUpperCase();
 }
 
-function resolveRecordChannel(record: Readonly<Record<string, unknown>>, eventType: string): string {
+function resolveRecordChannel(
+  record: Readonly<Record<string, unknown>>,
+  eventType: string,
+): string {
   if (typeof record.channel === "string") return record.channel.toLowerCase();
   if (eventType.includes("STDERR")) return "stderr";
   if (eventType.includes("STDOUT")) return "stdout";

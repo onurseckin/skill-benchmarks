@@ -3,69 +3,16 @@ import type {
   CliCommandSpecification,
   CliFlagSpecification,
   CliFlagValueKind,
-  CliGrammarRule,
-  CliNumberConstraint,
-  CliPositionalSpecification,
-  CliRequiredOptionSpecification,
 } from "./types.js";
+import { arrayFlag, booleanFlag, command, flag, numberFlag, stringFlag } from "./builders.js";
 
-type FlagInput = Omit<CliFlagSpecification, "aliases"> & { readonly aliases?: readonly string[] };
-
-function flag(input: FlagInput): CliFlagSpecification {
-  return Object.freeze({
-    ...input,
-    aliases: Object.freeze([...(input.aliases ?? [])]),
-    ...(input.choices === undefined ? {} : { choices: Object.freeze([...input.choices]) }),
-    ...(input.number === undefined ? {} : { number: Object.freeze({ ...input.number }) }),
-  });
-}
-
-function arrayFlag(key: string, name: string, description: string, aliases: readonly string[] = [], choices?: readonly string[]): CliFlagSpecification {
-  return flag({ key, name, aliases, kind: "array", valueName: "values", description, ...(choices === undefined ? {} : { choices }) });
-}
-
-function stringFlag(key: string, name: string, description: string, choices?: readonly string[]): CliFlagSpecification {
-  return flag({ key, name, kind: "string", valueName: "value", description, ...(choices === undefined ? {} : { choices }) });
-}
-
-function numberFlag(key: string, name: string, description: string, number: CliNumberConstraint, aliases: readonly string[] = []): CliFlagSpecification {
-  return flag({ key, name, aliases, kind: "number", valueName: "number", description, number });
-}
-
-function booleanFlag(key: string, name: string, description: string): CliFlagSpecification {
-  return flag({ key, name, kind: "boolean", description });
-}
-
-function command(
-  name: CliCommandName,
-  description: string,
-  usage: string,
-  flags: readonly CliFlagSpecification[],
-  requiredOptions: readonly CliRequiredOptionSpecification[],
-  rules: readonly CliGrammarRule[],
-  examples: readonly string[],
-  positional?: CliPositionalSpecification,
-  acceptsHelp: boolean = true
-): CliCommandSpecification {
-  return Object.freeze({
-    name,
-    description,
-    usage,
-    flags: Object.freeze([...flags]),
-    requiredOptions: Object.freeze(requiredOptions.map((required) => Object.freeze({ ...required }))),
-    rules: Object.freeze([...rules]),
-    examples: Object.freeze([...examples]),
-    acceptsHelp,
-    ...(positional === undefined ? {} : {
-      positional: Object.freeze({
-        ...positional,
-        ...(positional.choices === undefined ? {} : { choices: Object.freeze([...positional.choices]) }),
-      }),
-    }),
-  });
-}
-
-export const thinkingLevelChoices = Object.freeze(["none", "low", "medium", "high", "max"] as const);
+export const thinkingLevelChoices = Object.freeze([
+  "none",
+  "low",
+  "medium",
+  "high",
+  "max",
+] as const);
 export const reasoningLevelChoices = Object.freeze(["low", "medium", "high"] as const);
 export const tournamentModeChoices = Object.freeze(["round-robin", "swiss"] as const);
 export const reportFormatChoices = Object.freeze(["console", "json", "markdown", "html"] as const);
@@ -77,17 +24,55 @@ const runFlags = Object.freeze([
   arrayFlag("scenarioIds", "scenario", "Scenario IDs", ["s"]),
   arrayFlag("skillIds", "skill", "Skill IDs", ["k"]),
   arrayFlag("modelIds", "model", "Model IDs", ["m"]),
-  flag({ key: "providerId", name: "provider", aliases: ["p"], kind: "string", valueName: "id", description: "Model provider ID", choices: providerIds }),
-  flag({ key: "category", name: "category", aliases: ["c"], kind: "string", valueName: "name", description: "Scenario category" }),
-  numberFlag("concurrency", "concurrency", "Parallel concurrency", { integer: true, minimum: 1, maximum: Number.MAX_SAFE_INTEGER }, ["j"]),
-  numberFlag("repetitions", "repetitions", "Matrix repetitions", { integer: true, minimum: 1, maximum: Number.MAX_SAFE_INTEGER }, ["r"]),
+  flag({
+    key: "providerId",
+    name: "provider",
+    aliases: ["p"],
+    kind: "string",
+    valueName: "id",
+    description: "Model provider ID",
+    choices: providerIds,
+  }),
+  flag({
+    key: "category",
+    name: "category",
+    aliases: ["c"],
+    kind: "string",
+    valueName: "name",
+    description: "Scenario category",
+  }),
+  numberFlag(
+    "concurrency",
+    "concurrency",
+    "Parallel concurrency",
+    { integer: true, minimum: 1, maximum: Number.MAX_SAFE_INTEGER },
+    ["j"],
+  ),
+  numberFlag(
+    "repetitions",
+    "repetitions",
+    "Matrix repetitions",
+    { integer: true, minimum: 1, maximum: Number.MAX_SAFE_INTEGER },
+    ["r"],
+  ),
   numberFlag("temperature", "temperature", "Model temperature", {}),
   stringFlag("thinking", "thinking", "Thinking level", thinkingLevelChoices),
   stringFlag("reasoning", "reasoning", "Reasoning effort", reasoningLevelChoices),
-  numberFlag("thinkingBudget", "thinking-budget", "Thinking token budget", { integer: true, minimum: 0, maximum: Number.MAX_SAFE_INTEGER }),
+  numberFlag("thinkingBudget", "thinking-budget", "Thinking token budget", {
+    integer: true,
+    minimum: 0,
+    maximum: Number.MAX_SAFE_INTEGER,
+  }),
   arrayFlag("matrixThinking", "matrix-thinking", "Thinking-level matrix", [], thinkingLevelChoices),
-  numberFlag("timeoutSeconds", "timeout", "Positive timeout with millisecond precision", { exclusiveMinimum: 0, safeIntegerScale: 1000 }),
-  numberFlag("maxTurns", "max-turns", "Maximum interaction turns", { integer: true, minimum: 1, maximum: Number.MAX_SAFE_INTEGER }),
+  numberFlag("timeoutSeconds", "timeout", "Positive timeout with millisecond precision", {
+    exclusiveMinimum: 0,
+    safeIntegerScale: 1000,
+  }),
+  numberFlag("maxTurns", "max-turns", "Maximum interaction turns", {
+    integer: true,
+    minimum: 1,
+    maximum: Number.MAX_SAFE_INTEGER,
+  }),
   numberFlag("maxCostUSD", "max-cost", "Maximum cost in USD", { minimum: 0 }),
   booleanFlag("mock", "mock", "Use deterministic fake execution"),
   booleanFlag("live", "live", "Use live provider execution"),
@@ -111,14 +96,44 @@ const reportFlags = Object.freeze([
   arrayFlag("skillIds", "skill", "Skill filters"),
   arrayFlag("modelIds", "model", "Model filters"),
   arrayFlag("providerIds", "provider", "Provider filters"),
-  arrayFlag("statuses", "status", "Terminal status filters", [], ["completed", "failed", "timed_out", "aborted"]),
+  arrayFlag(
+    "statuses",
+    "status",
+    "Terminal status filters",
+    [],
+    ["completed", "failed", "timed_out", "aborted"],
+  ),
   arrayFlag("executionModes", "execution-mode", "Execution-mode filters", [], ["fake", "live"]),
   stringFlag("simulated", "simulated", "Simulation provenance", ["true", "false"]),
   stringFlag("authority", "authority", "Evidence authority", ["eligible", "diagnostic"]),
-  arrayFlag("benchmarkCohorts", "cohort", "Benchmark cohort filters", [], ["eligible", "validation", "operational"]),
-  arrayFlag("eligibilityStatuses", "eligibility", "Eligibility filters", [], ["eligible", "ineligible", "unknown"]),
-  arrayFlag("evaluationStatuses", "evaluation-status", "Evaluation status filters", [], ["not_requested", "not_evaluated", "evaluated", "invalid"]),
-  arrayFlag("evidenceStatuses", "evidence-status", "Evidence status filters", [], ["unavailable", "collecting", "complete", "invalid"]),
+  arrayFlag(
+    "benchmarkCohorts",
+    "cohort",
+    "Benchmark cohort filters",
+    [],
+    ["eligible", "validation", "operational"],
+  ),
+  arrayFlag(
+    "eligibilityStatuses",
+    "eligibility",
+    "Eligibility filters",
+    [],
+    ["eligible", "ineligible", "unknown"],
+  ),
+  arrayFlag(
+    "evaluationStatuses",
+    "evaluation-status",
+    "Evaluation status filters",
+    [],
+    ["not_requested", "not_evaluated", "evaluated", "invalid"],
+  ),
+  arrayFlag(
+    "evidenceStatuses",
+    "evidence-status",
+    "Evidence status filters",
+    [],
+    ["unavailable", "collecting", "complete", "invalid"],
+  ),
   stringFlag("fromDate", "from-date", "Inclusive earliest start timestamp"),
   stringFlag("toDate", "to-date", "Inclusive latest start timestamp"),
   stringFlag("title", "title", "Report title"),
@@ -128,24 +143,146 @@ const reportFlags = Object.freeze([
 ]);
 
 export const commandSpecifications: readonly CliCommandSpecification[] = Object.freeze([
-  command("run", "Execute admitted benchmark scenarios.", "skill-benchmarks run [options] [scenario-ids...]", runFlags, [{ key: "skillIds", code: "skill_unresolved" }], ["run"], ["skill-benchmarks run --mock --scenario git-worktrees --skill tdd --model gpt-4o"], { name: "scenario-id", minimum: 0 }),
-  command("arena", "Plan or run two unranked candidate diagnostics.", "skill-benchmarks arena [options]", [arrayFlag("scenarioIds", "scenario", "One scenario ID"), arrayFlag("skillIds", "skill", "One skill ID"), arrayFlag("arenaModels", "arena", "Two model IDs"), ...competitionModes], [{ key: "scenarioIds", code: "scenario_unresolved" }, { key: "skillIds", code: "skill_unresolved" }, { key: "arenaModels", code: "empty_matrix" }], ["arena"], ["skill-benchmarks arena --dry-run --scenario git-worktrees --skill tdd --arena gpt-4o,claude-3-7-sonnet-20250219"]),
-  command("tournament", "Plan or run unranked candidate schedules.", "skill-benchmarks tournament [options]", [arrayFlag("scenarioIds", "scenario", "Scenario IDs"), arrayFlag("skillIds", "skill", "One skill ID"), arrayFlag("modelIds", "model", "Participant model IDs"), stringFlag("tournamentMode", "tournament-mode", "Tournament planning mode", tournamentModeChoices), numberFlag("rounds", "rounds", "Planned round count", { integer: true, minimum: 1, maximum: Number.MAX_SAFE_INTEGER }), ...competitionModes], [{ key: "scenarioIds", code: "scenario_unresolved" }, { key: "skillIds", code: "skill_unresolved" }, { key: "modelIds", code: "empty_matrix" }], ["tournament"], ["skill-benchmarks tournament --dry-run --scenario git-worktrees --skill tdd --model gpt-4o,claude-3-7-sonnet-20250219"]),
-  command("report", "Generate evidence-backed cohort reports.", "skill-benchmarks report [options]", reportFlags, [{ key: "dbPath", code: "report_database_unavailable" }], ["report"], ["skill-benchmarks report --db benchmarks.sqlite --format json"]),
-  command("list", "List available scenarios and skills.", "skill-benchmarks list [scenarios|skills|all]", [], [], [], ["skill-benchmarks list scenarios"], { name: "target", minimum: 0, maximum: 1, choices: listTargetChoices }),
-  command("replay", "Read validated persisted execution evidence.", "skill-benchmarks replay [target] [options]", [stringFlag("target", "target", "Persisted events or replay JSON path"), stringFlag("runId", "run-id", "Canonical persisted run ID"), stringFlag("dbPath", "db", "Existing benchmark database"), stringFlag("outputDir", "output-dir", "Canonical benchmark output root"), stringFlag("format", "format", "Replay format", replayFormatChoices), stringFlag("outputPath", "output", "Replay output path"), numberFlag("speed", "speed", "TUI playback speed", { minimum: 0.1, maximum: 20 })], [], ["replay"], ["skill-benchmarks replay events.jsonl --format json"], { name: "target", minimum: 0, maximum: 1 }),
-  command("help", "Display global or command help.", "skill-benchmarks help [command]", [], [], [], ["skill-benchmarks help run"], { name: "command", minimum: 0, maximum: 1, choices: ["run", "arena", "tournament", "report", "list", "replay", "help", "version"] }, false),
-  command("version", "Display package version information.", "skill-benchmarks version", [], [], [], ["skill-benchmarks version"], undefined, false),
+  command(
+    "run",
+    "Execute admitted benchmark scenarios.",
+    "skill-benchmarks run [options] [scenario-ids...]",
+    runFlags,
+    [{ key: "skillIds", code: "skill_unresolved" }],
+    ["run"],
+    ["skill-benchmarks run --mock --scenario git-worktrees --skill tdd --model gpt-4o"],
+    { name: "scenario-id", minimum: 0 },
+  ),
+  command(
+    "arena",
+    "Plan or run two unranked candidate diagnostics.",
+    "skill-benchmarks arena [options]",
+    [
+      arrayFlag("scenarioIds", "scenario", "One scenario ID"),
+      arrayFlag("skillIds", "skill", "One skill ID"),
+      arrayFlag("arenaModels", "arena", "Two model IDs"),
+      ...competitionModes,
+    ],
+    [
+      { key: "scenarioIds", code: "scenario_unresolved" },
+      { key: "skillIds", code: "skill_unresolved" },
+      { key: "arenaModels", code: "empty_matrix" },
+    ],
+    ["arena"],
+    [
+      "skill-benchmarks arena --dry-run --scenario git-worktrees --skill tdd --arena gpt-4o,claude-3-7-sonnet-20250219",
+    ],
+  ),
+  command(
+    "tournament",
+    "Plan or run unranked candidate schedules.",
+    "skill-benchmarks tournament [options]",
+    [
+      arrayFlag("scenarioIds", "scenario", "Scenario IDs"),
+      arrayFlag("skillIds", "skill", "One skill ID"),
+      arrayFlag("modelIds", "model", "Participant model IDs"),
+      stringFlag(
+        "tournamentMode",
+        "tournament-mode",
+        "Tournament planning mode",
+        tournamentModeChoices,
+      ),
+      numberFlag("rounds", "rounds", "Planned round count", {
+        integer: true,
+        minimum: 1,
+        maximum: Number.MAX_SAFE_INTEGER,
+      }),
+      ...competitionModes,
+    ],
+    [
+      { key: "scenarioIds", code: "scenario_unresolved" },
+      { key: "skillIds", code: "skill_unresolved" },
+      { key: "modelIds", code: "empty_matrix" },
+    ],
+    ["tournament"],
+    [
+      "skill-benchmarks tournament --dry-run --scenario git-worktrees --skill tdd --model gpt-4o,claude-3-7-sonnet-20250219",
+    ],
+  ),
+  command(
+    "report",
+    "Generate evidence-backed cohort reports.",
+    "skill-benchmarks report [options]",
+    reportFlags,
+    [{ key: "dbPath", code: "report_database_unavailable" }],
+    ["report"],
+    ["skill-benchmarks report --db benchmarks.sqlite --format json"],
+  ),
+  command(
+    "list",
+    "List available scenarios and skills.",
+    "skill-benchmarks list [scenarios|skills|all]",
+    [],
+    [],
+    [],
+    ["skill-benchmarks list scenarios"],
+    { name: "target", minimum: 0, maximum: 1, choices: listTargetChoices },
+  ),
+  command(
+    "replay",
+    "Read validated persisted execution evidence.",
+    "skill-benchmarks replay [target] [options]",
+    [
+      stringFlag("target", "target", "Persisted events or replay JSON path"),
+      stringFlag("runId", "run-id", "Canonical persisted run ID"),
+      stringFlag("dbPath", "db", "Existing benchmark database"),
+      stringFlag("outputDir", "output-dir", "Canonical benchmark output root"),
+      stringFlag("format", "format", "Replay format", replayFormatChoices),
+      stringFlag("outputPath", "output", "Replay output path"),
+      numberFlag("speed", "speed", "TUI playback speed", { minimum: 0.1, maximum: 20 }),
+    ],
+    [],
+    ["replay"],
+    ["skill-benchmarks replay events.jsonl --format json"],
+    { name: "target", minimum: 0, maximum: 1 },
+  ),
+  command(
+    "help",
+    "Display global or command help.",
+    "skill-benchmarks help [command]",
+    [],
+    [],
+    [],
+    ["skill-benchmarks help run"],
+    {
+      name: "command",
+      minimum: 0,
+      maximum: 1,
+      choices: ["run", "arena", "tournament", "report", "list", "replay", "help", "version"],
+    },
+    false,
+  ),
+  command(
+    "version",
+    "Display package version information.",
+    "skill-benchmarks version",
+    [],
+    [],
+    [],
+    ["skill-benchmarks version"],
+    undefined,
+    false,
+  ),
 ]);
 
-export const commandSpecificationByName: Readonly<Record<CliCommandName, CliCommandSpecification>> = Object.freeze(
-  Object.fromEntries(commandSpecifications.map((specification) => [specification.name, specification]))
-) as Readonly<Record<CliCommandName, CliCommandSpecification>>;
+export const commandSpecificationByName: Readonly<Record<CliCommandName, CliCommandSpecification>> =
+  Object.freeze(
+    Object.fromEntries(
+      commandSpecifications.map((specification) => [specification.name, specification]),
+    ),
+  ) as Readonly<Record<CliCommandName, CliCommandSpecification>>;
 
 const knownPublicFlagNames: ReadonlySet<string> = new Set([
   "help",
   "version",
-  ...commandSpecifications.flatMap((specification) => specification.flags.flatMap((entry) => [entry.name, ...entry.aliases])),
+  ...commandSpecifications.flatMap((specification) =>
+    specification.flags.flatMap((entry) => [entry.name, ...entry.aliases]),
+  ),
 ]);
 
 export function findCommandSpecification(value: string): CliCommandSpecification | undefined {
@@ -156,7 +293,10 @@ export function isKnownPublicFlagName(value: string): boolean {
   return knownPublicFlagNames.has(value);
 }
 
-export function findFlagSpecification(commandSpec: CliCommandSpecification, value: string): CliFlagSpecification | undefined {
+export function findFlagSpecification(
+  commandSpec: CliCommandSpecification,
+  value: string,
+): CliFlagSpecification | undefined {
   return commandSpec.flags.find((entry) => entry.name === value || entry.aliases.includes(value));
 }
 

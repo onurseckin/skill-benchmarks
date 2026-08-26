@@ -16,10 +16,7 @@ import type {
 } from "./types.js";
 import { AgentContextManager } from "./context-manager.js";
 import { StandardToolDispatcher } from "./tool-dispatcher.js";
-import {
-  EventScribe,
-  createTelemetryEvent,
-} from "../infrastructure/telemetry/event-scribe.js";
+import { EventScribe, createTelemetryEvent } from "../infrastructure/telemetry/event-scribe.js";
 import { resolveArtifactPaths } from "../infrastructure/workspace/storage.js";
 
 export { createTelemetryEvent };
@@ -37,11 +34,12 @@ export class ScenarioRunnerEngine {
 
   public async run(
     config: ScenarioRunConfig,
-    collector?: StreamCollector
+    collector?: StreamCollector,
   ): Promise<ScenarioResult> {
     const startedAt = new Date().toISOString();
     const startTimeMs = performance.now();
-    const basePath = config.artifactOutputDir ?? config.workspace?.rootPath ?? ".benchmarks/runs/" + config.runId;
+    const basePath =
+      config.artifactOutputDir ?? config.workspace?.rootPath ?? ".benchmarks/runs/" + config.runId;
     const artifactPaths = resolveArtifactPaths(basePath);
     const scribe = new EventScribe({
       runId: config.runId,
@@ -109,11 +107,20 @@ export class ScenarioRunnerEngine {
       const turnStartTimeMs = performance.now();
 
       try {
-        if (collector?.onToken !== undefined && typeof config.provider.generateStream === "function") {
+        if (
+          collector?.onToken !== undefined &&
+          typeof config.provider.generateStream === "function"
+        ) {
           let accumulatedText = "";
           const toolCallMap = new Map<number, { id: string; name: string; argsText: string }>();
           let finishReason: ModelTurnResponse["finishReason"] = "stop";
-          let streamUsage: TokenUsage = { inputTokens: 0, outputTokens: 0, cacheCreationInputTokens: 0, cacheReadInputTokens: 0, totalTokens: 0 };
+          let streamUsage: TokenUsage = {
+            inputTokens: 0,
+            outputTokens: 0,
+            cacheCreationInputTokens: 0,
+            cacheReadInputTokens: 0,
+            totalTokens: 0,
+          };
           let firstTokenTimeMs = 0;
 
           for await (const chunk of config.provider.generateStream(messages, tools, options)) {
@@ -124,7 +131,11 @@ export class ScenarioRunnerEngine {
             }
             if (chunk.toolCallDeltas !== undefined) {
               for (const delta of chunk.toolCallDeltas) {
-                const existing = toolCallMap.get(delta.index) ?? { id: delta.id ?? `call_${delta.index}`, name: delta.name ?? "", argsText: "" };
+                const existing = toolCallMap.get(delta.index) ?? {
+                  id: delta.id ?? `call_${delta.index}`,
+                  name: delta.name ?? "",
+                  argsText: "",
+                };
                 if (delta.id !== undefined && delta.id.length > 0) existing.id = delta.id;
                 if (delta.name !== undefined && delta.name.length > 0) existing.name = delta.name;
                 if (delta.argumentsDelta !== undefined) existing.argsText += delta.argumentsDelta;
@@ -139,11 +150,17 @@ export class ScenarioRunnerEngine {
           for (const [, tc] of toolCallMap) {
             let parsedArgs: Record<string, unknown> = {};
             try {
-              if (tc.argsText.trim().length > 0) parsedArgs = JSON.parse(tc.argsText) as Record<string, unknown>;
+              if (tc.argsText.trim().length > 0)
+                parsedArgs = JSON.parse(tc.argsText) as Record<string, unknown>;
             } catch {
               parsedArgs = {};
             }
-            toolCalls.push({ id: tc.id, name: tc.name, arguments: parsedArgs, rawArguments: tc.argsText });
+            toolCalls.push({
+              id: tc.id,
+              name: tc.name,
+              arguments: parsedArgs,
+              rawArguments: tc.argsText,
+            });
           }
 
           const totalTurnDurationMs = performance.now() - turnStartTimeMs;
@@ -174,8 +191,10 @@ export class ScenarioRunnerEngine {
       totalUsage = {
         inputTokens: totalUsage.inputTokens + turnResponse.usage.inputTokens,
         outputTokens: totalUsage.outputTokens + turnResponse.usage.outputTokens,
-        cacheCreationInputTokens: totalUsage.cacheCreationInputTokens + turnResponse.usage.cacheCreationInputTokens,
-        cacheReadInputTokens: totalUsage.cacheReadInputTokens + turnResponse.usage.cacheReadInputTokens,
+        cacheCreationInputTokens:
+          totalUsage.cacheCreationInputTokens + turnResponse.usage.cacheCreationInputTokens,
+        cacheReadInputTokens:
+          totalUsage.cacheReadInputTokens + turnResponse.usage.cacheReadInputTokens,
         totalTokens: totalUsage.totalTokens + turnResponse.usage.totalTokens,
       };
 
@@ -204,7 +223,11 @@ export class ScenarioRunnerEngine {
             arguments: toolCall.arguments,
           });
 
-          const record = await this.defaultToolDispatcher.dispatch(toolCall, toolContext, config.limits);
+          const record = await this.defaultToolDispatcher.dispatch(
+            toolCall,
+            toolContext,
+            config.limits,
+          );
           toolHistory.push(record);
           turnToolExecutionDurationMs += record.durationMs;
           if (record.isError) turnToolErrorsCount += 1;
@@ -222,7 +245,12 @@ export class ScenarioRunnerEngine {
             collector.onToolEnd(record);
           }
 
-          contextManager.addToolResult(record.toolCallId, record.toolName, record.output, record.isError);
+          contextManager.addToolResult(
+            record.toolCallId,
+            record.toolName,
+            record.output,
+            record.isError,
+          );
         }
 
         if (turnToolErrorsCount === turnResponse.toolCalls.length) {
@@ -277,7 +305,11 @@ export class ScenarioRunnerEngine {
       }
     }
 
-    if (turnIndex >= config.limits.maxTurns && terminationReason === "success" && finalOutput.length === 0) {
+    if (
+      turnIndex >= config.limits.maxTurns &&
+      terminationReason === "success" &&
+      finalOutput.length === 0
+    ) {
       terminationReason = "max_turns";
     }
 

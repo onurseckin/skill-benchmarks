@@ -70,24 +70,14 @@ export interface CompletionChunk {
     readonly name?: string;
     readonly argumentsDelta?: string;
   }>;
-  readonly finishReason?:
-    | "stop"
-    | "tool_calls"
-    | "length"
-    | "content_filter"
-    | "error";
+  readonly finishReason?: "stop" | "tool_calls" | "length" | "content_filter" | "error";
   readonly usage?: TokenUsage;
 }
 
 export interface ModelTurnResponse {
   readonly text: string;
   readonly toolCalls: ReadonlyArray<ToolCallRequest>;
-  readonly finishReason:
-    | "stop"
-    | "tool_calls"
-    | "length"
-    | "content_filter"
-    | "error";
+  readonly finishReason: "stop" | "tool_calls" | "length" | "content_filter" | "error";
   readonly usage: TokenUsage;
   readonly timeToFirstTokenMs: number;
   readonly totalTurnDurationMs: number;
@@ -107,33 +97,24 @@ export interface GenerateOptions {
 }
 
 export interface LLMProviderAdapter {
-  readonly providerId:
-    | "anthropic"
-    | "openai"
-    | "google"
-    | "ollama"
-    | "custom"
-    | string;
+  readonly providerId: "anthropic" | "openai" | "google" | "ollama" | "custom" | string;
   readonly modelId: string;
   readonly executionMode?: ExecutionMode;
   readonly simulated?: boolean;
   generateStream(
     messages: ReadonlyArray<AgentMessage>,
     tools: ReadonlyArray<ToolDefinition>,
-    options: GenerateOptions
+    options: GenerateOptions,
   ): AsyncIterable<CompletionChunk>;
   generateTurn(
     messages: ReadonlyArray<AgentMessage>,
     tools: ReadonlyArray<ToolDefinition>,
-    options: GenerateOptions
+    options: GenerateOptions,
   ): Promise<ModelTurnResponse>;
   calculateCostUSD(usage: TokenUsage): number;
 }
 
-export interface StandardTool<
-  TParams = Record<string, unknown>,
-  TResult = unknown,
-> {
+export interface StandardTool<TParams = Record<string, unknown>, TResult = unknown> {
   readonly definition: ToolDefinition;
   execute(params: TParams, context: AgentToolContext): Promise<TResult>;
 }
@@ -174,7 +155,7 @@ export interface SandboxedWorkspace {
       readonly timeoutMs?: number;
       readonly env?: Record<string, string>;
       readonly stdin?: string;
-    }
+    },
   ): Promise<{
     readonly stdout: string;
     readonly stderr: string;

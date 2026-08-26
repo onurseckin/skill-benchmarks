@@ -40,15 +40,15 @@ Container lifecycle transitions follow a deterministic state machine managed by 
 
 ### 1.2 State Transition Matrix
 
-| Current State | Event / Trigger | Target State | Action Performed |
-| :--- | :--- | :--- | :--- |
-| `PROVISIONING` | `HEALTHCHECK_OK` | `IDLE` | Container verified, cgroups attached, added to warm pool. |
-| `PROVISIONING` | `TIMEOUT / ERROR` | `TERMINATED` | Container killed, resource handles cleaned, error logged. |
-| `IDLE` | `CHECKOUT_LEASE` | `LEASED` | Workspace volume bound, lease token issued, telemetry started. |
-| `LEASED` | `TASK_COMPLETE` | `DRAINING` | Telemetry finalized, workspace diff extracted. |
-| `LEASED` | `TIMEOUT / CRASH` | `DRAINING` | Process tree killed (`SIGKILL`), crash logs preserved. |
-| `DRAINING` | `SCRUB_OK (cycles < max)`| `IDLE` | Ephemeral mounts cleared, container reset for next lease. |
-| `DRAINING` | `EXPIRED / DIRTY` | `TERMINATED` | Docker container destroyed, temporary directories deleted. |
+| Current State  | Event / Trigger           | Target State | Action Performed                                               |
+| :------------- | :------------------------ | :----------- | :------------------------------------------------------------- |
+| `PROVISIONING` | `HEALTHCHECK_OK`          | `IDLE`       | Container verified, cgroups attached, added to warm pool.      |
+| `PROVISIONING` | `TIMEOUT / ERROR`         | `TERMINATED` | Container killed, resource handles cleaned, error logged.      |
+| `IDLE`         | `CHECKOUT_LEASE`          | `LEASED`     | Workspace volume bound, lease token issued, telemetry started. |
+| `LEASED`       | `TASK_COMPLETE`           | `DRAINING`   | Telemetry finalized, workspace diff extracted.                 |
+| `LEASED`       | `TIMEOUT / CRASH`         | `DRAINING`   | Process tree killed (`SIGKILL`), crash logs preserved.         |
+| `DRAINING`     | `SCRUB_OK (cycles < max)` | `IDLE`       | Ephemeral mounts cleared, container reset for next lease.      |
+| `DRAINING`     | `EXPIRED / DIRTY`         | `TERMINATED` | Docker container destroyed, temporary directories deleted.     |
 
 ---
 

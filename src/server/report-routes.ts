@@ -1,8 +1,5 @@
 import { generateHtmlDashboard } from "../reporting/html-dashboard.js";
-import {
-  buildReportSnapshot,
-  normalizeReportFilter,
-} from "../reporting/report-cohorts.js";
+import { buildReportSnapshot, normalizeReportFilter } from "../reporting/report-cohorts.js";
 import type {
   ReportBuildOptions,
   ReportFilter,
@@ -17,12 +14,29 @@ export interface ReportRouteRegistrar {
 }
 
 const reportParameters = new Set([
-  "scenarioId", "category", "skillId", "modelId", "providerId", "status",
-  "executionMode", "simulated", "authority", "cohort", "eligibility",
-  "evaluationStatus", "evidenceStatus", "fromDate", "toDate",
+  "scenarioId",
+  "category",
+  "skillId",
+  "modelId",
+  "providerId",
+  "status",
+  "executionMode",
+  "simulated",
+  "authority",
+  "cohort",
+  "eligibility",
+  "evaluationStatus",
+  "evidenceStatus",
+  "fromDate",
+  "toDate",
 ]);
 const runParameters = new Set([
-  ...reportParameters, "passedBenchmark", "minScore", "maxScore", "limit", "offset",
+  ...reportParameters,
+  "passedBenchmark",
+  "minScore",
+  "maxScore",
+  "limit",
+  "offset",
 ]);
 
 export function registerReportRoutes(router: ReportRouteRegistrar): void {
@@ -47,7 +61,9 @@ export function registerReportRoutes(router: ReportRouteRegistrar): void {
 
   router.register("GET", "/api/trends", (context) => {
     const filter = parseQuery(() => parseReportQuery(context.query));
-    return filter instanceof Response ? filter : jsonResponse(buildSnapshot(context, filter, { includeTrends: true }));
+    return filter instanceof Response
+      ? filter
+      : jsonResponse(buildSnapshot(context, filter, { includeTrends: true }));
   });
 
   router.register("GET", "/api/summary", (context) => {
@@ -70,7 +86,9 @@ export function registerReportRoutes(router: ReportRouteRegistrar): void {
       includeTrends: true,
       includeCostEfficiency: true,
     });
-    return htmlResponse(generateHtmlDashboard(snapshot, { title: "Skill Benchmarks Live Evidence" }));
+    return htmlResponse(
+      generateHtmlDashboard(snapshot, { title: "Skill Benchmarks Live Evidence" }),
+    );
   });
 }
 
@@ -98,7 +116,8 @@ export function parseReportQuery(query: URLSearchParams): ReportFilter {
 export function parseRunQuery(query: URLSearchParams): RunQueryFilter {
   requireAllowedParameters(query, runParameters);
   const reportQuery = new URLSearchParams(query);
-  for (const key of ["passedBenchmark", "minScore", "maxScore", "limit", "offset"]) reportQuery.delete(key);
+  for (const key of ["passedBenchmark", "minScore", "maxScore", "limit", "offset"])
+    reportQuery.delete(key);
   const report = parseReportQuery(reportQuery);
   return normalizeRunQueryFilter({
     ...report,
@@ -125,10 +144,15 @@ function parseQuery<T>(operation: () => T): T | Response {
 }
 
 function requireAllowedParameters(query: URLSearchParams, allowed: ReadonlySet<string>): void {
-  for (const key of query.keys()) if (!allowed.has(key)) throw new TypeError("Unknown report query parameter");
+  for (const key of query.keys())
+    if (!allowed.has(key)) throw new TypeError("Unknown report query parameter");
 }
 
-function readArray(query: URLSearchParams, parameter: string, key: string): Record<string, readonly string[]> {
+function readArray(
+  query: URLSearchParams,
+  parameter: string,
+  key: string,
+): Record<string, readonly string[]> {
   if (!query.has(parameter)) return {};
   const values = query.getAll(parameter).flatMap((value) => value.split(","));
   return { [key]: values };
@@ -144,14 +168,16 @@ function readScalar(query: URLSearchParams, parameter: string): Record<string, s
 function readBoolean(query: URLSearchParams, parameter: string): Record<string, boolean> {
   if (!query.has(parameter)) return {};
   const values = query.getAll(parameter);
-  if (values.length !== 1 || (values[0] !== "true" && values[0] !== "false")) throw new TypeError("Report boolean query parameter is invalid");
+  if (values.length !== 1 || (values[0] !== "true" && values[0] !== "false"))
+    throw new TypeError("Report boolean query parameter is invalid");
   return { [parameter]: values[0] === "true" };
 }
 
 function readNumber(query: URLSearchParams, parameter: string): Record<string, number> {
   if (!query.has(parameter)) return {};
   const values = query.getAll(parameter);
-  if (values.length !== 1 || values[0]?.trim().length === 0) throw new TypeError("Report numeric query parameter is invalid");
+  if (values.length !== 1 || values[0]?.trim().length === 0)
+    throw new TypeError("Report numeric query parameter is invalid");
   const value = Number(values[0]);
   if (!Number.isFinite(value)) throw new TypeError("Report numeric query parameter is invalid");
   return { [parameter]: value };

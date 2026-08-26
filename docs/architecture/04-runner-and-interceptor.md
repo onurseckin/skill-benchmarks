@@ -79,6 +79,7 @@ All agent tool calls are trapped and validated by the **Tool Dispatcher** ([`src
 ### 2.1 Security Invariant: Path Jailing & Escape Prevention
 
 The tool dispatcher enforces path containment via `resolve()` and strict prefix checking:
+
 ```typescript
 function assertPathWithinWorkspace(workspaceRoot: string, targetPath: string): string {
   const resolved = resolve(workspaceRoot, targetPath);

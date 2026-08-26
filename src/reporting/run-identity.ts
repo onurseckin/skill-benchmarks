@@ -7,14 +7,20 @@ export class TerminalRunIdentityConflictError extends Error {
   }
 }
 
-export function claimTerminalRunIdentity(db: Database, runId: string, sweepId: string, cellId: string): void {
+export function claimTerminalRunIdentity(
+  db: Database,
+  runId: string,
+  sweepId: string,
+  cellId: string,
+): void {
   try {
     db.transaction(() => {
       if (db.prepare("SELECT run_id FROM runs WHERE run_id = ?").get(runId) !== null) {
         throw new TerminalRunIdentityConflictError();
       }
-      db.prepare("INSERT INTO run_claims (run_id, sweep_id, cell_id, created_at) VALUES (?, ?, ?, ?)")
-        .run(runId, sweepId, cellId, new Date().toISOString());
+      db.prepare(
+        "INSERT INTO run_claims (run_id, sweep_id, cell_id, created_at) VALUES (?, ?, ?, ?)",
+      ).run(runId, sweepId, cellId, new Date().toISOString());
     })();
   } catch (error) {
     if (error instanceof TerminalRunIdentityConflictError) throw error;

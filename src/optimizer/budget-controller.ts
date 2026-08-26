@@ -1,7 +1,6 @@
 import {
   BudgetState,
   BudgetUsageSnapshot,
-  CircuitBreakerState,
   CostBreakdownUSD,
   DynamicRateLimitState,
   LoadSheddingAction,
@@ -9,42 +8,19 @@ import {
   ModelPricingRateOverride,
   RateCeilingAdjustment,
   RateCeilingConfig,
-  RateWindowStats,
   ThrottleEvent,
   ThrottleReason,
   ThrottleSeverity,
   TokenBudgetProfile,
 } from "./types.js";
-
-interface InternalWindowRecord {
-  readonly timestamp: number;
-  readonly promptTokens: number;
-  readonly completionTokens: number;
-  readonly latencyMs: number;
-  readonly isError: boolean;
-}
-
-interface ProviderRateBucket {
-  config: RateCeilingConfig;
-  currentMaxRPM: number;
-  currentMaxTPM: number;
-  activeConcurrency: number;
-  lastAdjustmentTimestamp: number;
-  circuitBreaker: CircuitBreakerState;
-  circuitBreakerResetAt: number;
-  failureStreak: number;
-  successStreak: number;
-  history: InternalWindowRecord[];
-}
-
-interface InternalProfileState {
-  profile: TokenBudgetProfile;
-  promptTokensUsed: number;
-  completionTokensUsed: number;
-  totalSpendUSD: number;
-  burstTokensUsed: number;
-  lastResetTimestamp: number;
-}
+import {
+  calculateBudgetCost,
+  computeRateWindowStats,
+  pruneRateHistory,
+  resetProfileIfDue,
+  type InternalProfileState,
+  type ProviderRateBucket,
+} from "./budget-state.js";
 
 export class BudgetController {
   private readonly profiles = new Map<string, InternalProfileState>();
@@ -86,7 +62,7 @@ export class BudgetController {
   public canExecute(
     profileId: string,
     providerId: string,
-    estimatedTokens: number
+    estimatedTokens: number,
   ): { allowed: boolean; action: LoadSheddingAction; reason?: string; retryAfterMs?: number } {
     const pState = this.profiles.get(profileId);
     if (!pState) return { allowed: false, action: "reject", reason: "Profile not found" };
@@ -122,7 +98,12 @@ export class BudgetController {
       }
     }
     if (bucket.activeConcurrency >= bucket.config.maxConcurrentRequests) {
-      return { allowed: false, action: "delay", reason: "Max concurrency reached", retryAfterMs: 250 };
+      return {
+        allowed: false,
+        action: "delay",
+        reason: "Max concurrency reached",
+        retryAfterMs: 250,
+      };
     }
     if (bucket.history.length >= bucket.currentMaxRPM) {
       return { allowed: false, action: "delay", reason: "RPM limit reached", retryAfterMs: 1000 };
@@ -150,12 +131,18 @@ export class BudgetController {
     completionTokens: number,
     latencyMs: number,
     costUSD: number,
-    isError: boolean = false
+    isError: boolean = false,
   ): void {
     const bucket = this.providers.get(providerId);
     if (bucket) {
       bucket.activeConcurrency = Math.max(0, bucket.activeConcurrency - 1);
-      bucket.history.push({ timestamp: Date.now(), promptTokens, completionTokens, latencyMs, isError });
+      bucket.history.push({
+        timestamp: Date.now(),
+        promptTokens,
+        completionTokens,
+        latencyMs,
+        isError,
+      });
       if (isError) {
         bucket.failureStreak += 1;
         bucket.successStreak = 0;
@@ -179,7 +166,10 @@ export class BudgetController {
       const newTotal = pState.promptTokensUsed + pState.completionTokensUsed;
       if (newTotal > pState.profile.allocation.totalTokensLimit) {
         const over = newTotal - pState.profile.allocation.totalTokensLimit;
-        pState.burstTokensUsed = Math.min(pState.profile.allocation.burstAllowance, Math.max(0, over));
+        pState.burstTokensUsed = Math.min(
+          pState.profile.allocation.burstAllowance,
+          Math.max(0, over),
+        );
       }
     }
   }
@@ -193,12 +183,20 @@ export class BudgetController {
     retryAfterMs: number,
     promptTokens: number,
     estimatedTokens: number,
-    context: Readonly<Record<string, unknown>> = {}
+    context: Readonly<Record<string, unknown>> = {},
   ): ThrottleEvent {
     const event: ThrottleEvent = {
       id: `thr-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      providerId, modelId, reason, severity, action, retryAfterMs, promptTokens, estimatedTokens,
-      timestamp: Date.now(), context,
+      providerId,
+      modelId,
+      reason,
+      severity,
+      action,
+      retryAfterMs,
+      promptTokens,
+      estimatedTokens,
+      timestamp: Date.now(),
+      context,
     };
     this.throttleEvents.push(event);
     const bucket = this.providers.get(providerId);
@@ -220,11 +218,17 @@ export class BudgetController {
       state = "warning";
     }
     return {
-      profileId, promptTokensUsed: pState.promptTokensUsed, completionTokensUsed: pState.completionTokensUsed,
-      totalTokensUsed: totalUsed, totalSpendUSD: pState.totalSpendUSD, state,
-      utilizationRatio: Math.min(1.0, ratio), remainingTokens: Math.max(0, limit - totalUsed),
+      profileId,
+      promptTokensUsed: pState.promptTokensUsed,
+      completionTokensUsed: pState.completionTokensUsed,
+      totalTokensUsed: totalUsed,
+      totalSpendUSD: pState.totalSpendUSD,
+      state,
+      utilizationRatio: Math.min(1.0, ratio),
+      remainingTokens: Math.max(0, limit - totalUsed),
       remainingSpendUSD: Math.max(0, pState.profile.maxSpendUSD - pState.totalSpendUSD),
-      burstTokensUsed: pState.burstTokensUsed, timestamp: Date.now(),
+      burstTokensUsed: pState.burstTokensUsed,
+      timestamp: Date.now(),
     };
   }
 
@@ -233,23 +237,46 @@ export class BudgetController {
     if (!bucket) return undefined;
     this.pruneHistory(bucket);
     return {
-      providerId, currentMaxRPM: bucket.currentMaxRPM, currentMaxTPM: bucket.currentMaxTPM,
-      activeConcurrency: bucket.activeConcurrency, maxConcurrency: bucket.config.maxConcurrentRequests,
-      lastAdjustmentTimestamp: bucket.lastAdjustmentTimestamp, windowStats: this.computeWindowStats(bucket),
-      circuitBreakerState: bucket.circuitBreaker, failureStreak: bucket.failureStreak, successStreak: bucket.successStreak,
+      providerId,
+      currentMaxRPM: bucket.currentMaxRPM,
+      currentMaxTPM: bucket.currentMaxTPM,
+      activeConcurrency: bucket.activeConcurrency,
+      maxConcurrency: bucket.config.maxConcurrentRequests,
+      lastAdjustmentTimestamp: bucket.lastAdjustmentTimestamp,
+      windowStats: this.computeWindowStats(bucket),
+      circuitBreakerState: bucket.circuitBreaker,
+      failureStreak: bucket.failureStreak,
+      successStreak: bucket.successStreak,
     };
   }
 
   public getMitigationTelemetry(): MitigationTelemetry {
     const byReason: Record<ThrottleReason, number> = {
-      rate_limit_rpm: 0, rate_limit_tpm: 0, budget_exhaustion: 0,
-      latency_sla_breach: 0, circuit_breaker_open: 0, concurrency_limit: 0,
+      rate_limit_rpm: 0,
+      rate_limit_tpm: 0,
+      budget_exhaustion: 0,
+      latency_sla_breach: 0,
+      circuit_breaker_open: 0,
+      concurrency_limit: 0,
     };
-    const bySeverity: Record<ThrottleSeverity, number> = { low: 0, medium: 0, high: 0, critical: 0 };
+    const bySeverity: Record<ThrottleSeverity, number> = {
+      low: 0,
+      medium: 0,
+      high: 0,
+      critical: 0,
+    };
     const actions: Record<LoadSheddingAction, number> = {
-      allow: 0, delay: 0, downgrade_model: 0, truncate_context: 0, reject: 0,
+      allow: 0,
+      delay: 0,
+      downgrade_model: 0,
+      truncate_context: 0,
+      reject: 0,
     };
-    let totalDelayMs = 0, rejected = 0, downgraded = 0, delayed = 0, lastTimestamp = 0;
+    let totalDelayMs = 0,
+      rejected = 0,
+      downgraded = 0,
+      delayed = 0,
+      lastTimestamp = 0;
     for (const ev of this.throttleEvents) {
       const curR = byReason[ev.reason];
       byReason[ev.reason] = (curR !== undefined ? curR : 0) + 1;
@@ -265,9 +292,15 @@ export class BudgetController {
     }
     const count = this.throttleEvents.length;
     return {
-      totalThrottleEvents: count, eventsByReason: byReason, eventsBySeverity: bySeverity, actionsApplied: actions,
-      averageRetryDelayMs: count > 0 ? totalDelayMs / count : 0, rejectedRequests: rejected,
-      downgradedRequests: downgraded, delayedRequests: delayed, lastEventTimestamp: lastTimestamp,
+      totalThrottleEvents: count,
+      eventsByReason: byReason,
+      eventsBySeverity: bySeverity,
+      actionsApplied: actions,
+      averageRetryDelayMs: count > 0 ? totalDelayMs / count : 0,
+      rejectedRequests: rejected,
+      downgradedRequests: downgraded,
+      delayedRequests: delayed,
+      lastEventTimestamp: lastTimestamp,
     };
   }
 
@@ -276,86 +309,81 @@ export class BudgetController {
     promptTokens: number,
     completionTokens: number,
     cachedPromptTokens: number = 0,
-    reasoningTokens: number = 0
+    reasoningTokens: number = 0,
   ): CostBreakdownUSD {
-    const override = this.pricingOverrides.get(modelId);
-    const inRate = override !== undefined ? override.inputPerThousand : 0.003;
-    const outRate = override !== undefined ? override.outputPerThousand : 0.015;
-    const cacheRate = (override !== undefined && override.cachedInputPerThousand !== undefined)
-      ? override.cachedInputPerThousand
-      : inRate * 0.1;
-    const rRate = (override !== undefined && override.reasoningOutputPerThousand !== undefined)
-      ? override.reasoningOutputPerThousand
-      : outRate;
-    const inCost = (Math.max(0, promptTokens - cachedPromptTokens) / 1000) * inRate;
-    const cacheCost = (cachedPromptTokens / 1000) * cacheRate;
-    const outCost = (Math.max(0, completionTokens - reasoningTokens) / 1000) * outRate;
-    const rCost = (reasoningTokens / 1000) * rRate;
-    return {
-      inputCostUSD: inCost, outputCostUSD: outCost, cachedInputCostUSD: cacheCost,
-      reasoningCostUSD: rCost, totalCostUSD: inCost + cacheCost + outCost + rCost,
-    };
+    return calculateBudgetCost(
+      this.pricingOverrides.get(modelId),
+      promptTokens,
+      completionTokens,
+      cachedPromptTokens,
+      reasoningTokens,
+    );
   }
 
   private scaleDownCeiling(providerId: string, bucket: ProviderRateBucket, reason: string): void {
     const prevRPM = bucket.currentMaxRPM;
     const prevTPM = bucket.currentMaxTPM;
-    bucket.currentMaxRPM = Math.max(bucket.config.minRequestsPerMinute, Math.floor(bucket.currentMaxRPM * bucket.config.scaleDownFactor));
-    bucket.currentMaxTPM = Math.max(bucket.config.minTokensPerMinute, Math.floor(bucket.currentMaxTPM * bucket.config.scaleDownFactor));
+    bucket.currentMaxRPM = Math.max(
+      bucket.config.minRequestsPerMinute,
+      Math.floor(bucket.currentMaxRPM * bucket.config.scaleDownFactor),
+    );
+    bucket.currentMaxTPM = Math.max(
+      bucket.config.minTokensPerMinute,
+      Math.floor(bucket.currentMaxTPM * bucket.config.scaleDownFactor),
+    );
     bucket.lastAdjustmentTimestamp = Date.now();
     bucket.successStreak = 0;
     this.adjustments.push({
-      providerId, previousMaxRPM: prevRPM, newMaxRPM: bucket.currentMaxRPM,
-      previousMaxTPM: prevTPM, newMaxTPM: bucket.currentMaxTPM,
-      reason: `Scale down: ${reason}`, timestamp: Date.now(), factorApplied: bucket.config.scaleDownFactor,
+      providerId,
+      previousMaxRPM: prevRPM,
+      newMaxRPM: bucket.currentMaxRPM,
+      previousMaxTPM: prevTPM,
+      newMaxTPM: bucket.currentMaxTPM,
+      reason: `Scale down: ${reason}`,
+      timestamp: Date.now(),
+      factorApplied: bucket.config.scaleDownFactor,
     });
   }
 
   private scaleUpCeiling(providerId: string, bucket: ProviderRateBucket): void {
-    if (bucket.currentMaxRPM >= bucket.config.maxRequestsPerMinute && bucket.currentMaxTPM >= bucket.config.maxTokensPerMinute) return;
+    if (
+      bucket.currentMaxRPM >= bucket.config.maxRequestsPerMinute &&
+      bucket.currentMaxTPM >= bucket.config.maxTokensPerMinute
+    )
+      return;
     const prevRPM = bucket.currentMaxRPM;
     const prevTPM = bucket.currentMaxTPM;
-    bucket.currentMaxRPM = Math.min(bucket.config.maxRequestsPerMinute, Math.ceil(bucket.currentMaxRPM * bucket.config.scaleUpFactor));
-    bucket.currentMaxTPM = Math.min(bucket.config.maxTokensPerMinute, Math.ceil(bucket.currentMaxTPM * bucket.config.scaleUpFactor));
+    bucket.currentMaxRPM = Math.min(
+      bucket.config.maxRequestsPerMinute,
+      Math.ceil(bucket.currentMaxRPM * bucket.config.scaleUpFactor),
+    );
+    bucket.currentMaxTPM = Math.min(
+      bucket.config.maxTokensPerMinute,
+      Math.ceil(bucket.currentMaxTPM * bucket.config.scaleUpFactor),
+    );
     bucket.lastAdjustmentTimestamp = Date.now();
     bucket.successStreak = 0;
     this.adjustments.push({
-      providerId, previousMaxRPM: prevRPM, newMaxRPM: bucket.currentMaxRPM,
-      previousMaxTPM: prevTPM, newMaxTPM: bucket.currentMaxTPM,
-      reason: "Scale up on success streak", timestamp: Date.now(), factorApplied: bucket.config.scaleUpFactor,
+      providerId,
+      previousMaxRPM: prevRPM,
+      newMaxRPM: bucket.currentMaxRPM,
+      previousMaxTPM: prevTPM,
+      newMaxTPM: bucket.currentMaxTPM,
+      reason: "Scale up on success streak",
+      timestamp: Date.now(),
+      factorApplied: bucket.config.scaleUpFactor,
     });
   }
 
   private pruneHistory(bucket: ProviderRateBucket): void {
-    const cutoff = Date.now() - bucket.config.windowSizeMs;
-    bucket.history = bucket.history.filter((r) => r.timestamp >= cutoff);
+    pruneRateHistory(bucket);
   }
 
-  private computeWindowStats(bucket: ProviderRateBucket): RateWindowStats {
-    const now = Date.now();
-    let tokens = 0, latencySum = 0, errors = 0;
-    for (const r of bucket.history) {
-      tokens += r.promptTokens + r.completionTokens;
-      latencySum += r.latencyMs;
-      if (r.isError) errors += 1;
-    }
-    const count = bucket.history.length;
-    const minutes = bucket.config.windowSizeMs / 60000;
-    return {
-      requestCount: count, tokenCount: tokens, currentRPM: minutes > 0 ? count / minutes : 0,
-      currentTPM: minutes > 0 ? tokens / minutes : 0, averageLatencyMs: count > 0 ? latencySum / count : 0,
-      errorCount: errors, windowStart: now - bucket.config.windowSizeMs, windowEnd: now,
-    };
+  private computeWindowStats(bucket: ProviderRateBucket) {
+    return computeRateWindowStats(bucket);
   }
 
   private checkAndResetProfile(pState: InternalProfileState): void {
-    const now = Date.now();
-    if (now - pState.lastResetTimestamp >= pState.profile.resetIntervalMs) {
-      pState.promptTokensUsed = 0;
-      pState.completionTokensUsed = 0;
-      pState.totalSpendUSD = 0;
-      pState.burstTokensUsed = 0;
-      pState.lastResetTimestamp = now;
-    }
+    resetProfileIfDue(pState);
   }
 }

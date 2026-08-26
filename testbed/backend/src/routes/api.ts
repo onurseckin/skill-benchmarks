@@ -20,7 +20,11 @@ export class ApiHandler {
     };
   }
 
-  public handleCreateItem(id: string, name: string, payload: Record<string, unknown>): ApiResponse<BenchmarkItem> {
+  public handleCreateItem(
+    id: string,
+    name: string,
+    payload: Record<string, unknown>,
+  ): ApiResponse<BenchmarkItem> {
     const created = this.store.create(id, name, payload);
     return {
       success: true,
@@ -28,7 +32,9 @@ export class ApiHandler {
     };
   }
 
-  public handleUpdateConfig(configPayload: Record<string, unknown>): ApiResponse<Record<string, unknown>> {
+  public handleUpdateConfig(
+    configPayload: Record<string, unknown>,
+  ): ApiResponse<Record<string, unknown>> {
     const updated = this.store.updateSettings(configPayload);
     return {
       success: true,

@@ -1,11 +1,7 @@
 import { chmod, mkdir, rm, stat } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import type { IDockerClient } from "../container/types.js";
-import type {
-  WorkspaceArtifactPaths,
-  WorkspaceConfig,
-  WorkspaceLayout,
-} from "./types.js";
+import type { WorkspaceArtifactPaths, WorkspaceConfig, WorkspaceLayout } from "./types.js";
 
 export const STORAGE_LABELS = {
   MANAGED: "io.skill-benchmarks.managed",
@@ -50,8 +46,7 @@ export class WorkspaceStorageManager {
   public resolveLayout(config: WorkspaceConfig): WorkspaceLayout {
     const volumeName = config.volumeName ?? formatVolumeName(config.runId);
     const hostArtifactDir =
-      config.hostArtifactsPath ??
-      resolve(this.baseArtifactsDir, config.runId);
+      config.hostArtifactsPath ?? resolve(this.baseArtifactsDir, config.runId);
     const containerWorkspaceDir = config.containerWorkspacePath ?? "/workspace";
     const containerArtifactDir = config.containerArtifactsPath ?? "/artifacts";
 
@@ -66,27 +61,24 @@ export class WorkspaceStorageManager {
     };
   }
 
-  public async prepareHostArtifactDirectory(
-    hostArtifactDir: string
-  ): Promise<string> {
+  public async prepareHostArtifactDirectory(hostArtifactDir: string): Promise<string> {
     const absolutePath = resolve(hostArtifactDir);
     await mkdir(absolutePath, { recursive: true });
 
     try {
       await chmod(absolutePath, 0o777);
-    } catch {
-    }
+    } catch {}
 
     return absolutePath;
   }
 
   public async provisionWorkspaceVolume(
     volumeName: string,
-    metadata?: { readonly runId?: string; readonly scenarioId?: string }
+    metadata?: { readonly runId?: string; readonly scenarioId?: string },
   ): Promise<string> {
     if (!this.dockerClient) {
       throw new Error(
-        "Cannot provision Docker volume: no IDockerClient was provided to WorkspaceStorageManager."
+        "Cannot provision Docker volume: no IDockerClient was provided to WorkspaceStorageManager.",
       );
     }
 
@@ -106,9 +98,7 @@ export class WorkspaceStorageManager {
     return volumeName;
   }
 
-  public async setupWorkspace(
-    config: WorkspaceConfig
-  ): Promise<WorkspaceLayout> {
+  public async setupWorkspace(config: WorkspaceConfig): Promise<WorkspaceLayout> {
     const layout = this.resolveLayout(config);
 
     await this.prepareHostArtifactDirectory(layout.hostArtifactDir);
@@ -135,16 +125,13 @@ export class WorkspaceStorageManager {
     }
   }
 
-  public async purgeHostArtifactDirectory(
-    hostArtifactDir: string
-  ): Promise<void> {
+  public async purgeHostArtifactDirectory(hostArtifactDir: string): Promise<void> {
     const absolutePath = resolve(hostArtifactDir);
     try {
       const dirStat = await stat(absolutePath);
       if (dirStat.isDirectory()) {
         await rm(absolutePath, { recursive: true, force: true });
       }
-    } catch {
-    }
+    } catch {}
   }
 }

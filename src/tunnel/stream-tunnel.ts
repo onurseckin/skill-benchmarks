@@ -1,15 +1,16 @@
 import type { Server, ServerWebSocket } from "bun";
+import { decodeBinaryFrame, encodeBinaryFrame } from "./binary-frame-codec.js";
+export { decodeBinaryFrame, encodeBinaryFrame } from "./binary-frame-codec.js";
 import { PtyMultiplexer } from "./pty-multiplexer.js";
 import {
-  CHANNEL_TO_CODE,
-  CODE_TO_CHANNEL,
-  FRAME_HEADER_LENGTH,
-  FRAME_HEADER_MAGIC,
-  FRAME_HEADER_VERSION,
+  collectTunnelClientSessions,
+  type SseClientData,
+  type WsClientData,
+} from "./tunnel-client-sessions.js";
+export type { WsClientData } from "./tunnel-client-sessions.js";
+import {
   type BinaryFrameEnvelope,
   type PtyMultiplexerInstance,
-  type StreamChannel,
-  type StreamChannelCode,
   type StreamPacket,
   type TunnelClientRole,
   type TunnelClientSession,
@@ -21,48 +22,12 @@ import {
 const TEXT_ENCODER = new TextEncoder();
 const TEXT_DECODER = new TextDecoder();
 
-export interface WsClientData {
-  readonly clientId: string;
-  readonly sessionId: string;
-  readonly role: TunnelClientRole;
-  readonly connectedAt: string;
-  lastPingAt: string;
-}
-
-export function encodeBinaryFrame(channel: StreamChannel, sequence: number, timestamp: number, payload: Uint8Array): Uint8Array {
-  const totalLength = FRAME_HEADER_LENGTH + payload.byteLength;
-  const buffer = new Uint8Array(totalLength);
-  const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength);
-  view.setUint16(0, FRAME_HEADER_MAGIC, false);
-  view.setUint8(2, FRAME_HEADER_VERSION);
-  view.setUint8(3, CHANNEL_TO_CODE[channel]);
-  view.setUint32(4, sequence, false);
-  view.setFloat64(8, timestamp, false);
-  buffer.set(payload, FRAME_HEADER_LENGTH);
-  return buffer;
-}
-
-export function decodeBinaryFrame(data: Uint8Array): BinaryFrameEnvelope | null {
-  if (data.byteLength < FRAME_HEADER_LENGTH) return null;
-  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
-  const magic = view.getUint16(0, false);
-  if (magic !== FRAME_HEADER_MAGIC) return null;
-  const version = view.getUint8(2);
-  const channelCode = view.getUint8(3) as StreamChannelCode;
-  const channel = CODE_TO_CHANNEL[channelCode];
-  if (!channel) return null;
-  const sequence = view.getUint32(4, false);
-  const timestamp = view.getFloat64(8, false);
-  const payload = data.subarray(FRAME_HEADER_LENGTH);
-  return { magic, version, channel, channelCode, sequence, timestamp, payloadLength: payload.byteLength, payload };
-}
-
 export class StreamTunnelServer implements StreamTunnelInstance {
   public readonly options: TunnelServerOptions;
   public readonly multiplexer: PtyMultiplexerInstance;
   private bunServer: Server<WsClientData> | null = null;
   private readonly wsClients = new Map<ServerWebSocket<WsClientData>, WsClientData>();
-  private readonly sseClients = new Map<string, { sessionId: string; controller: ReadableStreamDefaultController<Uint8Array>; role: TunnelClientRole }>();
+  private readonly sseClients = new Map<string, SseClientData>();
   private isRunningState = false;
   private startedAtIso = "";
   private totalTransferred = 0;
@@ -105,30 +70,7 @@ export class StreamTunnelServer implements StreamTunnelInstance {
   }
 
   public getClientSessions(): readonly TunnelClientSession[] {
-    const list: TunnelClientSession[] = [];
-    for (const [, data] of this.wsClients) {
-      list.push({
-        clientId: data.clientId,
-        sessionId: data.sessionId,
-        role: data.role,
-        connectionState: "open",
-        connectedAt: data.connectedAt,
-        lastPingAt: data.lastPingAt,
-        protocol: "websocket",
-      });
-    }
-    for (const [id, sse] of this.sseClients) {
-      list.push({
-        clientId: id,
-        sessionId: sse.sessionId,
-        role: sse.role,
-        connectionState: "open",
-        connectedAt: this.startedAtIso,
-        lastPingAt: new Date().toISOString(),
-        protocol: "sse",
-      });
-    }
-    return list;
+    return collectTunnelClientSessions(this.wsClients, this.sseClients, this.startedAtIso);
   }
 
   public async start(): Promise<void> {
@@ -148,12 +90,21 @@ export class StreamTunnelServer implements StreamTunnelInstance {
           const authKey = url.searchParams.get("token") ?? url.searchParams.get("authKey");
           if (self.options.authTokens && self.options.authTokens.length > 0) {
             if (!authKey || !self.options.authTokens.includes(authKey)) {
-              return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { "content-type": "application/json" } });
+              return new Response(JSON.stringify({ error: "Unauthorized" }), {
+                status: 401,
+                headers: { "content-type": "application/json" },
+              });
             }
           }
           const clientId = `ws-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
           const upgraded = server.upgrade(req, {
-            data: { clientId, sessionId, role, connectedAt: new Date().toISOString(), lastPingAt: new Date().toISOString() },
+            data: {
+              clientId,
+              sessionId,
+              role,
+              connectedAt: new Date().toISOString(),
+              lastPingAt: new Date().toISOString(),
+            },
           });
           if (upgraded) return undefined;
           return new Response("WebSocket upgrade failed", { status: 400 });
@@ -196,11 +147,15 @@ export class StreamTunnelServer implements StreamTunnelInstance {
       this.heartbeatTimer = null;
     }
     for (const [ws] of this.wsClients) {
-      try { ws.close(1001, "Server shutting down"); } catch {}
+      try {
+        ws.close(1001, "Server shutting down");
+      } catch {}
     }
     this.wsClients.clear();
     for (const [, sse] of this.sseClients) {
-      try { sse.controller.close(); } catch {}
+      try {
+        sse.controller.close();
+      } catch {}
     }
     this.sseClients.clear();
     if (this.bunServer) {
@@ -214,7 +169,10 @@ export class StreamTunnelServer implements StreamTunnelInstance {
     const data = ws.data;
     this.wsClients.set(ws, data);
     if (!this.multiplexer.hasSession(data.sessionId)) {
-      this.multiplexer.createSession({ sessionId: data.sessionId, containerId: `container-${data.sessionId}` });
+      this.multiplexer.createSession({
+        sessionId: data.sessionId,
+        containerId: `container-${data.sessionId}`,
+      });
     }
     this.multiplexer.onOutput(data.sessionId, (chunk, channel, seq) => {
       if (ws.readyState === 1) {
@@ -224,7 +182,9 @@ export class StreamTunnelServer implements StreamTunnelInstance {
           this.totalTransferred += frame.byteLength;
         } else {
           const text = TEXT_DECODER.decode(chunk);
-          ws.send(JSON.stringify({ channel, sessionId: data.sessionId, data: text, sequence: seq }));
+          ws.send(
+            JSON.stringify({ channel, sessionId: data.sessionId, data: text, sequence: seq }),
+          );
           this.totalTransferred += chunk.byteLength;
         }
         this.totalFrames += 1;
@@ -232,17 +192,22 @@ export class StreamTunnelServer implements StreamTunnelInstance {
     });
     const scrollback = this.multiplexer.getScrollback(data.sessionId);
     if (scrollback.length > 0) {
-      ws.send(JSON.stringify({
-        channel: "scrollback_replay",
-        sessionId: data.sessionId,
-        lines: scrollback,
-        totalLines: scrollback.length,
-        totalBytes: scrollback.reduce((acc, l) => acc + l.length, 0),
-      }));
+      ws.send(
+        JSON.stringify({
+          channel: "scrollback_replay",
+          sessionId: data.sessionId,
+          lines: scrollback,
+          totalLines: scrollback.length,
+          totalBytes: scrollback.reduce((acc, l) => acc + l.length, 0),
+        }),
+      );
     }
   }
 
-  private handleWsMessage(ws: ServerWebSocket<WsClientData>, message: string | Buffer | Uint8Array): void {
+  private handleWsMessage(
+    ws: ServerWebSocket<WsClientData>,
+    message: string | Buffer | Uint8Array,
+  ): void {
     const data = ws.data;
     data.lastPingAt = new Date().toISOString();
     this.totalFrames += 1;
@@ -253,7 +218,13 @@ export class StreamTunnelServer implements StreamTunnelInstance {
         const parsed = JSON.parse(message) as StreamPacket;
         this.processStreamPacket(ws, parsed);
       } catch (err) {
-        ws.send(JSON.stringify({ channel: "error", code: "INVALID_JSON", message: "Failed to parse message JSON" }));
+        ws.send(
+          JSON.stringify({
+            channel: "error",
+            code: "INVALID_JSON",
+            message: "Failed to parse message JSON",
+          }),
+        );
       }
       return;
     }
@@ -272,7 +243,8 @@ export class StreamTunnelServer implements StreamTunnelInstance {
 
   private processStreamPacket(ws: ServerWebSocket<WsClientData>, packet: StreamPacket): void {
     const data = ws.data;
-    const targetSessionId = ("sessionId" in packet && packet.sessionId) ? packet.sessionId : data.sessionId;
+    const targetSessionId =
+      "sessionId" in packet && packet.sessionId ? packet.sessionId : data.sessionId;
     switch (packet.channel) {
       case "stdin":
         if (data.role !== "readonly") this.multiplexer.writeStdin(targetSessionId, packet.data);
@@ -281,11 +253,30 @@ export class StreamTunnelServer implements StreamTunnelInstance {
         this.multiplexer.resizeSession(targetSessionId, packet.dimensions);
         break;
       case "ping":
-        ws.send(JSON.stringify({ channel: "pong", sessionId: targetSessionId, clientTimestamp: packet.clientTimestamp, serverTimestamp: Date.now() }));
+        ws.send(
+          JSON.stringify({
+            channel: "pong",
+            sessionId: targetSessionId,
+            clientTimestamp: packet.clientTimestamp,
+            serverTimestamp: Date.now(),
+          }),
+        );
         break;
       case "scrollback_request":
-        const lines = this.multiplexer.getScrollback(targetSessionId, packet.maxLines, packet.maxBytes);
-        ws.send(JSON.stringify({ channel: "scrollback_replay", sessionId: targetSessionId, lines, totalLines: lines.length, totalBytes: lines.join("").length }));
+        const lines = this.multiplexer.getScrollback(
+          targetSessionId,
+          packet.maxLines,
+          packet.maxBytes,
+        );
+        ws.send(
+          JSON.stringify({
+            channel: "scrollback_replay",
+            sessionId: targetSessionId,
+            lines,
+            totalLines: lines.length,
+            totalBytes: lines.join("").length,
+          }),
+        );
         break;
       case "control":
         if (packet.signal === "pause") this.multiplexer.pauseSession(targetSessionId);
@@ -294,7 +285,10 @@ export class StreamTunnelServer implements StreamTunnelInstance {
     }
   }
 
-  private processBinaryFrame(ws: ServerWebSocket<WsClientData>, envelope: BinaryFrameEnvelope): void {
+  private processBinaryFrame(
+    ws: ServerWebSocket<WsClientData>,
+    envelope: BinaryFrameEnvelope,
+  ): void {
     const data = ws.data;
     if (envelope.channel === "stdin" && data.role !== "readonly") {
       this.multiplexer.writeStdin(data.sessionId, envelope.payload);
@@ -317,11 +311,17 @@ export class StreamTunnelServer implements StreamTunnelInstance {
         if (!self.multiplexer.hasSession(sessionId)) {
           self.multiplexer.createSession({ sessionId, containerId: `container-${sessionId}` });
         }
-        controller.enqueue(TEXT_ENCODER.encode(`event: ready\ndata: ${JSON.stringify({ sessionId })}\n\n`));
+        controller.enqueue(
+          TEXT_ENCODER.encode(`event: ready\ndata: ${JSON.stringify({ sessionId })}\n\n`),
+        );
         self.multiplexer.onOutput(sessionId, (chunk, channel, seq) => {
           try {
             const text = TEXT_DECODER.decode(chunk);
-            controller.enqueue(TEXT_ENCODER.encode(`event: ${channel}\ndata: ${JSON.stringify({ text, sequence: seq })}\n\n`));
+            controller.enqueue(
+              TEXT_ENCODER.encode(
+                `event: ${channel}\ndata: ${JSON.stringify({ text, sequence: seq })}\n\n`,
+              ),
+            );
           } catch {}
         });
       },
@@ -344,7 +344,9 @@ export class StreamTunnelServer implements StreamTunnelInstance {
     const now = Date.now();
     for (const [ws, data] of this.wsClients) {
       if (ws.readyState === 1) {
-        ws.send(JSON.stringify({ channel: "ping", sessionId: data.sessionId, clientTimestamp: now }));
+        ws.send(
+          JSON.stringify({ channel: "ping", sessionId: data.sessionId, clientTimestamp: now }),
+        );
       }
     }
     for (const [, sse] of this.sseClients) {
@@ -368,7 +370,12 @@ export class StreamTunnelServer implements StreamTunnelInstance {
 
   public broadcastBinaryToSession(sessionId: string, envelope: BinaryFrameEnvelope): number {
     let sent = 0;
-    const frame = encodeBinaryFrame(envelope.channel, envelope.sequence, envelope.timestamp, envelope.payload);
+    const frame = encodeBinaryFrame(
+      envelope.channel,
+      envelope.sequence,
+      envelope.timestamp,
+      envelope.payload,
+    );
     for (const [ws, data] of this.wsClients) {
       if (data.sessionId === sessionId && ws.readyState === 1) {
         ws.send(frame);
@@ -379,6 +386,9 @@ export class StreamTunnelServer implements StreamTunnelInstance {
   }
 }
 
-export function createStreamTunnel(options?: TunnelServerOptions, multiplexer?: PtyMultiplexerInstance): StreamTunnelServer {
+export function createStreamTunnel(
+  options?: TunnelServerOptions,
+  multiplexer?: PtyMultiplexerInstance,
+): StreamTunnelServer {
   return new StreamTunnelServer(options, multiplexer);
 }

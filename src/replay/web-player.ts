@@ -10,7 +10,10 @@ const decimal = new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 });
 const integer = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
 const policyMarker = "<meta data-content-security-policy>";
 
-export function generateWebReplayHtml(session: ReplaySession, options: WebPlayerOptions = {}): string {
+export function generateWebReplayHtml(
+  session: ReplaySession,
+  options: WebPlayerOptions = {},
+): string {
   if (session.frames.length === 0) throw new TypeError("Replay requires persisted frames");
   const metadata = session.metadata;
   const title = escapeHtmlText(options.title ?? `Replay: ${metadata.scenarioId}`);
@@ -41,7 +44,11 @@ ${renderPlayback(session.frames.length)}
   return content.replace(policyMarker, createContentSecurityPolicyMeta(content));
 }
 
-export function exportWebReplayHtml(session: ReplaySession, outputPath: string, options: WebPlayerOptions = {}): void {
+export function exportWebReplayHtml(
+  session: ReplaySession,
+  outputPath: string,
+  options: WebPlayerOptions = {},
+): void {
   writeReplayExportAtomic(outputPath, generateWebReplayHtml(session, options));
 }
 
@@ -50,17 +57,27 @@ function renderHeader(session: ReplaySession, title: string): string {
   const provenance = [
     metadata.providerId,
     metadata.executionMode,
-    metadata.simulated === undefined ? undefined : metadata.simulated ? "simulated" : "non-simulated",
+    metadata.simulated === undefined
+      ? undefined
+      : metadata.simulated
+        ? "simulated"
+        : "non-simulated",
     session.provenance.benchmarkCohort,
     session.provenance.eligibilityStatus,
     session.provenance.evaluationStatus,
-  ].filter((value): value is string => value !== undefined).join(" · ");
+  ]
+    .filter((value): value is string => value !== undefined)
+    .join(" · ");
   const totals = [
     `Duration ${decimal.format(metadata.durationMs / 1000)} s`,
     `${integer.format(metadata.totalTurns)} turns`,
-    metadata.totalTokens === undefined ? undefined : `${integer.format(metadata.totalTokens)} observed tokens`,
+    metadata.totalTokens === undefined
+      ? undefined
+      : `${integer.format(metadata.totalTokens)} observed tokens`,
     `${integer.format(session.frames.length)} persisted frames`,
-  ].filter((value): value is string => value !== undefined).join(" · ");
+  ]
+    .filter((value): value is string => value !== undefined)
+    .join(" · ");
   return `<header class="replay-header"><div><h1>${title}</h1><p>${escapeHtmlText(metadata.scenarioId)} · ${escapeHtmlText(metadata.skillIds.join(", "))} · ${escapeHtmlText(metadata.modelId)}</p>${provenance.length === 0 ? "" : `<p>${escapeHtmlText(provenance)}</p>`}<p>${escapeHtmlText(totals)}</p></div><span class="badge">${escapeHtmlText(metadata.executionStatus)}</span></header>`;
 }
 
@@ -72,7 +89,12 @@ function renderTabs(): string {
     ["diff", "Diff"],
     ["telemetry", "Telemetry"],
   ] as const;
-  return tabs.map(([id, label], index) => `<button id="tab-${id}" type="button" role="tab" aria-label="Show ${label.toLocaleLowerCase("en-US")} evidence" aria-controls="frame-content" aria-selected="${index === 0}" tabindex="${index === 0 ? 0 : -1}" data-tab="${id}">${label}</button>`).join("");
+  return tabs
+    .map(
+      ([id, label], index) =>
+        `<button id="tab-${id}" type="button" role="tab" aria-label="Show ${label.toLocaleLowerCase("en-US")} evidence" aria-controls="frame-content" aria-selected="${index === 0}" tabindex="${index === 0 ? 0 : -1}" data-tab="${id}">${label}</button>`,
+    )
+    .join("");
 }
 
 function renderPlayback(frameCount: number): string {
