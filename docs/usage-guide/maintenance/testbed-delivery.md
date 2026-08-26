@@ -14,7 +14,7 @@ bun run --cwd testbed typecheck
 bun run --cwd testbed build
 ```
 
-All generated output is written below `testbed/dist/`. The build produces the frontend bundle, backend bundle, Bun supervisor, and finite Go executable.
+Installation creates dependency state under `testbed/node_modules/` and may update workspace links. The build deletes and recreates `testbed/dist/`, so that directory must contain only disposable build artifacts. The rebuilt directory contains the frontend bundle, backend bundle, Bun supervisor, and finite Go executable.
 
 ## Start locally
 

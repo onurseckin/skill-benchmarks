@@ -59,13 +59,13 @@ export async function verifyTestbedLocalLifecycle(temporaryRoot: string): Promis
 }
 
 export async function verifyTestbedDockerLifecycle(temporaryRoot: string): Promise<void> {
-  const testbed = copyTestbedFixture(temporaryRoot);
   const identifier = randomUUID();
   const image = `skill-benchmarks-testbed-operator:${identifier}`;
   const container = `skill-benchmarks-testbed-operator-${identifier}`;
   const environment = createNoKeyEnvironment(temporaryRoot);
-  let containerStarted = false;
+  let primaryFailure: unknown;
   try {
+    const testbed = copyTestbedFixture(temporaryRoot);
     await runSuccessfulCommand(
       ["docker", "build", "--tag", image, testbed],
       { cwd: testbed, env: environment, timeoutMs: 300_000 },
@@ -90,7 +90,6 @@ export async function verifyTestbedDockerLifecycle(temporaryRoot: string): Promi
       { cwd: testbed, env: environment, timeoutMs: 60_000 },
       "testbed_docker_run_failed",
     );
-    containerStarted = true;
     await verifyImageConfiguration(image, environment, testbed);
     await requireJsonEndpoint(`http://127.0.0.1:${frontendPort}/health`, { status: "ok" });
     await requireJsonEndpoint(`http://127.0.0.1:${backendPort}/health`, { status: "ok" });
@@ -103,31 +102,117 @@ export async function verifyTestbedDockerLifecycle(temporaryRoot: string): Promi
       { cwd: testbed, env: environment, timeoutMs: 30_000 },
       "testbed_docker_stop_failed",
     );
-    containerStarted = false;
-    const inspectStopped = await runCommand(["docker", "inspect", container], {
-      cwd: testbed,
-      env: environment,
-    });
-    requireCondition(inspectStopped.exitCode !== 0, "testbed_container_survived");
-  } finally {
-    if (containerStarted) {
-      await runCommand(["docker", "container", "rm", "--force", container], {
-        cwd: testbed,
-        env: environment,
-        timeoutMs: 30_000,
-      });
-    }
-    await runCommand(["docker", "image", "rm", "--force", image], {
-      cwd: testbed,
-      env: environment,
-      timeoutMs: 60_000,
-    });
+  } catch (error) {
+    primaryFailure = error;
   }
-  const inspectImage = await runCommand(["docker", "image", "inspect", image], {
-    cwd: testbed,
-    env: environment,
-  });
-  requireCondition(inspectImage.exitCode !== 0, "testbed_image_survived");
+  let cleanupFailure: unknown;
+  try {
+    await reconcileDockerResources(
+      container,
+      image,
+      temporaryRoot,
+      environment,
+      primaryFailure !== undefined,
+    );
+  } catch (error) {
+    cleanupFailure = error;
+  }
+  if (primaryFailure !== undefined && cleanupFailure !== undefined) {
+    throw new AggregateError(
+      [primaryFailure, cleanupFailure],
+      "testbed_docker_primary_and_cleanup_failed",
+    );
+  }
+  if (cleanupFailure !== undefined) throw cleanupFailure;
+  if (primaryFailure !== undefined) throw primaryFailure;
+}
+
+async function reconcileDockerResources(
+  container: string,
+  image: string,
+  cwd: string,
+  environment: Readonly<Record<string, string | undefined>>,
+  primaryFailed: boolean,
+): Promise<void> {
+  const deadline = Date.now() + (primaryFailed ? 60_000 : 30_000);
+  const requiredAbsenceMs = primaryFailed ? 5_000 : 1_000;
+  let absentSince: number | undefined;
+  let lastFailure: unknown;
+  while (Date.now() < deadline) {
+    try {
+      const timeoutMs = Math.max(100, Math.min(5_000, deadline - Date.now()));
+      const containerExists = await dockerResourceExists(
+        ["docker", "container", "inspect", container],
+        "No such container",
+        cwd,
+        environment,
+        timeoutMs,
+      );
+      if (containerExists) {
+        absentSince = undefined;
+        await requireDockerRemoval(
+          ["docker", "container", "rm", "--force", container],
+          cwd,
+          environment,
+          timeoutMs,
+          "testbed_container_cleanup_failed",
+        );
+      }
+      const imageExists = await dockerResourceExists(
+        ["docker", "image", "inspect", image],
+        "No such image",
+        cwd,
+        environment,
+        timeoutMs,
+      );
+      if (imageExists) {
+        absentSince = undefined;
+        await requireDockerRemoval(
+          ["docker", "image", "rm", "--force", image],
+          cwd,
+          environment,
+          timeoutMs,
+          "testbed_image_cleanup_failed",
+        );
+      }
+      if (!containerExists && !imageExists) {
+        absentSince ??= Date.now();
+        if (Date.now() - absentSince >= requiredAbsenceMs) return;
+      }
+      lastFailure = undefined;
+    } catch (error) {
+      absentSince = undefined;
+      lastFailure = error;
+    }
+    await Bun.sleep(200);
+  }
+  const detail =
+    lastFailure instanceof Error ? lastFailure.message : String(lastFailure ?? "unknown");
+  throw new TypeError(`testbed_docker_cleanup_timeout:${detail}`);
+}
+
+async function dockerResourceExists(
+  argumentsList: readonly string[],
+  absentMessage: string,
+  cwd: string,
+  environment: Readonly<Record<string, string | undefined>>,
+  timeoutMs: number,
+): Promise<boolean> {
+  const result = await runCommand(argumentsList, { cwd, env: environment, timeoutMs });
+  if (result.exitCode === 0) return true;
+  requireCondition(result.stderr.includes(absentMessage), "testbed_docker_inspect_failed");
+  return false;
+}
+
+async function requireDockerRemoval(
+  argumentsList: readonly string[],
+  cwd: string,
+  environment: Readonly<Record<string, string | undefined>>,
+  timeoutMs: number,
+  code: string,
+): Promise<void> {
+  const result = await runCommand(argumentsList, { cwd, env: environment, timeoutMs });
+  requireCondition(result.exitCode === 0, `${code}:${result.stderr.trim()}`);
 }
 
 async function verifyImageConfiguration(

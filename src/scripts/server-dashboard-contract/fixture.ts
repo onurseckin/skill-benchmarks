@@ -18,11 +18,24 @@ export interface ServerDashboardFixture {
 export function createServerDashboardFixture(): ServerDashboardFixture {
   const root = mkdtempSync(join(tmpdir(), "skill-benchmarks-server-dashboard-"));
   const outputRoot = join(root, "runtime");
-  const environment = Object.fromEntries(Object.entries(process.env).filter(([key]) => !credentialKeys.has(key)));
+  const environment = Object.fromEntries(
+    Object.entries(process.env).filter(([key]) => !credentialKeys.has(key)),
+  );
   environment.SKILL_BENCHMARKS_USE_MOCK = "true";
-  runCommand([
-    "run", "--scenario", "git-worktrees", "--skill", "tdd", "--model", "gpt-4o", "--output-dir", outputRoot,
-  ], environment);
+  runCommand(
+    [
+      "run",
+      "--scenario",
+      "git-worktrees",
+      "--skill",
+      "tdd",
+      "--model",
+      "gpt-4o",
+      "--output-dir",
+      outputRoot,
+    ],
+    environment,
+  );
   const runIds = readdirSync(join(outputRoot, "runs"));
   requireCondition(runIds.length === 1 && runIds[0] !== undefined, "fixture_run_missing");
   const runId = runIds[0];
@@ -32,13 +45,42 @@ export function createServerDashboardFixture(): ServerDashboardFixture {
   const replayPath = join(root, "replay.html");
   const replayJsonPath = join(root, "replay.json");
   runCommand(["report", "--db", dbPath, "--format", "html", "--output", reportPath], environment);
-  runCommand(["report", "--db", dbPath, "--format", "json", "--output", reportJsonPath], environment);
-  runCommand([
-    "replay", "--run-id", runId, "--db", dbPath, "--output-dir", outputRoot, "--format", "html", "--output", replayPath,
-  ], environment);
-  runCommand([
-    "replay", "--run-id", runId, "--db", dbPath, "--output-dir", outputRoot, "--format", "json", "--output", replayJsonPath,
-  ], environment);
+  runCommand(
+    ["report", "--db", dbPath, "--format", "json", "--output", reportJsonPath],
+    environment,
+  );
+  runCommand(
+    [
+      "replay",
+      "--run-id",
+      runId,
+      "--db",
+      dbPath,
+      "--output-dir",
+      outputRoot,
+      "--format",
+      "html",
+      "--output",
+      replayPath,
+    ],
+    environment,
+  );
+  runCommand(
+    [
+      "replay",
+      "--run-id",
+      runId,
+      "--db",
+      dbPath,
+      "--output-dir",
+      outputRoot,
+      "--format",
+      "json",
+      "--output",
+      replayJsonPath,
+    ],
+    environment,
+  );
   return {
     root,
     outputRoot,
@@ -52,13 +94,19 @@ export function createServerDashboardFixture(): ServerDashboardFixture {
   };
 }
 
-function runCommand(args: readonly string[], environment: Record<string, string | undefined>): void {
-  const result = Bun.spawnSync([process.execPath, "bin/skill-benchmarks", ...args], {
-    cwd: process.cwd(),
-    env: environment,
-    stdout: "pipe",
-    stderr: "pipe",
-  });
+function runCommand(
+  args: readonly string[],
+  environment: Record<string, string | undefined>,
+): void {
+  const result = Bun.spawnSync(
+    [process.execPath, "--no-env-file", "bin/skill-benchmarks", ...args],
+    {
+      cwd: process.cwd(),
+      env: environment,
+      stdout: "pipe",
+      stderr: "pipe",
+    },
+  );
   requireCondition(result.exitCode === 0, "fixture_command_failed");
 }
 

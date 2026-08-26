@@ -4,6 +4,7 @@ import {
   verifyArtifactReconciliation,
   verifyNoKeyFakeRun,
 } from "./operator-contract/fake-artifacts.js";
+import { verifyNoKeySubprocess } from "./operator-contract/environment.js";
 import { withIsolatedCase } from "./operator-contract/fixture.js";
 import { verifyReplayRoundTrip, verifyReportCohorts } from "./operator-contract/replay-report.js";
 import { verifySelectorAdmission } from "./operator-contract/selectors.js";
@@ -21,7 +22,8 @@ interface OperatorCase {
 }
 
 const cases: readonly OperatorCase[] = [
-  { name: "static", execute: () => verifyStaticBoundary() },
+  { name: "static", execute: verifyStaticBoundary },
+  { name: "environment", execute: verifyNoKeySubprocess },
   { name: "catalog", execute: () => verifyScenarioCatalog() },
   { name: "selectors", execute: verifySelectorAdmission },
   { name: "fake-run", execute: verifyNoKeyFakeRun },

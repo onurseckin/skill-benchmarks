@@ -6,7 +6,7 @@ import { requireCondition } from "./assertions.js";
 
 export const repositoryRoot = fileURLToPath(new URL("../../../", import.meta.url));
 
-const credentialKeys = new Set([
+export const credentialKeys: ReadonlySet<string> = new Set([
   "ANTHROPIC_API_KEY",
   "OPENAI_API_KEY",
   "GEMINI_API_KEY",
@@ -60,7 +60,12 @@ export function copyTestbedFixture(temporaryRoot: string): string {
       return !fromSource
         .split(sep)
         .some(
-          (segment) => segment === "node_modules" || segment === "dist" || segment === ".DS_Store",
+          (segment) =>
+            segment === "node_modules" ||
+            segment === "dist" ||
+            segment === ".DS_Store" ||
+            segment === ".env" ||
+            segment.startsWith(".env."),
         );
     },
   });
@@ -70,7 +75,12 @@ export function copyTestbedFixture(temporaryRoot: string): string {
 function readCheckoutState(): string {
   const result = Bun.spawnSync(
     ["git", "status", "--porcelain=v1", "--untracked-files=all", "--ignored=matching"],
-    { cwd: repositoryRoot, stdout: "pipe", stderr: "pipe" },
+    {
+      cwd: repositoryRoot,
+      env: createNoKeyEnvironment(tmpdir()),
+      stdout: "pipe",
+      stderr: "pipe",
+    },
   );
   requireCondition(result.exitCode === 0, "checkout_status_failed");
   return new TextDecoder().decode(result.stdout);

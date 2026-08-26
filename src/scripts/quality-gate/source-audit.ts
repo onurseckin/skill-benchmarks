@@ -1,8 +1,12 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { lstatSync, readdirSync, readFileSync } from "node:fs";
 import { basename, extname, join, sep } from "node:path";
 import { parseSync } from "oxc-parser";
 
-export type SourceViolationType = "LINE_COUNT_EXCEEDED" | "FORBIDDEN_COMMENT" | "PARSER_ERROR";
+export type SourceViolationType =
+  | "LINE_COUNT_EXCEEDED"
+  | "FORBIDDEN_COMMENT"
+  | "PARSER_ERROR"
+  | "UNSUPPORTED_SOURCE_ENTRY";
 
 export interface SourceViolation {
   readonly file: string;
@@ -17,6 +21,11 @@ export interface SourceAuditResult {
 
 type SourceKind = "ecmascript" | "shell" | "go" | "dockerfile";
 
+interface CollectedSources {
+  readonly files: readonly string[];
+  readonly violations: readonly SourceViolation[];
+}
+
 const maintainedRoots = ["src", "bin", "testbed", "docker"] as const;
 const excludedDirectories = new Set([
   "node_modules",
@@ -26,29 +35,70 @@ const excludedDirectories = new Set([
   "dist",
   "coverage",
 ]);
-const ecmascriptExtensions = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"]);
+const ecmascriptExtensions = new Set([
+  ".ts",
+  ".tsx",
+  ".mts",
+  ".cts",
+  ".js",
+  ".jsx",
+  ".mjs",
+  ".cjs",
+]);
 const maximumLineCount = 399;
 
 export function auditMaintainedSources(repositoryRoot: string): SourceAuditResult {
-  const files = maintainedRoots.flatMap((root) =>
-    collectSourceFiles(join(repositoryRoot, root), root),
+  const collections = maintainedRoots.map((root) =>
+    collectMaintainedRoot(join(repositoryRoot, root), root),
   );
-  const violations = files.flatMap((file) => scanSourceFile(file));
+  const files = collections.flatMap((collection) => collection.files);
+  const violations = [
+    ...collections.flatMap((collection) => collection.violations),
+    ...files.flatMap((file) => scanSourceFile(file)),
+  ];
   return Object.freeze({
     files: Object.freeze([...files].sort()),
     violations: Object.freeze(violations),
   });
 }
 
-function collectSourceFiles(directory: string, maintainedRoot: string): readonly string[] {
+function collectMaintainedRoot(directory: string, maintainedRoot: string): CollectedSources {
+  const stats = lstatSync(directory);
+  if (!stats.isDirectory() || stats.isSymbolicLink()) {
+    return unsupportedSourceEntry(directory);
+  }
+  return collectSourceFiles(directory, maintainedRoot);
+}
+
+function collectSourceFiles(directory: string, maintainedRoot: string): CollectedSources {
   const files: string[] = [];
+  const violations: SourceViolation[] = [];
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
     if (entry.isDirectory() && excludedDirectories.has(entry.name)) continue;
     const path = join(directory, entry.name);
-    if (entry.isDirectory()) files.push(...collectSourceFiles(path, maintainedRoot));
-    else if (entry.isFile() && classifySource(path, maintainedRoot) !== undefined) files.push(path);
+    if (entry.isSymbolicLink()) violations.push(...unsupportedSourceEntry(path).violations);
+    else if (entry.isDirectory()) {
+      const nested = collectSourceFiles(path, maintainedRoot);
+      files.push(...nested.files);
+      violations.push(...nested.violations);
+    } else if (entry.isFile() && classifySource(path, maintainedRoot) !== undefined)
+      files.push(path);
+    else if (!entry.isFile()) violations.push(...unsupportedSourceEntry(path).violations);
   }
-  return files;
+  return { files, violations };
+}
+
+function unsupportedSourceEntry(path: string): CollectedSources {
+  return {
+    files: [],
+    violations: [
+      {
+        file: path,
+        type: "UNSUPPORTED_SOURCE_ENTRY",
+        detail: "Maintained source roots may contain only regular files and directories",
+      },
+    ],
+  };
 }
 
 function classifySource(path: string, maintainedRoot: string): SourceKind | undefined {
@@ -145,27 +195,34 @@ function findGoCommentOffsets(content: string): readonly number[] {
 }
 
 function scanShellComments(path: string, content: string): readonly SourceViolation[] {
-  const violations: SourceViolation[] = [];
-  for (const [lineIndex, line] of content.split(/\r?\n/).entries()) {
-    const offset = findShellCommentOffset(line);
-    if (offset === undefined || (lineIndex === 0 && offset === 0 && line.startsWith("#!")))
-      continue;
-    violations.push({
-      file: path,
-      type: "FORBIDDEN_COMMENT",
-      detail: `Scanner found a shell comment on line ${lineIndex + 1}`,
-    });
-  }
-  return violations;
+  return findShellCommentLines(content).flatMap((lineNumber) =>
+    lineNumber === 1 && content.startsWith("#!")
+      ? []
+      : [
+          {
+            file: path,
+            type: "FORBIDDEN_COMMENT" as const,
+            detail: `Scanner found a shell comment on line ${lineNumber}`,
+          },
+        ],
+  );
 }
 
-function findShellCommentOffset(line: string): number | undefined {
+function findShellCommentLines(content: string): readonly number[] {
+  const lines: number[] = [];
   let quote: "'" | '"' | undefined;
   let escaped = false;
-  for (let index = 0; index < line.length; index += 1) {
-    const character = line[index];
+  let wordStart = true;
+  let lineNumber = 1;
+  for (let index = 0; index < content.length; index += 1) {
+    const character = content[index];
     if (escaped) {
       escaped = false;
+      if (character === "\n") {
+        lineNumber += 1;
+      } else {
+        wordStart = false;
+      }
       continue;
     }
     if (character === "\\" && quote !== "'") {
@@ -174,12 +231,23 @@ function findShellCommentOffset(line: string): number | undefined {
     }
     if (quote !== undefined) {
       if (character === quote) quote = undefined;
+      if (character === "\n") lineNumber += 1;
       continue;
     }
-    if (character === '"' || character === "'") quote = character;
-    else if (character === "#" && (index === 0 || /\s/.test(line[index - 1] ?? ""))) return index;
+    if (character === '"' || character === "'") {
+      quote = character;
+      wordStart = false;
+    } else if (character === "#" && wordStart) {
+      lines.push(lineNumber);
+      while (content[index + 1] !== undefined && content[index + 1] !== "\n") index += 1;
+    } else if (character === "\n") {
+      lineNumber += 1;
+      wordStart = true;
+    } else {
+      wordStart = character !== undefined && /[\t\r |&;()<>]/.test(character);
+    }
   }
-  return undefined;
+  return lines;
 }
 
 function scanDockerfileComments(path: string, content: string): readonly SourceViolation[] {
