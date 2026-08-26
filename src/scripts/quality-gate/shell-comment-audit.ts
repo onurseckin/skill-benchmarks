@@ -109,7 +109,7 @@ export function scanShellComments(content: string): ShellCommentScan {
     } else if (character === "\n") {
       lineNumber += 1;
       context.wordStart = true;
-    } else context.wordStart = /[\t\r |&;<>]/.test(character);
+    } else context.wordStart = /[\t\r |&;()<>]/.test(character);
   }
   if (contexts.length !== 1 || contexts[0]?.kind !== "base") {
     return uncertain(commentLines, `unclosed_shell_construct:${lineNumber}`);

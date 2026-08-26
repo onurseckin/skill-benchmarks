@@ -50,8 +50,12 @@ function verifyStaticRejections(temporaryRoot: string): void {
     '#!/bin/sh\nprintf "%s\\n" "$(case x in\nesac)# forbidden\nprintf x\n;;\nesac)"\n',
   );
   writeFileSync(join(temporaryRoot, "src", "case-empty.sh"), "#!/bin/sh\ncase x in\n) :;;\nesac\n");
+  writeFileSync(
+    join(temporaryRoot, "src", "case-subshell-boundary.sh"),
+    "#!/bin/sh\n(case x in\nx)# forbidden\n:;;\nesac)\n",
+  );
   const audit = auditMaintainedSources(temporaryRoot);
-  requireCondition(audit.violations.length === 8, "static_rejection_count_invalid");
+  requireCondition(audit.violations.length === 9, "static_rejection_count_invalid");
   requireCondition(
     audit.violations.some(
       (violation) =>
@@ -73,7 +77,12 @@ function verifyStaticRejections(temporaryRoot: string): void {
     ).length === 2,
     "static_nested_shell_comment_admitted",
   );
-  for (const name of ["case-boundary.sh", "case-esac-boundary.sh", "case-empty.sh"]) {
+  for (const name of [
+    "case-boundary.sh",
+    "case-esac-boundary.sh",
+    "case-empty.sh",
+    "case-subshell-boundary.sh",
+  ]) {
     requireCondition(
       audit.violations.some(
         (violation) =>
