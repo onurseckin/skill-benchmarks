@@ -44,6 +44,17 @@ const ROOT_SYSTEM_PREFIXES: readonly string[] = [
   "\\\\",
 ];
 
+const DANGEROUS_NAME_CHARACTERS = new Set([";", "&", "|", "`", "$", "<", ">"]);
+
+function hasDangerousNameCharacter(value: string): boolean {
+  for (const character of value) {
+    if (character.charCodeAt(0) <= 31 || DANGEROUS_NAME_CHARACTERS.has(character)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 export function validatePathSafety(targetPath: string, basePath?: string): boolean {
   if (!targetPath || typeof targetPath !== "string") {
     return false;
@@ -92,9 +103,8 @@ export function validateSecurityInvariants(manifest: SkillManifest): {
   issues: string[];
 } {
   const issues: string[] = [];
-  const dangerousNameChars = /[;&|`$<>\x00-\x1f]/;
 
-  if (dangerousNameChars.test(manifest.name)) {
+  if (hasDangerousNameCharacter(manifest.name)) {
     issues.push(`Skill name contains forbidden shell metacharacters: ${manifest.name}`);
   }
 
@@ -115,7 +125,7 @@ export function validateSecurityInvariants(manifest: SkillManifest): {
   }
 
   for (const tool of manifest.tools) {
-    if (dangerousNameChars.test(tool.name)) {
+    if (hasDangerousNameCharacter(tool.name)) {
       issues.push(`Tool name contains forbidden characters: ${tool.name}`);
     }
 
@@ -147,7 +157,7 @@ export function validateSkillManifest(manifest: SkillManifest): SkillValidationR
     if (trimmedName.length === 0 || trimmedName.length > 128) {
       errors.push("Skill name length must be between 1 and 128 characters");
     }
-    const nameRegex = /^[a-zA-Z0-9_\-\.@\/]+$/;
+    const nameRegex = /^[a-zA-Z0-9_.@/-]+$/;
     if (!nameRegex.test(trimmedName)) {
       errors.push(`Skill name contains invalid characters: ${trimmedName}`);
     }

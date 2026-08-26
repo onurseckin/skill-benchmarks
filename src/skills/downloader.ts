@@ -168,7 +168,6 @@ export async function downloadFromHttp(
 export async function stageAndVerifySkill(
   stagingDir: string,
   targetDir: string,
-  options?: SkillDownloadOptions,
 ): Promise<SkillManifest> {
   const manifestFile = await findManifestFile(stagingDir);
   if (manifestFile === null) {
@@ -267,7 +266,7 @@ export async function downloadSkill(
       await downloadFromHttp(source, stagingDir, options);
     }
 
-    const manifest = await stageAndVerifySkill(stagingDir, targetDir, options);
+    const manifest = await stageAndVerifySkill(stagingDir, targetDir);
     const content = manifest.rawContent !== undefined ? manifest.rawContent : "";
     return {
       manifest,

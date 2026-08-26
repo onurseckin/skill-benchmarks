@@ -217,7 +217,7 @@ export class StreamTunnelServer implements StreamTunnelInstance {
       try {
         const parsed = JSON.parse(message) as StreamPacket;
         this.processStreamPacket(ws, parsed);
-      } catch (err) {
+      } catch {
         ws.send(
           JSON.stringify({
             channel: "error",

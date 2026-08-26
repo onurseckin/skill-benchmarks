@@ -190,7 +190,19 @@ async function reconcileDockerResources(
     await Bun.sleep(200);
   }
   const detail =
-    lastFailure instanceof Error ? lastFailure.message : String(lastFailure ?? "unknown");
+    lastFailure instanceof Error
+      ? lastFailure.message
+      : typeof lastFailure === "string" ||
+          typeof lastFailure === "number" ||
+          typeof lastFailure === "bigint" ||
+          typeof lastFailure === "boolean" ||
+          typeof lastFailure === "symbol"
+        ? String(lastFailure)
+        : lastFailure === null
+          ? "null"
+          : lastFailure === undefined
+            ? "unknown"
+            : "non_error_failure";
   throw new TypeError(`testbed_docker_cleanup_timeout:${detail}`);
 }
 

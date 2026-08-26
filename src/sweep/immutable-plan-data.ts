@@ -91,7 +91,7 @@ function cloneAndFreezeArray(
 ): readonly unknown[] {
   if (Object.getPrototypeOf(value) !== Array.prototype)
     throw new TypeError("Sweep plan contains unsupported configuration data");
-  const clone: unknown[] = new Array(value.length);
+  const clone = Array<unknown>(value.length);
   for (const key of Reflect.ownKeys(value)) {
     if (key === "length") continue;
     if (typeof key !== "string" || !/^(?:0|[1-9][0-9]*)$/.test(key)) {

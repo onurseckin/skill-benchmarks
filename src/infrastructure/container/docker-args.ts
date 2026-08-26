@@ -30,6 +30,19 @@ export interface RawDockerVolumeInspectItem {
   CreatedAt?: string;
 }
 
+function appendDockerFilters(
+  args: string[],
+  filters?: Readonly<Record<string, string | ReadonlyArray<string>>>,
+): void {
+  if (filters === undefined) return;
+  for (const [key, value] of Object.entries(filters)) {
+    const values = typeof value === "string" ? [value] : value;
+    for (const item of values) {
+      args.push("--filter", `${key}=${item}`);
+    }
+  }
+}
+
 export function buildCreateContainerArgs(options: DockerCreateOptions): string[] {
   const args: string[] = ["create", "--name", options.name];
 
@@ -160,17 +173,7 @@ export function buildListContainersArgs(options?: {
   if (options?.all !== false) {
     args.push("-a");
   }
-  if (options?.filters) {
-    for (const [k, v] of Object.entries(options.filters)) {
-      if (Array.isArray(v)) {
-        for (const item of v) {
-          args.push("--filter", `${k}=${item}`);
-        }
-      } else {
-        args.push("--filter", `${k}=${v}`);
-      }
-    }
-  }
+  appendDockerFilters(args, options?.filters);
   return args;
 }
 
@@ -178,16 +181,6 @@ export function buildListVolumesArgs(options?: {
   readonly filters?: Record<string, string | ReadonlyArray<string>>;
 }): string[] {
   const args: string[] = ["volume", "ls", "-q"];
-  if (options?.filters) {
-    for (const [k, v] of Object.entries(options.filters)) {
-      if (Array.isArray(v)) {
-        for (const item of v) {
-          args.push("--filter", `${k}=${item}`);
-        }
-      } else {
-        args.push("--filter", `${k}=${v}`);
-      }
-    }
-  }
+  appendDockerFilters(args, options?.filters);
   return args;
 }

@@ -44,13 +44,23 @@ export const canonicalDiagnosticReasons = [
   "evidence_digest_missing",
 ] as const;
 
+const escapeCharacter = String.fromCharCode(27);
+const ansiColorPattern = new RegExp(`${escapeCharacter}\\[[0-9;]*m`, "g");
+
+function hasForbiddenControlCharacter(value: string): boolean {
+  for (const character of value) {
+    const code = character.charCodeAt(0);
+    if (code <= 8 || code === 11 || code === 12 || (code >= 14 && code <= 31) || code === 127) {
+      return true;
+    }
+  }
+  return false;
+}
+
 export function requireOperatorLog(path: string, identity: DiagnosticIdentity): void {
   const rawLog = readFileSync(path, "utf8");
-  const log = rawLog.replace(/\u001b\[[0-9;]*m/g, "");
-  requireCondition(
-    !/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(log),
-    "artifact_operator_log_invalid",
-  );
+  const log = rawLog.replace(ansiColorPattern, "");
+  requireCondition(!hasForbiddenControlCharacter(log), "artifact_operator_log_invalid");
   const lines = log.split(/\r?\n/).filter((line) => line.trim().length > 0);
   requireExactValue(lines.length, 3, "artifact_operator_log_invalid");
   requireCondition(

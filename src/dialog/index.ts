@@ -6,8 +6,8 @@ import type {
   InterviewGraderConfig,
   StakeholderSimulatorConfig,
 } from "./types.js";
-import { StakeholderSimulator, createStakeholderSimulator } from "./stakeholder-simulator.js";
-import { InterviewEvaluator, createInterviewEvaluator } from "./interview-evaluator.js";
+import { createStakeholderSimulator } from "./stakeholder-simulator.js";
+import { createInterviewEvaluator } from "./interview-evaluator.js";
 
 export * from "./types.js";
 export * from "./stakeholder-simulator.js";

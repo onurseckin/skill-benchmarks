@@ -86,7 +86,7 @@ ${command}
 EXIT_CODE=$?
 END_NS=$(date +%s%N)
 DURATION_MS=$(( (END_NS - START_NS) / 1000000 ))
-printf "\\n__SB_META_TRAILER__:{\\"exitCode\\":%d,\\\"durationMs\\\":%d}\\n" "\${EXIT_CODE}" "\${DURATION_MS}" >&2
+printf "\\n__SB_META_TRAILER__:{\\"exitCode\\":%d,\\"durationMs\\":%d}\\n" "\${EXIT_CODE}" "\${DURATION_MS}" >&2
 exit \${EXIT_CODE}
 `.trim();
 

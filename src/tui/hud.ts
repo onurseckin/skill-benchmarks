@@ -1,5 +1,4 @@
 import {
-  renderAsciiBarChart,
   renderAsciiLatencyDistribution,
   renderAsciiParetoChart,
   renderAsciiSparkline,

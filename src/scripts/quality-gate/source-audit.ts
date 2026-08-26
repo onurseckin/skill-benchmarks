@@ -158,10 +158,11 @@ function scanEcmascriptComments(path: string, content: string): readonly SourceV
         ],
   );
   if (parsed.errors.length > 0) {
+    const parserErrorMessage = parsed.errors[0]?.message ?? "Unknown parser error";
     violations.push({
       file: path,
       type: "PARSER_ERROR",
-      detail: `Oxc could not parse maintained source: ${String(parsed.errors[0])}`,
+      detail: `Oxc could not parse maintained source: ${parserErrorMessage}`,
     });
   }
   return violations;

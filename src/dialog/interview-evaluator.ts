@@ -4,16 +4,12 @@ import type {
   ClarificationAssertion,
   ClarificationTopic,
   DialogEvaluationResult,
-  DialogMessage,
   DialogScoreBreakdown,
   DialogTranscript,
   InterviewGraderConfig,
   InterviewScript,
 } from "./types.js";
 import { gradeInterviewArtifact } from "./artifact-evaluator.js";
-import { StakeholderSimulator } from "./stakeholder-simulator.js";
-
-void StakeholderSimulator;
 
 export class InterviewEvaluator {
   private readonly config: InterviewGraderConfig;
@@ -35,7 +31,7 @@ export class InterviewEvaluator {
       assertions,
       script.clarificationTopics,
     );
-    const questionQualityScore = this.evaluateQuestionQuality(transcript, script);
+    const questionQualityScore = this.evaluateQuestionQuality(transcript);
     const domainDepthScore = this.evaluateDomainDepth(transcript, script);
     const requirementCoverageScore = this.evaluateRequirementCoverage(
       assertions,
@@ -158,7 +154,7 @@ export class InterviewEvaluator {
     return { score: normalized, assertions: resolvedAssertions };
   }
 
-  private evaluateQuestionQuality(transcript: DialogTranscript, script: InterviewScript): number {
+  private evaluateQuestionQuality(transcript: DialogTranscript): number {
     const agentMessages = transcript.messages.filter((m) => m.role === "agent");
     if (agentMessages.length === 0) {
       return 0;

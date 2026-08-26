@@ -5,9 +5,7 @@ import type {
   DialogTranscript,
   DialogTurnResponse,
   InterviewScript,
-  PersonaConfig,
   PersonaTone,
-  ScriptTrigger,
   ScriptTriggerResponse,
   StakeholderSimulatorConfig,
 } from "./types.js";

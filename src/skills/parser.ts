@@ -9,6 +9,7 @@ import type {
   RuleSeverity,
   SkillCategory,
 } from "./types";
+import { stringifyRuleDescriptionForSeverity } from "./parser-values.js";
 
 function parseYamlValue(raw: string): unknown {
   const trimmed = raw.trim();
@@ -314,6 +315,7 @@ export function parseSkillContent(rawContent: string, options?: SkillParseOption
         });
       } else if (typeof item === "object" && item !== null) {
         const obj = item as Record<string, unknown>;
+        const severityDescription = stringifyRuleDescriptionForSeverity(obj.description);
         rawRules.push({
           id: typeof obj.id === "string" ? obj.id : `rule-${idx + 1}`,
           title: typeof obj.title === "string" ? obj.title : `Rule ${idx + 1}`,
@@ -321,7 +323,7 @@ export function parseSkillContent(rawContent: string, options?: SkillParseOption
           severity:
             typeof obj.severity === "string"
               ? (obj.severity as RuleSeverity)
-              : inferSeverity(String(obj.description || "")),
+              : inferSeverity(severityDescription),
           category: typeof obj.category === "string" ? obj.category : undefined,
         });
       }

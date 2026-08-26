@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import type {
-  ExecutionLimits,
   LLMProviderAdapter,
   MatrixExecutionConfig,
   MatrixExecutionSummary,
@@ -13,7 +12,6 @@ import { ScenarioRunnerEngine } from "./runner-engine.js";
 import { StandardToolDispatcher } from "./tool-dispatcher.js";
 import type {
   IContainerInstance,
-  IContainerPoolManager,
   ContainerLaunchConfig,
 } from "../infrastructure/container/types.js";
 
@@ -111,7 +109,7 @@ export class MatrixRunner {
     const startTime = performance.now();
     const permutations = generateMatrixPermutations(config);
     const concurrency = Math.max(1, config.concurrency ?? 4);
-    const results: ScenarioResult[] = new Array(permutations.length);
+    const results = Array<ScenarioResult>(permutations.length);
 
     let nextIndex = 0;
     const workerCount = Math.min(concurrency, permutations.length);

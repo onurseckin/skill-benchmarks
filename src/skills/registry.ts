@@ -10,7 +10,7 @@ import type {
   SkillPromptFormatOptions,
 } from "./types";
 import { CANONICAL_SKILLS } from "./canonical";
-import { parseCatalogMarkdown, parseInstallsCount } from "./catalog-parser";
+import { parseCatalogMarkdown } from "./catalog-parser";
 import { formatSkillPrompt, formatSkillsForAgentContext } from "./formatter";
 import { parseSkillFile } from "./parser";
 import { validateSkillManifest } from "./validator";

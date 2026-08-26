@@ -2,10 +2,8 @@ import type {
   LLMProviderAdapter,
   ExecutionLimits,
   ScenarioResult,
-  AgentMessage,
   TokenUsage,
   DetailedTokenTelemetry,
-  RunTerminationReason,
 } from "../runner/types.js";
 import type { IContainerPoolManager } from "../infrastructure/container/types.js";
 import type { RunRecord } from "../reporting/types.js";

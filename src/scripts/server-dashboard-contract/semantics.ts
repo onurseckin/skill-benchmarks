@@ -72,7 +72,7 @@ export async function verifyHtmlSemantics(fixture: ServerDashboardFixture): Prom
 async function verifyMaliciousTextConstruction(fixture: ServerDashboardFixture): Promise<void> {
   const bidirectionalControls =
     "\u061c\u200e\u200f\u202a\u202b\u202c\u202d\u202e\u2066\u2067\u2068\u2069";
-  const payload = `</script><script>globalThis.reportPwned=1</script>\n\"><img src=x onerror=globalThis.reportPwned=2>\n&quot; autofocus onfocus=globalThis.reportPwned=3 x=\"\njavascript:globalThis.reportPwned=4\n${"x".repeat(10_000)}${bidirectionalControls}`;
+  const payload = `</script><script>globalThis.reportPwned=1</script>\n"><img src=x onerror=globalThis.reportPwned=2>\n&quot; autofocus onfocus=globalThis.reportPwned=3 x="\njavascript:globalThis.reportPwned=4\n${"x".repeat(10_000)}${bidirectionalControls}`;
   const snapshot = JSON.parse(readFileSync(fixture.reportJsonPath, "utf8")) as ReportSnapshot;
   const session = JSON.parse(readFileSync(fixture.replayJsonPath, "utf8")) as ReplaySession;
   const firstFrame = session.frames[0];

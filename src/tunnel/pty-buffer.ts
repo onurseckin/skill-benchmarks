@@ -6,8 +6,11 @@ import type {
   StreamChannel,
 } from "./types.js";
 
+const escapeCharacter = String.fromCharCode(27);
+const controlSequenceIntroducerCharacter = String.fromCharCode(155);
+const bellCharacter = String.fromCharCode(7);
 const ANSI_REGEX = new RegExp(
-  "[\\u001B\\u009B][[\\]()#;?]*(?:(?:(?:(?:;[-a-zA-Z\\d\\/#&.:=?%_~_]+)*|[a-zA-Z\\d]+(?:;[-a-zA-Z\\d\\/#&.:=?%_~_]*)*)?\\u0007)|(?:(?:\\d{1,4}(?:;\\d{0,4})*)?[\\dA-PR-TZcf-nq-uy=><~]))",
+  `[${escapeCharacter}${controlSequenceIntroducerCharacter}][[\\]()#;?]*(?:(?:(?:(?:;[-a-zA-Z\\d\\/#&.:=?%_~_]+)*|[a-zA-Z\\d]+(?:;[-a-zA-Z\\d\\/#&.:=?%_~_]*)*)?${bellCharacter})|(?:(?:\\d{1,4}(?:;\\d{0,4})*)?[\\dA-PR-TZcf-nq-uy=><~]))`,
   "g",
 );
 const TEXT_DECODER = new TextDecoder();

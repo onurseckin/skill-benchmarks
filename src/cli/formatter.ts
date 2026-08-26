@@ -1,6 +1,7 @@
 const escapeSequence = "\u001B[";
 const resetSequence = "\u001B[0m";
-const ansiPattern = /\u001B\[[0-9;]*[a-zA-Z]/g;
+const escapeCharacter = String.fromCharCode(27);
+const ansiPattern = new RegExp(`${escapeCharacter}\\[[0-9;]*[a-zA-Z]`, "g");
 
 function colorEnabled(): boolean {
   return (

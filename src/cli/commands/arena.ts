@@ -1,6 +1,6 @@
 import { preflightReportOutputPaths, publishReportOutputs } from "../../reporting/report-output.js";
 import { ArenaRunner, type ArenaPairing } from "../../runner/arena-runner.js";
-import { cyan, formatBadge, formatSectionHeader } from "../formatter.js";
+import { formatBadge, formatSectionHeader } from "../formatter.js";
 import type { ArenaCliOptions, CliCommandResult, CliOutput, CliParsedArgs } from "../types.js";
 import { admitCompetition, toCompetitionSweepConfig } from "./competition-admission.js";
 

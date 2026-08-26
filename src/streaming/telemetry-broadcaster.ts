@@ -6,7 +6,6 @@ import type {
   ServerBroadcastMessage,
   TelemetryChunk,
 } from "./types.js";
-import type { LiveStreamingEngine } from "./index.js";
 
 const DEFAULT_HEARTBEAT_INTERVAL_MS = 15000;
 const DEFAULT_CLIENT_TIMEOUT_MS = 30000;

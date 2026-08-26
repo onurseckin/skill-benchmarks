@@ -3,7 +3,6 @@ import type {
   ChaosFault,
   ChaosFaultExecutionResult,
   ChaosFaultStatus,
-  FaultInjectionKind,
   IFaultInjector,
 } from "./types.js";
 

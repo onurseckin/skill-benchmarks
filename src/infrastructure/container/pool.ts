@@ -148,7 +148,7 @@ export class ContainerPoolManager implements IContainerPoolManager {
       "io.skill-benchmarks.managed": "true",
       "io.skill-benchmarks.run-id": config.runId,
       "io.skill-benchmarks.scenario-id": config.scenarioId,
-      ...(config.labels ?? {}),
+      ...config.labels,
     };
 
     let containerId: string;
