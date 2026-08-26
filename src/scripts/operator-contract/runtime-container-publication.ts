@@ -55,7 +55,7 @@ export async function verifyPoolPublicationBoundary(temporaryRoot: string): Prom
       signal: controller.signal,
       planFingerprint: "container-publication-boundary-fixture",
     });
-    await waitForPoolCall(dockerClient, "start-container:");
+    await dockerClient.waitForPhase("start-container");
     const pendingStatus = pool.getStatus();
     requireCondition(pendingStatus.creatingCount === 1, "publication_abort_has_pending_lease");
     requireCondition(pendingStatus.activeCount === 0, "publication_abort_has_no_published_lease");
@@ -65,20 +65,23 @@ export async function verifyPoolPublicationBoundary(temporaryRoot: string): Prom
     requireCondition(result.status === "aborted", "publication_abort_terminal_status");
     requireCondition(runner.dispatchCount === 0, "publication_abort_prevents_provider_dispatch");
     requireCondition(pool.activeCount === 0, "publication_abort_has_no_active_lease");
-    requireCondition(
-      pool.getStatus().creatingCount === 0,
-      "publication_abort_settles_creation_lease",
-    );
-    requireCondition(dockerClient.resourceCount === 0, "publication_abort_cleans_owned_resources");
+    await pool.drain();
+    requireFullyDrained(pool, dockerClient);
   } finally {
     database.close();
   }
 }
 
-async function waitForPoolCall(dockerClient: FakeDockerClient, prefix: string): Promise<void> {
-  for (let attempt = 0; attempt < 100; attempt += 1) {
-    if (dockerClient.hasCall(prefix)) return;
-    await Bun.sleep(1);
-  }
-  throw new Error(`Timed out waiting for fake Docker call '${prefix}'`);
+function requireFullyDrained(pool: ContainerPoolManager, dockerClient: FakeDockerClient): void {
+  const status = pool.getStatus();
+  requireCondition(!status.accepting, "publication_abort_drain_is_terminal");
+  requireCondition(status.queuedCount === 0, "publication_abort_drain_has_no_queue");
+  requireCondition(status.creatingCount === 0, "publication_abort_drain_has_no_creation");
+  requireCondition(status.activeCount === 0, "publication_abort_drain_has_no_active");
+  requireCondition(status.releasingCount === 0, "publication_abort_drain_has_no_release");
+  requireCondition(
+    status.cleanupFailedCount === 0,
+    "publication_abort_drain_has_no_cleanup_failure",
+  );
+  requireCondition(dockerClient.resourceCount === 0, "publication_abort_drain_has_no_resources");
 }

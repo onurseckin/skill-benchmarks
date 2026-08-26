@@ -19,6 +19,8 @@ export type DockerFixturePhase =
   | "remove-container"
   | "remove-volume";
 
+const leaseLabelKey = "io.skill-benchmarks.lease-id";
+
 class DeferredValue {
   public readonly promise: Promise<void>;
   private resolvePromise: () => void = () => {};
@@ -65,6 +67,8 @@ export class FakeDockerClient implements IDockerClient {
   public readonly containers = new Set<string>();
   private readonly deferredPhases = new Map<DockerFixturePhase, DeferredValue>();
   private readonly phaseCallbacks = new Map<DockerFixturePhase, () => void>();
+  private readonly phaseWaiters = new Map<DockerFixturePhase, DeferredValue>();
+  private readonly reachedPhases = new Set<DockerFixturePhase>();
   private readonly failures = new Map<DockerFixturePhase, number>();
   private readonly containerNames = new Map<string, string>();
   private readonly containerLabels = new Map<string, Record<string, string>>();
@@ -93,6 +97,16 @@ export class FakeDockerClient implements IDockerClient {
     this.phaseCallbacks.set(phase, callback);
   }
 
+  public waitForPhase(phase: DockerFixturePhase): Promise<void> {
+    if (this.reachedPhases.has(phase)) return Promise.resolve();
+    let waiter = this.phaseWaiters.get(phase);
+    if (waiter === undefined) {
+      waiter = new DeferredValue();
+      this.phaseWaiters.set(phase, waiter);
+    }
+    return waiter.promise;
+  }
+
   public callCount(phase: DockerFixturePhase): number {
     return this.calls.filter((call) => call.startsWith(`${phase}:`)).length;
   }
@@ -109,7 +123,10 @@ export class FakeDockerClient implements IDockerClient {
     if (this.conflictNextContainerCreation) {
       this.conflictNextContainerCreation = false;
       this.containers.add(options.name);
-      this.containerLabels.set(options.name, { "io.skill-benchmarks.managed": "external" });
+      this.containerLabels.set(options.name, {
+        ...options.labels,
+        [leaseLabelKey]: "external-lease-uuid",
+      });
       throw new DockerError(
         ["docker", "create"],
         1,
@@ -137,6 +154,7 @@ export class FakeDockerClient implements IDockerClient {
     operation?: DockerOperationOptions,
   ): Promise<void> {
     this.calls.push(`start-container:${containerId}`);
+    this.markPhaseReached("start-container");
     await this.awaitPhase("start-container", operation?.signal);
     this.runPhaseCallback("start-container");
     this.throwFailure("start-container");
@@ -263,6 +281,12 @@ export class FakeDockerClient implements IDockerClient {
     const callback = this.phaseCallbacks.get(phase);
     this.phaseCallbacks.delete(phase);
     callback?.();
+  }
+
+  private markPhaseReached(phase: DockerFixturePhase): void {
+    this.reachedPhases.add(phase);
+    this.phaseWaiters.get(phase)?.resolve();
+    this.phaseWaiters.delete(phase);
   }
 }
 

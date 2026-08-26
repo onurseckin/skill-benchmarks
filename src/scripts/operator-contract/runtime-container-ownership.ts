@@ -41,12 +41,35 @@ async function verifyNameConflictPreservesUnownedContainer(): Promise<void> {
   const dockerClient = new FakeDockerClient();
   dockerClient.conflictNextContainer();
   const pool = createPool(dockerClient, 1);
-  await expectFailure(pool.acquire(createLaunchConfig()), "DockerError");
+  const config = createLaunchConfig();
+  await expectFailure(pool.acquire(config), "DockerError");
   requireCondition(
     dockerClient.containers.size === 1,
     "container_conflict_preserves_external_container",
   );
   requireCondition(dockerClient.volumes.size === 0, "container_conflict_removes_owned_volume");
+  const [externalContainerName] = dockerClient.containers;
+  requireCondition(
+    externalContainerName !== undefined,
+    "container_conflict_external_container_exists",
+  );
+  const externalContainer = await dockerClient.inspectContainer(externalContainerName);
+  requireCondition(
+    externalContainer.config.labels["io.skill-benchmarks.managed"] === "true",
+    "container_conflict_external_managed_label_matches_request",
+  );
+  requireCondition(
+    externalContainer.config.labels["io.skill-benchmarks.run-id"] === config.runId,
+    "container_conflict_external_run_label_matches_request",
+  );
+  requireCondition(
+    externalContainer.config.labels["io.skill-benchmarks.scenario-id"] === config.scenarioId,
+    "container_conflict_external_scenario_label_matches_request",
+  );
+  requireCondition(
+    externalContainer.config.labels["io.skill-benchmarks.lease-id"] === "external-lease-uuid",
+    "container_conflict_external_lease_label_differs",
+  );
   requireCondition(
     dockerClient.callCount("remove-container") === 0,
     "container_conflict_never_removes_unowned_container",
