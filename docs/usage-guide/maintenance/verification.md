@@ -51,6 +51,16 @@ bun run test
 
 It then runs one separately reconciled fake trajectory and uploads `simulated-diagnostic-<sha>`. That bundle demonstrates installed-command operation, persistence, terminal reconciliation, and diagnostic report empty-state behavior. It does not publish model-quality evidence, rankings, or regression decisions.
 
+## Maintainer-only maintenance scripts
+
+These package scripts are not public `skill-benchmarks` commands and are not part of the normal consumer workflow.
+
+`bun run sync:skills` reads a skills catalog and can download/cache skills below its destination. Run `bun run sync:skills --dry-run --limit 1` before a real synchronization; do not use `--force` until the destination is confirmed. A real synchronization can make network requests and write catalog/cache files.
+
+`bun run verify:ci-diagnostic <bundle-directory>` validates one existing CI diagnostic bundle. It reads the bundle, its database, events, artifacts, and report; it does not run a provider or create benchmark evidence.
+
+`bun run gc:containers` is destructive cleanup. It kills/removes Docker resources labeled as managed by this project and removes labeled workspace volumes. Its package entry point exposes no dry-run flag, so inspect the Docker environment and use it only when removal is intended.
+
 ## Before committing
 
 ```bash
