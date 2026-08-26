@@ -45,11 +45,9 @@ function runQualityAudit(): void {
   const usageVerification = join(rootDir, "docs/usage-guide/maintenance/verification.md");
   const usageTestbed = join(rootDir, "docs/usage-guide/maintenance/testbed-delivery.md");
   const archReadme = join(rootDir, "docs/architecture/README.md");
-  const masterRoadmap = join(rootDir, "docs/planning/MASTER-ROADMAP-AND-CONTINUITY.md");
 
   const requiredDeliverables = [
     rootReadme,
-    masterRoadmap,
     usageReadme,
     usageInstall,
     usageConfig,

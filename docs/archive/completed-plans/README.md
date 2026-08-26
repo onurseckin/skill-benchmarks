@@ -20,4 +20,4 @@ This directory archives completed milestone implementation plans. Superseded arc
 └────────────────────────────┴────────────────────────────────────────────┴─────────────┴───────────┘
 ```
 
-Active roadmaps and upcoming feature plans live in [`docs/planning/ACTIVE-ROADMAP.md`](../../planning/ACTIVE-ROADMAP.md). The [current architecture book](../../architecture/README.md) is the implementation reference.
+The [current architecture book](../../architecture/README.md) is the implementation reference. Completed planning artifacts are intentionally removed once their work is delivered.
