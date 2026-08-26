@@ -23,6 +23,7 @@ This document outlines the strategic product vision, future capability expansion
 ## 🚀 Active Feature Expansion Queue
 
 ### 1. 100% Complete Scenario Catalog Coverage (`scenarios/`)
+
 - ✅ **100% Complete Skill Catalog (29 / 29 Scenarios Implemented & Verified)**:
   1. `git-worktrees` (`using-git-worktrees` / `caveman-commit`)
   2. `a11y-audit` (`a11y-debugging` / `frontend-design` / `qa` / `webapp-testing` / `playwright-best-practices`)
@@ -55,6 +56,7 @@ This document outlines the strategic product vision, future capability expansion
   29. `agent-browser` (`agent-browser`)
 
 ### 2. Evidence-Bound Report Dashboard, Replay & REPL HUD (`src/reporting/`, `src/replay/`, `src/tui/`)
+
 - ✅ **Persisted Trajectory Diff Viewer**: Replay exposes only workspace mutations loaded from the canonical persisted event stream.
 - ✅ **Standalone Shareable Report Card & Badge Exporter**: Authored `src/reporting/report-card.ts` with `--export-card <svg|html>` CLI flag for generating embeddable SVG badges and self-contained HTML report cards for GitHub READMEs.
 - ✅ **Accessible HTML Evidence Reader**: The report dashboard and replay player use labeled controls, keyboard navigation, semantic charts, responsive layouts, and persisted evidence only.
@@ -62,16 +64,19 @@ This document outlines the strategic product vision, future capability expansion
 - ✅ **Terminal TUI Scrubber**: Terminal replay navigates the same persisted frames without manufacturing missing evidence.
 
 ### 3. Zero-Friction Provider Engine (`src/providers/`)
+
 - ✅ **Default Offline Mock Mode**: Run validation sweeps and unranked candidate diagnostics without provider requests or benchmark-quality claims.
 - ✅ **Multi-Thinking Matrix Sweeps**: Full support for `--matrix-thinking none,low,medium,high,max`, `--dry-run`, and `--category` filtering.
 - **Live API Transition**: Set `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `GEMINI_API_KEY` (or toggle `--live` / `SKILL_BENCHMARKS_MOCK=false`) to execute live inference against Claude 3.7 Sonnet, OpenAI o3-mini/o1, and Gemini 2.0 Pro.
 
 ### 4. Side-by-Side Arena Diagnostics (`src/runner/arena-runner.ts`, `src/arena/`)
+
 - ✅ **Deterministic Planning**: Dry arena validates explicit selectors and emits a pairing without provider, workspace, database, or judge work.
 - ✅ **Unranked Fake Execution**: Mock arena routes candidates through the common sweep and exposes only simulated operational provenance.
 - ⏳ **Ranked Comparison**: Winner, judge, confidence, and rating behavior remains unavailable until durable comparable evidence exists.
 
 ### 5. Multi-Model Tournament Planner (`src/runner/tournament-scheduler.ts`)
+
 - ✅ **Pairing Plans**: Round-robin schedules and the first Swiss round expose pairings, capacity, and planned byes only.
 - ✅ **Diagnostic Execution**: Fake pairings do not mutate points, match history, tiebreaks, ratings, standings, or ranks.
 - ⏳ **Ranked Tournament**: Result-dependent Swiss rounds and standings remain unavailable until ranked arena evidence exists.
@@ -79,4 +84,5 @@ This document outlines the strategic product vision, future capability expansion
 ---
 
 ## 📜 Completed Plans Archive
-Historical implementation plans and initial phase blueprints are preserved under `docs/archive/completed-plans/` and `docs/blueprints/`.
+
+Historical implementation plans and superseded design blueprints are preserved under `docs/archive/completed-plans/`, `docs/archive/architecture/`, and `docs/archive/blueprints/`. The current architecture documentation is under `docs/architecture/`.
